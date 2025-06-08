@@ -1,0 +1,15 @@
+[package]
+name = "example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+either = "1.15.0"
+ext-php-rs = "0.13.1"
+itertools = "0.14.0"
+sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio"] }
+sqlx-core = "0.8.6"
+threadsafe-lru = "0.1.2"
+tokio = { version = "1.45.1" , features = ["rt-multi-thread"]}
+[lib]
+crate-type = ["cdylib"]
