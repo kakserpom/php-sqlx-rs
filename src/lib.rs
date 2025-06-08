@@ -44,39 +44,34 @@ pub struct Sqlx {
     ast_cache: LruCache<String, Ast>,
 }
 trait RowToZval: Row {
-    fn to_zval(&self) -> Zval;
+    fn into_zval(self) -> Zval;
 }
 impl RowToZval for PgRow {
-    fn to_zval(&self) -> Zval {
-        // Build up a Rust HashMap<String, Zval>
-        let mut map = HashMap::new();
-
-        for column in self.columns() {
+    fn into_zval(self) -> Zval {
+        HashMap::from_iter(self.columns().into_iter().map(|column| {
             let name = column.name();
-            let zval = if let Ok(v) = self.try_get::<i64, _>(name) {
-                v.into_zval(false).ok()
-            } else if let Ok(v) = self.try_get::<f64, _>(name) {
-                v.into_zval(false).ok()
-            } else if let Ok(v) = self.try_get::<bool, _>(name) {
-                v.into_zval(false).ok()
-            } else if let Ok(v) = self.try_get::<String, _>(name) {
-                v.into_zval(false).ok()
-            } else {
-                None
-            };
-
-            map.insert(
+            (
                 name.to_string(),
-                zval.unwrap_or_else(|| {
+                if let Ok(v) = self.try_get::<i64, _>(name) {
+                    v.into_zval(false).ok()
+                } else if let Ok(v) = self.try_get::<f64, _>(name) {
+                    v.into_zval(false).ok()
+                } else if let Ok(v) = self.try_get::<bool, _>(name) {
+                    v.into_zval(false).ok()
+                } else if let Ok(v) = self.try_get::<String, _>(name) {
+                    v.into_zval(false).ok()
+                } else {
+                    None
+                }
+                .unwrap_or_else(|| {
                     let mut null = Zval::new();
                     null.set_null();
                     null
                 }),
-            );
-        }
-
-        // IntoZval for HashMap<String, Zval> will produce a PHP array
-        map.into_zval(false).unwrap()
+            )
+        }))
+        .into_zval(false)
+        .unwrap()
     }
 }
 
@@ -133,7 +128,7 @@ impl Sqlx {
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.inner))
             .unwrap()
-            .to_zval()
+            .into_zval()
     }
 
     pub fn query_all(&mut self, query: &str, params: HashMap<String, Value>) -> Vec<Zval> {
@@ -145,7 +140,7 @@ impl Sqlx {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.inner))
             .unwrap()
             .into_iter()
-            .map(|x| x.to_zval())
+            .map(PgRow::into_zval)
             .collect()
     }
 
