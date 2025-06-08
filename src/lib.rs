@@ -131,7 +131,7 @@ impl Sqlx {
             .into_zval()
     }
 
-    pub fn query_all(&mut self, query: &str, params: HashMap<String, Value>) -> Vec<Zval> {
+    pub fn query_all(&mut self, query: &str, params: HashMap<String, Value>) -> impl Iterator<Item = Zval> {
         let (query, values) = self.render_query(query, params);
 
         println!("query: {query:?}");
@@ -141,7 +141,6 @@ impl Sqlx {
             .unwrap()
             .into_iter()
             .map(PgRow::into_zval)
-            .collect()
     }
 
     pub fn execute(&mut self, query: &str, params: HashMap<String, Value>) -> u64 {
