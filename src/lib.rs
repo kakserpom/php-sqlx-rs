@@ -95,7 +95,12 @@ fn bind_values<'a>(
 }
 
 impl Sqlx {
-    fn render_query(&self, query: &str, params: HashMap<String, Value>) -> (String, Vec<Value>) {
+    fn render_query(
+        &self,
+        query: &str,
+        params: Option<HashMap<String, Value>>,
+    ) -> (String, Vec<Value>) {
+        let params = params.unwrap_or_default();
         if let Some(ast) = self.ast_cache.get(query) {
             ast.render(params)
         } else {
@@ -122,7 +127,7 @@ impl Sqlx {
         }
     }
 
-    pub fn query_one(&mut self, query: &str, params: HashMap<String, Value>) -> Zval {
+    pub fn query_one(&mut self, query: &str, params: Option<HashMap<String, Value>>) -> Zval {
         let (query, values) = self.render_query(query, params);
 
         RUNTIME
@@ -131,7 +136,7 @@ impl Sqlx {
             .into_zval()
     }
 
-    pub fn query_all(&mut self, query: &str, params: HashMap<String, Value>) -> impl Iterator<Item = Zval> {
+    pub fn query_all(&mut self, query: &str, params: Option<HashMap<String, Value>>) -> Vec<Zval> {
         let (query, values) = self.render_query(query, params);
 
         println!("query: {query:?}");
@@ -141,9 +146,10 @@ impl Sqlx {
             .unwrap()
             .into_iter()
             .map(PgRow::into_zval)
+            .collect()
     }
 
-    pub fn execute(&mut self, query: &str, params: HashMap<String, Value>) -> u64 {
+    pub fn execute(&mut self, query: &str, params: Option<HashMap<String, Value>>) -> u64 {
         let (query, values) = self.render_query(query, params);
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).execute(&self.inner))
@@ -156,7 +162,7 @@ impl Sqlx {
             "INSERT INTO {table} SET {}",
             fields.keys().map(|k| format!("{k} = ${k}")).join(", ")
         );
-        self.execute(&query, fields)
+        self.execute(&query, Some(fields))
     }
 }
 // Required to register the extension with PHP.
