@@ -5,6 +5,7 @@
 mod ast;
 
 use crate::ast::{Ast, Value};
+use anyhow::anyhow;
 use ext_php_rs::convert::FromZvalMut;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::flags::DataType;
@@ -44,11 +45,11 @@ pub struct Sqlx {
     ast_cache: LruCache<String, Ast>,
 }
 trait RowToZval: Row {
-    fn into_zval(self) -> Zval;
+    fn into_zval(self) -> anyhow::Result<Zval>;
 }
 impl RowToZval for PgRow {
-    fn into_zval(self) -> Zval {
-        HashMap::from_iter(self.columns().into_iter().map(|column| {
+    fn into_zval(self) -> anyhow::Result<Zval> {
+        Ok(HashMap::from_iter(self.columns().into_iter().map(|column| {
             let name = column.name();
             (
                 name.to_string(),
@@ -71,7 +72,7 @@ impl RowToZval for PgRow {
             )
         }))
         .into_zval(false)
-        .unwrap()
+        .map_err(|err| anyhow!("{:?}", err))?)
     }
 }
 
@@ -114,55 +115,57 @@ impl Sqlx {
 
 #[php_impl]
 impl Sqlx {
-    pub fn __construct() -> Sqlx {
-        Self {
+    pub fn __construct(url: String) -> anyhow::Result<Sqlx> {
+        Ok(Self {
             ast_cache: LruCache::new(4, 2),
-            inner: RUNTIME
-                .block_on(
-                    PgPoolOptions::new()
-                        .max_connections(5)
-                        .connect("postgres://localhost/postgres"),
-                )
-                .unwrap(),
-        }
+            inner: RUNTIME.block_on(PgPoolOptions::new().max_connections(5).connect(&url))?,
+        })
     }
 
-    pub fn query_one(&mut self, query: &str, params: Option<HashMap<String, Value>>) -> Zval {
+    pub fn query_one(
+        &mut self,
+        query: &str,
+        params: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, params);
 
-        RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.inner))
-            .unwrap()
-            .into_zval()
+        Ok(RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.inner))?
+            .into_zval()?)
     }
 
-    pub fn query_all(&mut self, query: &str, params: Option<HashMap<String, Value>>) -> Vec<Zval> {
+    pub fn query_all(
+        &mut self,
+        query: &str,
+        params: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, params);
-
-        println!("query: {query:?}");
-        println!("values: {values:?}");
-        RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.inner))
-            .unwrap()
+        Ok(RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.inner))?
             .into_iter()
             .map(PgRow::into_zval)
-            .collect()
+            .try_collect()?)
     }
 
-    pub fn execute(&mut self, query: &str, params: Option<HashMap<String, Value>>) -> u64 {
+    pub fn execute(
+        &mut self,
+        query: &str,
+        params: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<u64> {
         let (query, values) = self.render_query(query, params);
-        RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).execute(&self.inner))
-            .unwrap()
-            .rows_affected()
+        Ok(RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).execute(&self.inner))?
+            .rows_affected())
     }
 
-    pub fn insert(&mut self, table: &str, fields: HashMap<String, Value>) -> u64 {
-        let query = format!(
-            "INSERT INTO {table} SET {}",
-            fields.keys().map(|k| format!("{k} = ${k}")).join(", ")
-        );
-        self.execute(&query, Some(fields))
+    pub fn insert(&mut self, table: &str, fields: HashMap<String, Value>) -> anyhow::Result<u64> {
+        Ok(self.execute(
+            &format!(
+                "INSERT INTO {table} SET {}",
+                fields.keys().map(|k| format!("{k} = ${k}")).join(", ")
+            ),
+            Some(fields),
+        )?)
     }
 }
 // Required to register the extension with PHP.

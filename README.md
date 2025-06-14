@@ -13,7 +13,7 @@ docker run php-sql
 
 ## Build on Mac OS
 ```sh
-export MACOSX_DEPLOYMENT_TARGET=15.4.1
+export MACOSX_DEPLOYMENT_TARGET=15.5.0
 export RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup"
 cargo php install --release --yes 
 ```
