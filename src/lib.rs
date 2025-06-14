@@ -7,6 +7,7 @@ mod ast;
 
 use crate::ast::{Ast, Value};
 use anyhow::anyhow;
+use dashmap::DashMap;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
@@ -26,6 +27,10 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 const SQLX_OPTION_URL: &'static str = "url";
 const SQLX_OPTION_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
 const SQLX_OPTION_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
+const SQLX_OPTION_PERSISTENT_NAME: &'static str = "persistent_name";
+
+static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<DriverInner>>> =
+    LazyLock::new(|| DashMap::new());
 
 /// A database connection wrapper with query helpers and AST cache.
 #[php_class(name = "Sqlx")]
@@ -36,6 +41,7 @@ pub struct DriverInner {
     pub pool: sqlx::PgPool,
     pub ast_cache: LruCache<String, Ast>,
 }
+
 impl DriverInner {
     /// Execute a query (e.g., INSERT/UPDATE) and return the number of rows affected.
     pub fn execute(
@@ -182,6 +188,7 @@ pub struct DriverOptions {
     url: Option<String>,
     ast_cache_shard_count: usize,
     ast_cache_shard_size: usize,
+    persistent_name: Option<String>,
 }
 impl Default for DriverOptions {
     fn default() -> Self {
@@ -189,6 +196,7 @@ impl Default for DriverOptions {
             url: None,
             ast_cache_shard_count: 8,
             ast_cache_shard_size: 128,
+            persistent_name: None,
         }
     }
 }
@@ -241,24 +249,43 @@ impl Driver {
                         }
                     },
                 )?,
+                persistent_name: match kv.get(SQLX_OPTION_PERSISTENT_NAME) {
+                    None => None,
+                    Some(value) => {
+                        if let Value::Str(str) = value {
+                            Some(str.clone())
+                        } else {
+                            return Err(anyhow!(
+                                "{SQLX_OPTION_PERSISTENT_NAME} must be an integer"
+                            ));
+                        }
+                    }
+                },
             },
         };
-        Ok(Self {
-            inner: Arc::new(DriverInner {
-                pool: RUNTIME.block_on(
-                    PgPoolOptions::new().max_connections(5).connect(
-                        options
-                            .url
-                            .ok_or_else(|| anyhow!("URL must be set"))?
-                            .as_str(),
-                    ),
-                )?,
-                ast_cache: LruCache::new(
-                    options.ast_cache_shard_count,
-                    options.ast_cache_shard_size,
+
+        if let Some(name) = options.persistent_name.as_ref() {
+            if let Some(inner) = PERSISTENT_DRIVER_REGISTRY.get(name) {
+                return Ok(Self {
+                    inner: inner.clone(),
+                });
+            }
+        }
+        let inner = Arc::new(DriverInner {
+            pool: crate::RUNTIME.block_on(
+                PgPoolOptions::new().max_connections(5).connect(
+                    options
+                        .url
+                        .ok_or_else(|| anyhow!("URL must be set"))?
+                        .as_str(),
                 ),
-            }),
-        })
+            )?,
+            ast_cache: LruCache::new(options.ast_cache_shard_count, options.ast_cache_shard_size),
+        });
+        if let Some(name) = options.persistent_name {
+            PERSISTENT_DRIVER_REGISTRY.insert(name, inner.clone());
+        }
+        Ok(Self { inner })
     }
 
     /// Execute a query and return a single row.

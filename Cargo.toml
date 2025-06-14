@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.98"
+dashmap = "6.1.0"
 ext-php-rs = { version = "0.13.1", features = ["anyhow"] }
 itertools = "0.14.0"
 sqlx = { version = "0.8.6", features = ["postgres", "runtime-tokio"] }
