@@ -1285,6 +1285,7 @@ dependencies = [
  "itertools",
  "sqlx",
  "sqlx-core",
+ "sqlx-postgres",
  "threadsafe-lru",
  "tokio",
 ]

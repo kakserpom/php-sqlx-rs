@@ -6,15 +6,20 @@
 mod ast;
 
 use crate::ast::{Ast, Value};
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use dashmap::DashMap;
+use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Column, Row};
 use sqlx_core::database::Database;
+use sqlx_core::decode::Decode;
+use sqlx_core::encode::Encode;
 use sqlx_core::query::Query;
+use sqlx_core::type_info::TypeInfo;
+use sqlx_core::types::Type;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use threadsafe_lru::LruCache;
@@ -107,33 +112,93 @@ trait RowToZval: Row {
 
 impl RowToZval for PgRow {
     fn into_zval(self) -> anyhow::Result<Zval> {
-        self.columns()
-            .iter()
-            .map(|column| {
-                let name = column.name();
-                (
-                    name.to_string(),
-                    if let Ok(v) = self.try_get::<i64, _>(name) {
-                        v.into_zval(false).ok()
-                    } else if let Ok(v) = self.try_get::<f64, _>(name) {
-                        v.into_zval(false).ok()
-                    } else if let Ok(v) = self.try_get::<bool, _>(name) {
-                        v.into_zval(false).ok()
-                    } else if let Ok(v) = self.try_get::<String, _>(name) {
-                        v.into_zval(false).ok()
-                    } else {
-                        None
-                    }
-                    .unwrap_or_else(|| {
-                        let mut null = Zval::new();
-                        null.set_null();
-                        null
-                    }),
-                )
-            })
-            .collect::<HashMap<String, Zval>>()
-            .into_zval(false)
-            .map_err(|err| anyhow!("{:?}", err))
+        fn try_cast_into_zval<'r, T>(row: &'r PgRow, name: &str) -> anyhow::Result<Zval>
+        where
+            T: Decode<'r, <PgRow as Row>::Database> + Type<<PgRow as Row>::Database>,
+            T: IntoZval,
+        {
+            Ok(row
+                .try_get::<'r, T, _>(name)
+                .map_err(|err| anyhow!("{err:?}"))?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))?)
+        }
+
+        let mut row: HashMap<String, Zval> = HashMap::with_capacity(self.len());
+        for column in self.columns() {
+            let name = column.name();
+            let value = match column.type_info().name().to_uppercase().as_str() {
+                "BOOL" => try_cast_into_zval::<bool>(&self, name)?,
+                "BYTEA" | "BINARY" => self
+                    .try_get::<&[u8], _>(name)
+                    .map_err(|err| anyhow!("{err:?}"))
+                    .map(|x| Binary::from_iter(x.iter().copied()))?
+                    .into_zval(false)
+                    .map_err(|err| anyhow!("{err:?}"))?,
+                "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
+                    try_cast_into_zval::<String>(&self, name)?
+                }
+                "INT2" => try_cast_into_zval::<i16>(&self, name)?,
+                "INT4" | "INT" => try_cast_into_zval::<i32>(&self, name)?,
+                "INT8" => try_cast_into_zval::<i64>(&self, name)?,
+                "OID" => try_cast_into_zval::<i32>(&self, name)?,
+                "FLOAT4" => try_cast_into_zval::<f32>(&self, name)?,
+                "FLOAT8" | "F64" => try_cast_into_zval::<f64>(&self, name)?,
+                "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(&self, name)?,
+                "UUID" => try_cast_into_zval::<String>(&self, name)?,
+                "JSON" | "JSONB" => try_cast_into_zval::<String>(&self, name)?,
+                "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
+                    try_cast_into_zval::<String>(&self, name)?
+                }
+                "INET" | "CIDR" | "MACADDR" | "MACADDR8" => {
+                    try_cast_into_zval::<String>(&self, name)?
+                }
+                "BIT" | "VARBIT" => try_cast_into_zval::<String>(&self, name)?,
+                "POINT" | "LSEG" | "PATH" | "BOX" | "POLYGON" | "LINE" | "CIRCLE" => {
+                    try_cast_into_zval::<String>(&self, name)?
+                }
+                "INT4RANGE" | "NUMRANGE" | "TSRANGE" | "TSTZRANGE" | "DATERANGE" | "INT8RANGE" => {
+                    try_cast_into_zval::<String>(&self, name)?
+                }
+                "RECORD" => try_cast_into_zval::<String>(&self, name)?,
+                "JSONPATH" => try_cast_into_zval::<String>(&self, name)?,
+
+                // массивы
+                "_BOOL" => try_cast_into_zval::<Vec<bool>>(&self, name)?,
+                "_BYTEA" => try_cast_into_zval::<Vec<Vec<u8>>>(&self, name)?,
+                "_CHAR" | "_NAME" | "_TEXT" | "_BPCHAR" | "_VARCHAR" => {
+                    try_cast_into_zval::<Vec<String>>(&self, name)?
+                }
+                "_INT2" => try_cast_into_zval::<Vec<i16>>(&self, name)?,
+                "_INT4" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
+                "_INT8" => try_cast_into_zval::<Vec<i64>>(&self, name)?,
+                "_OID" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
+                "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(&self, name)?,
+                "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(&self, name)?,
+                "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                "_UUID" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                "_JSON" | "_JSONB" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                "_DATE" | "_TIME" | "_TIMESTAMP" | "_TIMESTAMPTZ" | "_INTERVAL" | "_TIMETZ" => {
+                    try_cast_into_zval::<Vec<String>>(&self, name)?
+                }
+                "_INET" | "_CIDR" | "_MACADDR" | "_MACADDR8" => {
+                    try_cast_into_zval::<Vec<String>>(&self, name)?
+                }
+                "_BIT" | "_VARBIT" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                "_POINT" | "_LSEG" | "_PATH" | "_BOX" | "_POLYGON" | "_LINE" | "_CIRCLE" => {
+                    try_cast_into_zval::<Vec<String>>(&self, name)?
+                }
+                "_INT4RANGE" | "_NUMRANGE" | "_TSRANGE" | "_TSTZRANGE" | "_DATERANGE"
+                | "_INT8RANGE" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                "_RECORD" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                "_JSONPATH" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+
+                _ => bail!("unsupported type: {}", column.type_info().name()),
+            };
+
+            row.insert(name.to_string(), value);
+        }
+        row.into_zval(false).map_err(|err| anyhow!("{:?}", err))
     }
 }
 
@@ -143,28 +208,28 @@ fn bind_values<'a, D: Database>(
     values: &'a [Value],
 ) -> Query<'a, D, <D>::Arguments<'a>>
 where
-    f64: sqlx::Type<D>,
-    f64: sqlx::Encode<'a, D>,
-    i64: sqlx::Type<D>,
-    i64: sqlx::Encode<'a, D>,
-    bool: sqlx::Type<D>,
-    bool: sqlx::Encode<'a, D>,
-    String: sqlx::Type<D>,
-    String: sqlx::Encode<'a, D>,
+    f64: Type<D>,
+    f64: Encode<'a, D>,
+    i64: Type<D>,
+    i64: Encode<'a, D>,
+    bool: Type<D>,
+    bool: Encode<'a, D>,
+    String: Type<D>,
+    String: Encode<'a, D>,
 {
     fn walker<'a, D: Database>(
         q: Query<'a, D, <D>::Arguments<'a>>,
         value: &'a Value,
     ) -> Query<'a, D, <D>::Arguments<'a>>
     where
-        f64: sqlx::Type<D>,
-        f64: sqlx::Encode<'a, D>,
-        i64: sqlx::Type<D>,
-        i64: sqlx::Encode<'a, D>,
-        bool: sqlx::Type<D>,
-        bool: sqlx::Encode<'a, D>,
-        String: sqlx::Type<D>,
-        String: sqlx::Encode<'a, D>,
+        f64: Type<D>,
+        f64: Encode<'a, D>,
+        i64: Type<D>,
+        i64: Encode<'a, D>,
+        bool: Type<D>,
+        bool: Encode<'a, D>,
+        String: Type<D>,
+        String: Encode<'a, D>,
     {
         match value {
             Value::Str(s) => q.bind(s),
