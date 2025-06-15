@@ -4,9 +4,47 @@ $sql = new Sqlx\Driver([
     Sqlx\Driver::OPTION_URL => 'postgres://localhost/test',
     Sqlx\Driver::OPTION_PERSISTENT_NAME => 'test',
 ]);
-var_dump($sql->queryMaybeOne('select * from my_table'));
-//var_dump($sql->queryOne('select $1::json', ['{"a":1,"b":2}']));
-//var_dump($sql->queryOneAssoc('select $1::json', ['{"a":1,"b":2}']));
+$order_by = new Sqlx\OrderBy(["name", "age", "total_posts" => "COUNT(posts.*)"])
+    ->apply([["age","desc"], ["total_posts", "ASC"]]);
+var_dump($order_by);
+
+//var_dump(new RenderedOrderBy());
+
+$order_by = new Sqlx\OrderBy([
+    "name",
+    "age",
+    "total_posts" => "COUNT(posts.*)"
+]);
+var_dump($sql->dry(
+    'SELECT * FROM people WHERE name in (?) ORDER BY :order_by',
+     [
+        ["Peter", "John", "Jane"],
+        "order_by" => $order_by([
+            ["age","desc"],
+            ["total_posts", "ASC"]
+        ])
+    ]
+));
+/*array(2) {
+    [0]=>
+    string(85) "SELECT * FROM people WHERE name in ($1, $2, $3) ORDER BY age DESC, COUNT(posts.*) ASC"
+    [1]=>
+    array(3) {
+      [0]=>
+      string(5) "Peter"
+      [1]=>
+      string(4) "John"
+      [2]=>
+      string(4) "Jane"
+    }
+  }
+*/
+
+//var_dump($sql->queryOne('select $1::json', ['{"foo": ["bar", "baz"]}']));
+//var_dump($sql->queryOneAssoc('select $1::json', ['{"foo": ["bar", "baz"]}']));
+//var_dump($sql->queryOneAssoc('select 9223372036854775807'));
+//var_dump($sql->queryOne('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 largest')->largest);
+// int(9223372036854775807)
 
 //$sql->query('SELECT $1 {{WHERE id = $id}}', [123]);
 //var_dump($sql->queryOne('SELECT ? IN (?) as result', [123, [111, 123, 333]]));

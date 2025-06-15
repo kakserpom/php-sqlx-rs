@@ -1,5 +1,6 @@
+use crate::RenderedOrderBy;
 use ext_php_rs::ZvalConvert;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Write};
 
 #[derive(Debug, Clone)]
@@ -28,6 +29,8 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     Array(Vec<Value>),
+    Object(HashMap<String, Value>),
+    RenderedOrderBy(RenderedOrderBy),
 }
 pub type ParamsMap = BTreeMap<String, Value>;
 impl From<&str> for Value {
@@ -283,19 +286,30 @@ impl Ast {
                         println!("{name:?} ==> {:?}", values.get(name));
                     }
                     if let Some(val) = values.get(name) {
-                        if let Value::Array(arr) = val {
-                            for (i, item) in arr.iter().enumerate() {
-                                *counter += 1;
-                                if i > 0 {
-                                    sql.push_str(", ");
+                        match val {
+                            Value::RenderedOrderBy(order_by) => {
+                                for (i, item) in order_by.__inner.iter().enumerate() {
+                                    if i > 0 {
+                                        sql.push_str(", ");
+                                    }
+                                    sql.push_str(item);
                                 }
-                                write!(sql, "${}", *counter).unwrap();
-                                out_vals.push(item.clone());
                             }
-                        } else {
-                            *counter += 1;
-                            write!(sql, "${}", *counter).unwrap();
-                            out_vals.push(val.clone());
+                            Value::Array(arr) => {
+                                for (i, item) in arr.iter().enumerate() {
+                                    *counter += 1;
+                                    if i > 0 {
+                                        sql.push_str(", ");
+                                    }
+                                    write!(sql, "${}", *counter).unwrap();
+                                    out_vals.push(item.clone());
+                                }
+                            }
+                            _ => {
+                                *counter += 1;
+                                write!(sql, "${}", *counter).unwrap();
+                                out_vals.push(val.clone());
+                            }
                         }
                     }
                 }

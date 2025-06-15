@@ -32,6 +32,95 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<DriverInner>>> =
     LazyLock::new(|| DashMap::new());
 
+#[php_class(name = "Sqlx\\OrderBy")]
+pub struct OrderBy {
+    pub(crate) defined_fields: HashMap<String, Option<String>>,
+}
+
+#[derive(ZvalConvert, Debug)]
+pub enum OrderFieldDefinition {
+    Full(Vec<String>),
+    Short(String),
+}
+
+#[php_impl]
+impl OrderBy {
+    const ASC: &'static str = "ASC";
+    const DESC: &'static str = "DESC";
+    pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
+        Ok(Self {
+            defined_fields: defined_fields
+                .into_iter()
+                .map(|(key, value)| {
+                    if key.parse::<u32>().is_ok() {
+                        (value, None)
+                    } else {
+                        (key, Some(value))
+                    }
+                })
+                .collect(),
+        })
+    }
+
+    #[must_use]
+    pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
+        self.apply(order_by)
+    }
+
+    #[must_use]
+    pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
+        RenderedOrderBy {
+            __inner: order_by
+                .into_iter()
+                .filter_map(|definition| {
+                    let (field, dir) = match definition {
+                        OrderFieldDefinition::Short(name) => (name, OrderBy::ASC),
+                        OrderFieldDefinition::Full(vec) => (
+                            vec.first()?.clone(),
+                            match vec.get(1) {
+                                Some(str) if str.trim().eq_ignore_ascii_case("DESC") => {
+                                    OrderBy::DESC
+                                }
+                                _ => OrderBy::ASC,
+                            },
+                        ),
+                    };
+                    if let Some(x) = self.defined_fields.get(&field) {
+                        Some(format!("{} {dir}", x.as_ref().unwrap_or(&field)))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        }
+    }
+}
+#[derive(ZvalConvert)]
+pub struct ApplyOrderBy {
+    inner: Vec<Vec<String>>,
+}
+#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+//#[php_class]
+pub struct RenderedOrderBy {
+    pub(crate) __inner: Vec<String>,
+}
+
+// @TODO: make it impossible to alter RenderedOrderBy from PHP side
+/*impl FromZval<'_> for RenderedOrderBy {
+    const TYPE: DataType = DataType::Object(Some("RenderedOrderBy"));
+
+    fn from_zval(zval: &'_ Zval) -> Option<Self> {
+        dbg!(zval);
+        Some(Self { __inner: vec![] })
+    }
+}
+#[php_impl]
+impl RenderedOrderBy {
+    pub fn inner(&self) -> Vec<String> {
+        self.inner.clone()
+    }
+}*/
+
 /// A database driver using SQLx with query helpers and AST cache.
 ///
 /// This class supports prepared queries, persistent connections, and augmented SQL.
@@ -131,6 +220,18 @@ impl DriverInner {
             })
             .try_collect()
     }
+
+    pub fn dry(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        let (query, values) = self.render_query(query, parameters);
+        Ok(vec![
+            query.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
+            values.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
+        ])
+    }
 }
 
 /// Trait to convert a row into a PHP value.
@@ -207,8 +308,9 @@ impl RowToZval for PgRow {
             HashMap::<String, Zval>::with_capacity(self.len()),
             |mut row, column| {
                 let name = column.name();
+                let column_type = column.type_info().name();
                 let value =
-                    match column.type_info().name().to_uppercase().as_str() {
+                    match column_type {
                         "BOOL" => try_cast_into_zval::<bool>(&self, name)?,
                         "BYTEA" | "BINARY" => self
                             .try_get::<&[u8], _>(name)
@@ -285,7 +387,7 @@ impl RowToZval for PgRow {
                         "_RECORD" => try_cast_into_zval::<Vec<String>>(&self, name)?,
                         "_JSONPATH" => try_cast_into_zval::<Vec<String>>(&self, name)?,
 
-                        _ => bail!("unsupported type: {}", column.type_info().name()),
+                        _ => bail!("unsupported type: {column_type}"),
                     };
                 row.insert(name.to_string(), value);
                 Ok(row)
@@ -346,6 +448,9 @@ where
             Value::Bool(s) => q.bind(s),
             Value::Float(s) => q.bind(s),
             Value::Array(s) => s.iter().fold(q, walker),
+            // @TODO: values()?
+            Value::Object(s) => s.values().fold(q, walker),
+            _ => unimplemented!(),
         }
     }
 
@@ -396,7 +501,7 @@ impl Driver {
     ///   - `ast_cache_shard_size`: (int) size per shard (default: 128)
     ///   - `persistent_name`: (string) name of persistent connection
     ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
-    pub fn __construct(options: DriverConstructorOptions) -> anyhow::Result<Driver> {
+    pub fn __construct(options: DriverConstructorOptions) -> anyhow::Result<Self> {
         let options = match options {
             DriverConstructorOptions::Url(url) => DriverOptions {
                 url: Some(url),
@@ -667,6 +772,14 @@ impl Driver {
             ),
             Some(row),
         )
+    }
+
+    pub fn dry(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.inner.dry(query, parameters)
     }
 }
 
