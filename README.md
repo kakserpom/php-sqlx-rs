@@ -1,11 +1,20 @@
 # php-sqlx-rs
 
 A PHP extension powered by Rust and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
-database access with optional AST-based SQL augmentation and caching.
+database access with additional SQL syntax.
+
+The project's goals are centered on providing a *secure* and *ergonomic* way to interact with SQL-based DBM systems
+without
+any compromise on performance. The author's not big on PHP, but as a security researcher he understood the necessity of
+modernizing the toolkit of the great many PHP developers. The idea came up, and bish bash bosh, a couple of weekends the
+project
+was all but done. More to come.
+
+The project is still kind of experimental, so any feedback/ideas will be greatly appreciated!  
 
 ## Features
 
-- Optional persistent connections
+- Optional persistent connections (with connection pooling)
 - AST-based SQL augmentation (e.g., conditional blocks)
 - Named parameters with `$param`, `:param`, or positional `:1` syntax
 - Automatic result conversion to PHP arrays or objects
@@ -23,7 +32,7 @@ parameters.
 
 Wrap parts of your query with double braces `{{ ... }}` to make them conditional:
 
-```sql
+```
 SELECT *
 FROM users
 WHERE TRUE
@@ -35,7 +44,7 @@ If a named parameter used inside the block is not provided, the entire block is 
 
 Nested conditional blocks are supported:
 
-```sql
+```
 SELECT *
 FROM logs
 WHERE TRUE {{ AND date > $since {{ AND level = $level }} }}
@@ -224,13 +233,11 @@ array(1) {
 PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects:
 
 ```php
-var_dump($driver->queryOne('SELECT $1::json AS json', ['{"foo": ["bar", "baz"]}']));
-var_dump($driver->queryOneAssoc('SELECT $1::json AS json', ['{"foo": ["bar", "baz"]}']));
-```
-
-Example output:
-
-```php
+var_dump($driver->queryOne(
+    'SELECT $1::json AS json',
+    ['{"foo": ["bar", "baz"]}'
+]));
+/* Output:
 object(stdClass)#3 (1) {
   ["json"] =>
   object(stdClass)#2 (1) {
@@ -240,9 +247,13 @@ object(stdClass)#3 (1) {
       [1] => string(3) "baz"
     }
   }
-}
-
-array(1) {
+} */
+var_dump($driver->queryOneAssoc(
+    'SELECT $1::json AS json',
+    ['{"foo": ["bar", "baz"]}'
+]));
+/* Output:
+ array(1) {
   ["json"] =>
   array(1) {
     ["foo"] =>
@@ -251,7 +262,7 @@ array(1) {
       [1] => string(3) "baz"
     }
   }
-}
+} */
 ```
 
 ---

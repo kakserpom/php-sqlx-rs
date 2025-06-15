@@ -592,16 +592,13 @@ impl Driver {
                             }
                         })?,
                 ),
-                associative_arrays: kv.get(Self::OPT_ASSOC_ARRAYS).map_or(
-                    Ok(false),
-                    |value| {
-                        if let Value::Bool(bool) = value {
-                            Ok(*bool)
-                        } else {
-                            Err(anyhow!("{} must be a string", Self::OPT_ASSOC_ARRAYS))
-                        }
-                    },
-                )?,
+                associative_arrays: kv.get(Self::OPT_ASSOC_ARRAYS).map_or(Ok(false), |value| {
+                    if let Value::Bool(bool) = value {
+                        Ok(*bool)
+                    } else {
+                        Err(anyhow!("{} must be a string", Self::OPT_ASSOC_ARRAYS))
+                    }
+                })?,
                 ast_cache_shard_count: kv.get(Self::OPT_AST_CACHE_SHARD_COUNT).map_or(
                     Ok(DEFAULT_AST_CACHE_SHARD_COUNT),
                     |value| {
@@ -889,11 +886,18 @@ impl Driver {
     ///
     /// # Returns
     /// Number of inserted rows
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+    /// - parameters contain unsupported types or fail to bind correctly;
+    /// - the runtime fails to execute the query (e.g., task panic or timeout).
     pub fn insert(&self, table: &str, row: HashMap<String, Value>) -> anyhow::Result<u64> {
         self.execute(
             &format!(
-                "INSERT INTO {table} SET {}",
-                row.keys().map(|k| format!("{k} = ${k}")).join(", ")
+                "INSERT INTO {table} ({}) VALUES ({})",
+                row.keys().join(", "),
+                row.keys().map(|k| format!("${k}")).join(", ")
             ),
             Some(row),
         )
