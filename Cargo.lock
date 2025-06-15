@@ -1283,9 +1283,9 @@ dependencies = [
  "dashmap",
  "ext-php-rs",
  "itertools",
+ "serde_json",
  "sqlx",
  "sqlx-core",
- "sqlx-postgres",
  "threadsafe-lru",
  "tokio",
 ]

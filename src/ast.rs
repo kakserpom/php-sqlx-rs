@@ -1,6 +1,6 @@
 use ext_php_rs::ZvalConvert;
-use std::collections::HashMap;
-use std::fmt::Write;
+use std::collections::BTreeMap;
+use std::fmt::{Debug, Write};
 
 #[derive(Debug, Clone)]
 pub enum Ast {
@@ -29,7 +29,7 @@ pub enum Value {
     Bool(bool),
     Array(Vec<Value>),
 }
-pub type ParamsMap = HashMap<String, Value>;
+pub type ParamsMap = BTreeMap<String, Value>;
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value::Str(s.to_string())
@@ -104,6 +104,12 @@ impl Ast {
                         }
                         // Dollar placeholder
                         if c == '$' {
+                            if next == Some('$') {
+                                buf.push_str("$$");
+                                *pos += 2;
+                                continue;
+                            }
+
                             if !buf.is_empty() {
                                 branches.push(Ast::Sql(buf.clone()));
                                 buf.clear();
@@ -122,6 +128,11 @@ impl Ast {
                         }
                         // Named placeholder
                         if c == ':' {
+                            if next == Some(':') {
+                                buf.push_str("::");
+                                *pos += 2;
+                                continue;
+                            }
                             if let Some(nc) = next {
                                 if nc.is_alphanumeric() || nc == '_' {
                                     if !buf.is_empty() {
@@ -242,10 +253,15 @@ impl Ast {
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
     pub fn render<I, K, V>(&self, values: I) -> (String, Vec<Value>)
     where
-        I: IntoIterator<Item = (K, V)>,
+        I: IntoIterator<Item = (K, V)> + Debug,
         K: Into<String>,
         V: Into<Value>,
     {
+        #[cfg(test)]
+        {
+            println!("AST = {:?}", self);
+            println!("VALUES = {:?}", values);
+        }
         fn walk(
             node: &Ast,
             values: &ParamsMap,
@@ -261,15 +277,18 @@ impl Ast {
                 }
                 Ast::Sql(s) => sql.push_str(s),
                 Ast::Placeholder(name) => {
+                    #[cfg(test)]
+                    {
+                        println!("values = {values:?}");
+                        println!("{name:?} ==> {:?}", values.get(name));
+                    }
                     if let Some(val) = values.get(name) {
                         if let Value::Array(arr) = val {
-                            let mut first = true;
-                            for item in arr {
+                            for (i, item) in arr.iter().enumerate() {
                                 *counter += 1;
-                                if !first {
+                                if i > 0 {
                                     sql.push_str(", ");
                                 }
-                                first = false;
                                 write!(sql, "${}", *counter).unwrap();
                                 out_vals.push(item.clone());
                             }
@@ -364,25 +383,25 @@ mod tests {
 
     #[test]
     fn test_render_var_types() {
-        let sql =
-            "SELECT * FROM table WHERE id = $id AND active = :flag AND scores = ? AND data = $data";
+        let sql = "SELECT * FROM table WHERE id = $id AND active = :flag AND scores IN (?) AND data = $data";
         let ast = Ast::parse(sql).unwrap();
         let mut vals = ParamsMap::new();
         vals.insert("id".into(), Value::Int(7));
         vals.insert("flag".into(), Value::Bool(true));
-        vals.insert("1".into(), Value::Array(vec![Value::Int(1), Value::Int(2)]));
+        vals.insert("0".into(), Value::Array(vec![Value::Int(1), Value::Int(2)]));
         vals.insert("data".into(), Value::Str("xyz".into()));
         let (q, params) = ast.render(vals);
         assert_eq!(
             q,
-            "SELECT * FROM table WHERE id = $1 AND active = $2 AND scores = $3 AND data = $4"
+            "SELECT * FROM table WHERE id = $1 AND active = $2 AND scores IN ($3, $4) AND data = $5"
         );
         assert_eq!(
             params,
             vec![
                 Value::Int(7),
                 Value::Bool(true),
-                Value::Array(vec![Value::Int(1), Value::Int(2)]),
+                Value::Int(1),
+                Value::Int(2),
                 Value::Str("xyz".into()),
             ]
         );

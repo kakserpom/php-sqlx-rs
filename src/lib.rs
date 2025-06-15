@@ -110,6 +110,38 @@ trait RowToZval: Row {
     fn into_zval(self) -> anyhow::Result<Zval>;
 }
 
+fn json_into_zval(value: serde_json::Value) -> anyhow::Result<Zval> {
+    match value {
+        serde_json::Value::String(str) => str
+            .into_zval(false)
+            .map_err(|err| anyhow!("String: {err:?}")),
+        serde_json::Value::Number(number) => number
+            .to_string()
+            .into_zval(false)
+            .map_err(|err| anyhow!("Number: {err:?}")),
+        serde_json::Value::Bool(bool) => bool
+            .into_zval(false)
+            .map_err(|err| anyhow!("Bool: {err:?}")),
+        serde_json::Value::Null => {
+            let mut null = Zval::new();
+            null.set_null();
+            Ok(null)
+        }
+        serde_json::Value::Array(array) => Ok(array
+            .into_iter()
+            .map(json_into_zval)
+            .collect::<anyhow::Result<Vec<Zval>>>()?
+            .into_zval(false)
+            .map_err(|err| anyhow!("Bool: {err:?}"))?),
+        serde_json::Value::Object(object) => Ok(object
+            .into_iter()
+            .map(|(key, value)| Ok((key, json_into_zval(value)?)))
+            .collect::<anyhow::Result<HashMap<String, Zval>>>()?
+            .into_zval(false)
+            .map_err(|err| anyhow!("Bool: {err:?}"))?),
+    }
+}
+
 impl RowToZval for PgRow {
     fn into_zval(self) -> anyhow::Result<Zval> {
         fn try_cast_into_zval<'r, T>(row: &'r PgRow, name: &str) -> anyhow::Result<Zval>
@@ -146,7 +178,12 @@ impl RowToZval for PgRow {
                 "FLOAT8" | "F64" => try_cast_into_zval::<f64>(&self, name)?,
                 "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(&self, name)?,
                 "UUID" => try_cast_into_zval::<String>(&self, name)?,
-                "JSON" | "JSONB" => try_cast_into_zval::<String>(&self, name)?,
+                "JSON" | "JSONB" => self
+                    .try_get::<serde_json::Value, _>(name)
+                    .map_err(|err| anyhow!("{err:?}"))
+                    .map(json_into_zval)?
+                    .into_zval(false)
+                    .map_err(|err| anyhow!("{err:?}"))?,
                 "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
                     try_cast_into_zval::<String>(&self, name)?
                 }
