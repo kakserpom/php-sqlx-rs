@@ -85,11 +85,12 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
+        associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters);
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?
-            .into_zval(self.options.associative_arrays)
+            .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
     }
 
     /// Execute a query and return all matching rows.
@@ -97,12 +98,18 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
+        associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters);
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
-            .map(|x| PgRow::into_zval(x, self.options.associative_arrays))
+            .map(|x| {
+                PgRow::into_zval(
+                    x,
+                    associative_arrays.unwrap_or(self.options.associative_arrays),
+                )
+            })
             .try_collect()
     }
 }
@@ -458,7 +465,25 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_one(query, parameters)
+        self.inner.query_one(query, parameters, None)
+    }
+
+    /// Execute a query and return a single row as an associative array.
+    pub fn query_one_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.inner.query_one(query, parameters, Some(true))
+    }
+
+    /// Execute a query and return a single row as an object.
+    pub fn query_one_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.inner.query_one(query, parameters, Some(false))
     }
 
     /// Execute a query and return all matching rows.
@@ -467,7 +492,25 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner.query_all(query, parameters)
+        self.inner.query_all(query, parameters, None)
+    }
+
+    /// Execute a query and return all matching rows.
+    pub fn query_all_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.inner.query_all(query, parameters, Some(true))
+    }
+
+    /// Execute a query and return all matching rows.
+    pub fn query_all_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.inner.query_all(query, parameters, Some(false))
     }
 
     /// Prepare a reusable query object with driver context.
@@ -539,7 +582,39 @@ impl PreparedQuery {
     /// # Returns
     /// A PHP value (usually an associative array).
     pub fn query_one(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<Zval> {
-        self.driver_inner.query_one(&self.query, parameters)
+        self.driver_inner.query_one(&self.query, parameters, None)
+    }
+
+    /// Executes a new query using the same driver, returning a single row.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional map of parameter names to values.
+    ///
+    /// # Returns
+    /// A PHP value (usually an associative array).
+    pub fn query_one_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.driver_inner
+            .query_one(&self.query, parameters, Some(true))
+    }
+
+    /// Executes a new query using the same driver, returning a single row.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional map of parameter names to values.
+    ///
+    /// # Returns
+    /// A PHP value (usually an associative array).
+    pub fn query_one_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.driver_inner
+            .query_one(&self.query, parameters, Some(false))
     }
 
     /// Executes a new query using the same driver, returning all rows.
@@ -554,7 +629,39 @@ impl PreparedQuery {
         &self,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.driver_inner.query_all(&self.query, parameters)
+        self.driver_inner.query_all(&self.query, parameters, None)
+    }
+
+    /// Executes a new query using the same driver, returning all rows.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional map of parameter names to values.
+    ///
+    /// # Returns
+    /// A list of PHP values.
+    pub fn query_all_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.driver_inner
+            .query_all(&self.query, parameters, Some(true))
+    }
+
+    /// Executes a new query using the same driver, returning all rows.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional map of parameter names to values.
+    ///
+    /// # Returns
+    /// A list of PHP values.
+    pub fn query_all_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.driver_inner
+            .query_all(&self.query, parameters, Some(false))
     }
 }
 

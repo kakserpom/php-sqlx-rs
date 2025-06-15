@@ -3,9 +3,9 @@
 $sql = new Sqlx([
     'url' => 'postgres://localhost/postgres',
     'persistent_name' => 'test',
-    'assoc_arrays' => false
 ]);
 var_dump($sql->queryOne('select $1::json', ['{"a":1,"b":2}']));
+var_dump($sql->queryOneAssoc('select $1::json', ['{"a":1,"b":2}']));
 
 //$sql->query('SELECT $1 {{WHERE id = $id}}', [123]);
 //var_dump($sql->queryOne('SELECT ? IN (?) as result', [123, [111, 123, 333]]));
