@@ -116,7 +116,7 @@ $row = $driver->queryRow("SELECT * FROM users WHERE id = :id", [
 $row = $driver->queryRow("SELECT * FROM users WHERE id = :1", [1]);
 ```
 
-#### queryMaybeOne
+#### queryMaybeRow
 
 Same as `queryRow`, but returns `null` if not found.
 

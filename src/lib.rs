@@ -253,7 +253,7 @@ impl DriverInner {
     }
 
     /// Execute a query and return at most one row.
-    pub fn query_maybe_one(
+    pub fn query_maybe_row(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
@@ -784,12 +784,12 @@ impl Driver {
     /// # Errors
     /// Returns an error if the query fails for reasons other than no matching rows.
     /// For example, syntax errors, type mismatches, or database connection issues.
-    pub fn query_maybe_one(
+    pub fn query_maybe_row(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_maybe_one(query, parameters, None)
+        self.inner.query_maybe_row(query, parameters, None)
     }
 
     /// Executes a SQL query and returns one row as an associative array.
@@ -802,7 +802,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_maybe_one(query, parameters, Some(true))
+        self.inner.query_maybe_row(query, parameters, Some(true))
     }
 
     /// Executes a SQL query and returns one row as an object.
@@ -810,12 +810,12 @@ impl Driver {
     /// # Parameters
     /// - `query`: SQL query string
     /// - `parameters`: Optional map of named parameters
-    pub fn query_maybe_one_obj(
+    pub fn query_maybe_row_obj(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_maybe_one(query, parameters, Some(false))
+        self.inner.query_maybe_row(query, parameters, Some(false))
     }
 
     /// Executes a SQL query and returns all results.
