@@ -1,7 +1,8 @@
 # php-sqlx-rs
 
-A PHP extension powered by Rust and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
-database access with additional SQL syntax.
+A PHP extension powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
+database access with additional SQL syntax. It's built using the [ext-php-rs]((https://github.com/davidcole1340/ext-php-rs))
+crate.
 
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBM systems
 without
@@ -56,7 +57,7 @@ In the above example the `level` condition will only be rendered when both `$lev
 
 ## Installation
 
-Install with [`cargo-php`](https://github.com/danog/php-ext-rs):
+Install with [`cargo-php`](https://github.com/davidcole1340/ext-php-rs):
 
 ```bash
 cargo install cargo-php --locked
@@ -95,7 +96,7 @@ $driver = new Sqlx\Driver([
 #### queryOne / queryAll
 
 ```php
-$row = $driver->queryOne("SELECT * FROM users WHERE id = \$id", [
+$row = $driver->queryOne('SELECT * FROM users WHERE id = $id', [
     'id' => 1,
 ]);
 
