@@ -15,6 +15,7 @@ use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Column, Row};
+use sqlx_core::Error;
 use sqlx_core::database::Database;
 use sqlx_core::decode::Decode;
 use sqlx_core::encode::Encode;
@@ -39,7 +40,9 @@ const SQLX_OPTION_ASSOC_ARRAYS: &'static str = "assoc_arrays";
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<DriverInner>>> =
     LazyLock::new(|| DashMap::new());
 
-/// A database connection wrapper with query helpers and AST cache.
+/// A database driver using SQLx with query helpers and AST cache.
+///
+/// This class supports prepared queries, persistent connections, and augmented SQL.
 #[php_class(name = "Sqlx")]
 pub struct Driver {
     pub inner: Arc<DriverInner>,
@@ -91,6 +94,30 @@ impl DriverInner {
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?
             .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
+    }
+
+    /// Execute a query and return at most one row.
+    pub fn query_maybe_one(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<Zval> {
+        let (query, values) = self.render_query(query, parameters);
+        Ok(RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
+            .map(|x| Some(x))
+            .or_else(|err: Error| match err {
+                Error::RowNotFound => Ok(None),
+                _ => Err(anyhow!("{:?}", err)),
+            })?
+            .map(|x| x.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays)))
+            .transpose()?
+            .unwrap_or_else(|| {
+                let mut null = Zval::new();
+                null.set_null();
+                null
+            }))
     }
 
     /// Execute a query and return all matching rows.
@@ -360,10 +387,15 @@ impl Default for DriverOptions {
 
 #[php_impl]
 impl Driver {
-    /// Create a new database connection using the given URL.
+    /// Constructs a new SQLx driver instance.
     ///
     /// # Parameters
-    /// - `url`: SQLX connection string.
+    /// - `options`: Connection URL as string or associative array with options:
+    ///   - `url`: (string) PostgreSQL connection string (required)
+    ///   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
+    ///   - `ast_cache_shard_size`: (int) size per shard (default: 128)
+    ///   - `persistent_name`: (string) name of persistent connection
+    ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
     pub fn __construct(options: DriverConstructorOptions) -> anyhow::Result<Driver> {
         let options = match options {
             DriverConstructorOptions::Url(url) => DriverOptions {
@@ -459,7 +491,14 @@ impl Driver {
         Ok(Self { inner })
     }
 
-    /// Execute a query and return a single row.
+    /// Executes a SQL query and returns a single result.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// Single row as array or object depending on config
     pub fn query_one(
         &self,
         query: &str,
@@ -468,7 +507,11 @@ impl Driver {
         self.inner.query_one(query, parameters, None)
     }
 
-    /// Execute a query and return a single row as an associative array.
+    /// Executes a SQL query and returns one row as an associative array.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
     pub fn query_one_assoc(
         &self,
         query: &str,
@@ -477,7 +520,11 @@ impl Driver {
         self.inner.query_one(query, parameters, Some(true))
     }
 
-    /// Execute a query and return a single row as an object.
+    /// Executes a SQL query and returns one row as an object.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
     pub fn query_one_obj(
         &self,
         query: &str,
@@ -486,7 +533,56 @@ impl Driver {
         self.inner.query_one(query, parameters, Some(false))
     }
 
-    /// Execute a query and return all matching rows.
+    /// Executes a SQL query and returns a single result.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// Single row as array or object depending on config
+    pub fn query_maybe_one(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.inner.query_maybe_one(query, parameters, None)
+    }
+
+    /// Executes a SQL query and returns one row as an associative array.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    pub fn query_one_maybe_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.inner.query_maybe_one(query, parameters, Some(true))
+    }
+
+    /// Executes a SQL query and returns one row as an object.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    pub fn query_maybe_one_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.inner.query_maybe_one(query, parameters, Some(false))
+    }
+
+    /// Executes a SQL query and returns all results.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// Array of rows as array or object depending on config
     pub fn query_all(
         &self,
         query: &str,
@@ -495,7 +591,11 @@ impl Driver {
         self.inner.query_all(query, parameters, None)
     }
 
-    /// Execute a query and return all matching rows.
+    /// Executes a SQL query and returns all rows as associative arrays.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
     pub fn query_all_assoc(
         &self,
         query: &str,
@@ -504,7 +604,11 @@ impl Driver {
         self.inner.query_all(query, parameters, Some(true))
     }
 
-    /// Execute a query and return all matching rows.
+    /// Executes a SQL query and returns all rows as objects.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
     pub fn query_all_obj(
         &self,
         query: &str,
@@ -513,10 +617,13 @@ impl Driver {
         self.inner.query_all(query, parameters, Some(false))
     }
 
-    /// Prepare a reusable query object with driver context.
+    /// Creates a prepared query object with the given SQL string.
     ///
     /// # Parameters
-    /// - `query`: SQL string to prepare.
+    /// - `query`: SQL query string to prepare
+    ///
+    /// # Returns
+    /// Prepared query object
     #[must_use]
     pub fn prepare(&self, query: &str) -> PreparedQuery {
         PreparedQuery {
@@ -525,7 +632,14 @@ impl Driver {
         }
     }
 
-    /// Execute a query (e.g., INSERT/UPDATE) and return the number of rows affected.
+    /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// Number of affected rows
     pub fn execute(
         &self,
         query: &str,
@@ -534,26 +648,28 @@ impl Driver {
         self.inner.execute(query, parameters)
     }
 
-    /// Insert data into a table using a map of fields and values.
+    /// Inserts a row into the given table using a map of fields.
     ///
     /// # Parameters
-    /// - `table`: Table name.
-    /// - `fields`: Map of column names to values.
+    /// - `table`: Table name
+    /// - `row`: Map of column names to values
     ///
     /// # Returns
-    /// Number of inserted rows.
-    pub fn insert(&self, table: &str, fields: HashMap<String, Value>) -> anyhow::Result<u64> {
+    /// Number of inserted rows
+    pub fn insert(&self, table: &str, row: HashMap<String, Value>) -> anyhow::Result<u64> {
         self.execute(
             &format!(
                 "INSERT INTO {table} SET {}",
-                fields.keys().map(|k| format!("{k} = ${k}")).join(", ")
+                row.keys().map(|k| format!("{k} = ${k}")).join(", ")
             ),
-            Some(fields),
+            Some(row),
         )
     }
 }
 
-/// A prepared SQL query that holds the query string and a reference to the driver.
+/// A reusable prepared SQL query with parameter support.
+///
+/// Created using `Driver::prepare()`, shares context with original driver.
 #[php_class]
 pub struct PreparedQuery {
     query: String,
@@ -562,37 +678,32 @@ pub struct PreparedQuery {
 
 #[php_impl]
 impl PreparedQuery {
-    /// Executes the prepared query with the given parameters.
+    /// Executes the prepared query with optional parameters.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of parameter names to values.
+    /// - `parameters`: Optional map of named parameters
     ///
     /// # Returns
-    /// Number of rows affected.
+    /// Number of affected rows
     pub fn execute(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<u64> {
         self.driver_inner.execute(self.query.as_str(), parameters)
     }
 
-    /// Executes a new query using the same driver, returning a single row.
+    /// Executes the prepared query and returns a single result.
     ///
     /// # Parameters
-    /// - `query`: SQL query string.
-    /// - `parameters`: Optional map of parameter names to values.
+    /// - `parameters`: Optional map of named parameters
     ///
     /// # Returns
-    /// A PHP value (usually an associative array).
+    /// Single row as array or object depending on config
     pub fn query_one(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<Zval> {
         self.driver_inner.query_one(&self.query, parameters, None)
     }
 
-    /// Executes a new query using the same driver, returning a single row.
+    /// Executes the prepared query and returns one row as an associative array.
     ///
     /// # Parameters
-    /// - `query`: SQL query string.
-    /// - `parameters`: Optional map of parameter names to values.
-    ///
-    /// # Returns
-    /// A PHP value (usually an associative array).
+    /// - `parameters`: Optional map of named parameters
     pub fn query_one_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -601,14 +712,10 @@ impl PreparedQuery {
             .query_one(&self.query, parameters, Some(true))
     }
 
-    /// Executes a new query using the same driver, returning a single row.
+    /// Executes the prepared query and returns one row as an object.
     ///
     /// # Parameters
-    /// - `query`: SQL query string.
-    /// - `parameters`: Optional map of parameter names to values.
-    ///
-    /// # Returns
-    /// A PHP value (usually an associative array).
+    /// - `parameters`: Optional map of named parameters
     pub fn query_one_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -617,14 +724,13 @@ impl PreparedQuery {
             .query_one(&self.query, parameters, Some(false))
     }
 
-    /// Executes a new query using the same driver, returning all rows.
+    /// Executes the prepared query and returns all rows.
     ///
     /// # Parameters
-    /// - `query`: SQL query string.
-    /// - `parameters`: Optional map of parameter names to values.
+    /// - `parameters`: Optional map of named parameters
     ///
     /// # Returns
-    /// A list of PHP values.
+    /// Array of rows as array or object depending on config
     pub fn query_all(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -632,14 +738,10 @@ impl PreparedQuery {
         self.driver_inner.query_all(&self.query, parameters, None)
     }
 
-    /// Executes a new query using the same driver, returning all rows.
+    /// Executes the prepared query and returns all rows as associative arrays.
     ///
     /// # Parameters
-    /// - `query`: SQL query string.
-    /// - `parameters`: Optional map of parameter names to values.
-    ///
-    /// # Returns
-    /// A list of PHP values.
+    /// - `parameters`: Optional map of named parameters
     pub fn query_all_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -648,14 +750,10 @@ impl PreparedQuery {
             .query_all(&self.query, parameters, Some(true))
     }
 
-    /// Executes a new query using the same driver, returning all rows.
+    /// Executes the prepared query and returns all rows as objects.
     ///
     /// # Parameters
-    /// - `query`: SQL query string.
-    /// - `parameters`: Optional map of parameter names to values.
-    ///
-    /// # Returns
-    /// A list of PHP values.
+    /// - `parameters`: Optional map of named parameters
     pub fn query_all_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,

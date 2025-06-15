@@ -1,11 +1,12 @@
 <?php
 //$sql = new Sqlx("postgres://localhost/postgres");
 $sql = new Sqlx([
-    'url' => 'postgres://localhost/postgres',
+    'url' => 'postgres://localhost/test',
     'persistent_name' => 'test',
 ]);
-var_dump($sql->queryOne('select $1::json', ['{"a":1,"b":2}']));
-var_dump($sql->queryOneAssoc('select $1::json', ['{"a":1,"b":2}']));
+var_dump($sql->queryMaybeOne('select * from my_table'));
+//var_dump($sql->queryOne('select $1::json', ['{"a":1,"b":2}']));
+//var_dump($sql->queryOneAssoc('select $1::json', ['{"a":1,"b":2}']));
 
 //$sql->query('SELECT $1 {{WHERE id = $id}}', [123]);
 //var_dump($sql->queryOne('SELECT ? IN (?) as result', [123, [111, 123, 333]]));
