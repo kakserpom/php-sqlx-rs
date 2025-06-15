@@ -30,8 +30,10 @@ use tokio::runtime::Runtime;
 /// Global runtime for executing async `SQLx` queries from sync context.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<DriverInner>>> =
-    LazyLock::new(|| DashMap::new());
+    LazyLock::new(DashMap::new);
 
+const DEFAULT_AST_CACHE_SHARD_COUNT: usize = 8;
+const DEFAULT_AST_CACHE_SHARD_SIZE: usize = 256;
 #[php_class(name = "Sqlx\\OrderBy")]
 pub struct OrderBy {
     pub(crate) defined_fields: HashMap<String, Option<String>>,
@@ -45,8 +47,25 @@ pub enum OrderFieldDefinition {
 
 #[php_impl]
 impl OrderBy {
+    /// ASCending order
     const ASC: &'static str = "ASC";
+    /// DESCending order
     const DESC: &'static str = "DESC";
+
+    /// Constructs an OrderBy helper with allowed sortable fields.
+    ///
+    /// # Parameters
+    /// - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
+    ///
+    /// # Example
+    /// ```php
+    /// $order_by = new Sqlx\OrderBy([
+    ///     "name",
+    ///     "age",
+    ///     "total_posts" => "COUNT(posts.*)"
+    /// ]);
+    /// ```
+
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
         Ok(Self {
             defined_fields: defined_fields
@@ -62,11 +81,25 @@ impl OrderBy {
         })
     }
 
+    /// __invoke magic for apply()
+
     #[must_use]
     pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
         self.apply(order_by)
     }
 
+    /// Applies ordering rules to a user-defined input.
+    ///
+    /// # Parameters
+    /// - `order_by`: List of fields (as strings or [field, direction] arrays)
+    ///
+    /// # Returns
+    /// A `RenderedOrderBy` object containing validated SQL ORDER BY clauses
+    /// The returning value is to be used as a placeholder value
+    ///
+    /// # Errors
+    /// This method does not return an error but silently ignores unknown fields.
+    /// Use validation separately if strict input is required.
     #[must_use]
     pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
         RenderedOrderBy {
@@ -99,27 +132,12 @@ impl OrderBy {
 pub struct ApplyOrderBy {
     inner: Vec<Vec<String>>,
 }
+/// A rendered ORDER BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
-//#[php_class]
 pub struct RenderedOrderBy {
+    // @TODO: make it impossible to alter RenderedOrderBy from PHP side
     pub(crate) __inner: Vec<String>,
 }
-
-// @TODO: make it impossible to alter RenderedOrderBy from PHP side
-/*impl FromZval<'_> for RenderedOrderBy {
-    const TYPE: DataType = DataType::Object(Some("RenderedOrderBy"));
-
-    fn from_zval(zval: &'_ Zval) -> Option<Self> {
-        dbg!(zval);
-        Some(Self { __inner: vec![] })
-    }
-}
-#[php_impl]
-impl RenderedOrderBy {
-    pub fn inner(&self) -> Vec<String> {
-        self.inner.clone()
-    }
-}*/
 
 /// A database driver using SQLx with query helpers and AST cache.
 ///
@@ -135,7 +153,20 @@ pub struct DriverInner {
 }
 
 impl DriverInner {
-    /// Execute a query (e.g., INSERT/UPDATE) and return the number of rows affected.
+    /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// Number of affected rows
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+    /// - parameters contain unsupported types or fail to bind correctly;
+    /// - the runtime fails to execute the query (e.g., task panic or timeout).
     pub fn execute(
         &self,
         query: &str,
@@ -164,7 +195,20 @@ impl DriverInner {
         }
     }
 
-    /// Execute a query and return a single row.
+    /// Executes the prepared query and returns a single result.
+    ///
+    /// # Parameters
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// Single row as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or execution fails;
+    /// - a parameter cannot be bound or has incorrect type;
+    /// - the row contains unsupported database types;
+    /// - conversion to PHP object fails.
     pub fn query_one(
         &self,
         query: &str,
@@ -187,7 +231,7 @@ impl DriverInner {
         let (query, values) = self.render_query(query, parameters);
         Ok(RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
-            .map(|x| Some(x))
+            .map(Some)
             .or_else(|err: Error| match err {
                 Error::RowNotFound => Ok(None),
                 _ => Err(anyhow!("{:?}", err)),
@@ -201,7 +245,22 @@ impl DriverInner {
             }))
     }
 
-    /// Execute a query and return all matching rows.
+    /// Executes a SQL query and returns all results.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// Array of rows as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or fails to execute;
+    /// - parameter binding fails;
+    /// - row decoding fails due to an unsupported or mismatched database type;
+    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+
     pub fn query_all(
         &self,
         query: &str,
@@ -221,6 +280,21 @@ impl DriverInner {
             .try_collect()
     }
 
+    /// Executes a SQL query and returns the rendered query and its parameters.
+    ///
+    /// This method does not execute the query but returns the SQL string with placeholders
+    /// and the bound parameter values for debugging or logging purposes.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// A list where the first element is the rendered SQL query (string), and the second is an array of bound values
+    ///
+    /// # Errors
+    /// Returns an error if the query can't be parsed, rendered, or if parameters
+    /// cannot be converted from PHP values.
     pub fn dry(
         &self,
         query: &str,
@@ -279,7 +353,7 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
                         |mut std_object, (key, value)| {
                             std_object
                                 .set_property(&key, json_into_zval(value, associative_arrays))
-                                .map(|_| std_object)
+                                .map(|()| std_object)
                                 .map_err(|err| anyhow!("{:?}", err))
                         },
                     )?
@@ -297,11 +371,10 @@ impl RowToZval for PgRow {
             T: Decode<'r, <PgRow as Row>::Database> + Type<<PgRow as Row>::Database>,
             T: IntoZval,
         {
-            Ok(row
-                .try_get::<'r, T, _>(name)
+            row.try_get::<'r, T, _>(name)
                 .map_err(|err| anyhow!("{err:?}"))?
                 .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?)
+                .map_err(|err| anyhow!("{err:?}"))
         }
 
         let row = self.columns().iter().try_fold(
@@ -315,7 +388,7 @@ impl RowToZval for PgRow {
                         "BYTEA" | "BINARY" => self
                             .try_get::<&[u8], _>(name)
                             .map_err(|err| anyhow!("{err:?}"))
-                            .map(|x| Binary::from_iter(x.iter().copied()))?
+                            .map(|x| x.iter().copied().collect::<Binary<_>>())?
                             .into_zval(false)
                             .map_err(|err| anyhow!("{err:?}"))?,
                         "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
@@ -403,7 +476,7 @@ impl RowToZval for PgRow {
                     |mut std_object, (key, value)| {
                         std_object
                             .set_property(&key, value)
-                            .map(|_| std_object)
+                            .map(|()| std_object)
                             .map_err(|err| anyhow!("{:?}", err))
                     },
                 )?
@@ -450,7 +523,7 @@ where
             Value::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             Value::Object(s) => s.values().fold(q, walker),
-            _ => unimplemented!(),
+            Value::RenderedOrderBy(_) => unimplemented!(),
         }
     }
 
@@ -474,8 +547,8 @@ impl Default for DriverOptions {
     fn default() -> Self {
         Self {
             url: None,
-            ast_cache_shard_count: 8,
-            ast_cache_shard_size: 128,
+            ast_cache_shard_count: DEFAULT_AST_CACHE_SHARD_COUNT,
+            ast_cache_shard_size: DEFAULT_AST_CACHE_SHARD_SIZE,
             persistent_name: None,
             associative_arrays: false,
         }
@@ -496,9 +569,9 @@ impl Driver {
     ///
     /// # Parameters
     /// - `options`: Connection URL as string or associative array with options:
-    ///   - `url`: (string) PostgreSQL connection string (required)
+    ///   - `url`: (string) database connection string (required)
     ///   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
-    ///   - `ast_cache_shard_size`: (int) size per shard (default: 128)
+    ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
     ///   - `persistent_name`: (string) name of persistent connection
     ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
     pub fn __construct(options: DriverConstructorOptions) -> anyhow::Result<Self> {
@@ -530,10 +603,10 @@ impl Driver {
                     },
                 )?,
                 ast_cache_shard_count: kv.get(Self::OPTION_AST_CACHE_SHARD_COUNT).map_or(
-                    Ok(8),
+                    Ok(DEFAULT_AST_CACHE_SHARD_COUNT),
                     |value| {
                         if let Value::Int(n) = value {
-                            Ok(*n as usize)
+                            Ok(usize::try_from(*n)?)
                         } else {
                             Err(anyhow!(
                                 "{} must be an integer",
@@ -543,10 +616,10 @@ impl Driver {
                     },
                 )?,
                 ast_cache_shard_size: kv.get(Self::OPTION_AST_CACHE_SHARD_SIZE).map_or(
-                    Ok(8),
+                    Ok(DEFAULT_AST_CACHE_SHARD_SIZE),
                     |value| {
                         if let Value::Int(n) = value {
-                            Ok(*n as usize)
+                            Ok(usize::try_from(*n)?)
                         } else {
                             Err(anyhow!(
                                 "{} must be an integer",
@@ -607,6 +680,13 @@ impl Driver {
     ///
     /// # Returns
     /// Single row as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or execution fails;
+    /// - a parameter cannot be bound or has incorrect type;
+    /// - the row contains unsupported database types;
+    /// - conversion to PHP object fails.
     pub fn query_one(
         &self,
         query: &str,
@@ -620,6 +700,13 @@ impl Driver {
     /// # Parameters
     /// - `query`: SQL query string
     /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or execution fails;
+    /// - a parameter cannot be bound or has incorrect type;
+    /// - the row contains unsupported database types;
+    /// - conversion to PHP object fails.
     pub fn query_one_assoc(
         &self,
         query: &str,
@@ -633,6 +720,13 @@ impl Driver {
     /// # Parameters
     /// - `query`: SQL query string
     /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or execution fails;
+    /// - a parameter cannot be bound or has incorrect type;
+    /// - the row contains unsupported database types;
+    /// - conversion to PHP object fails.
     pub fn query_one_obj(
         &self,
         query: &str,
@@ -649,6 +743,10 @@ impl Driver {
     ///
     /// # Returns
     /// Single row as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if the query fails for reasons other than no matching rows.
+    /// For example, syntax errors, type mismatches, or database connection issues.
     pub fn query_maybe_one(
         &self,
         query: &str,
@@ -691,6 +789,13 @@ impl Driver {
     ///
     /// # Returns
     /// Array of rows as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or fails to execute;
+    /// - parameter binding fails;
+    /// - row decoding fails due to an unsupported or mismatched database type;
+    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
     pub fn query_all(
         &self,
         query: &str,
@@ -704,6 +809,13 @@ impl Driver {
     /// # Parameters
     /// - `query`: SQL query string
     /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or fails to execute;
+    /// - parameter binding fails;
+    /// - row decoding fails due to an unsupported or mismatched database type;
+    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
     pub fn query_all_assoc(
         &self,
         query: &str,
@@ -717,6 +829,13 @@ impl Driver {
     /// # Parameters
     /// - `query`: SQL query string
     /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or fails to execute;
+    /// - parameter binding fails;
+    /// - row decoding fails due to an unsupported or mismatched database type;
+    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
     pub fn query_all_obj(
         &self,
         query: &str,
@@ -748,6 +867,12 @@ impl Driver {
     ///
     /// # Returns
     /// Number of affected rows
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+    /// - parameters contain unsupported types or fail to bind correctly;
+    /// - the runtime fails to execute the query (e.g., task panic or timeout).
     pub fn execute(
         &self,
         query: &str,
@@ -774,6 +899,21 @@ impl Driver {
         )
     }
 
+    /// Executes a SQL query and returns the rendered query and its parameters.
+    ///
+    /// This method does not execute the query but returns the SQL string with placeholders
+    /// and the bound parameter values for debugging or logging purposes.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Returns
+    /// A list where the first element is the rendered SQL query (string), and the second is an array of bound values
+    ///
+    /// # Errors
+    /// Returns an error if the query can't be parsed, rendered, or if parameters
+    /// cannot be converted from PHP values.
     pub fn dry(
         &self,
         query: &str,
@@ -801,6 +941,12 @@ impl PreparedQuery {
     ///
     /// # Returns
     /// Number of affected rows
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+    /// - parameters contain unsupported types or fail to bind correctly;
+    /// - the runtime fails to execute the query (e.g., task panic or timeout).
     pub fn execute(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<u64> {
         self.driver_inner.execute(self.query.as_str(), parameters)
     }
@@ -812,6 +958,13 @@ impl PreparedQuery {
     ///
     /// # Returns
     /// Single row as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or execution fails;
+    /// - a parameter cannot be bound or has incorrect type;
+    /// - the row contains unsupported database types;
+    /// - conversion to PHP object fails.
     pub fn query_one(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<Zval> {
         self.driver_inner.query_one(&self.query, parameters, None)
     }
@@ -847,6 +1000,13 @@ impl PreparedQuery {
     ///
     /// # Returns
     /// Array of rows as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or fails to execute;
+    /// - parameter binding fails;
+    /// - row decoding fails due to an unsupported or mismatched database type;
+    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
     pub fn query_all(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -858,6 +1018,13 @@ impl PreparedQuery {
     ///
     /// # Parameters
     /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or fails to execute;
+    /// - parameter binding fails;
+    /// - row decoding fails due to an unsupported or mismatched database type;
+    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
     pub fn query_all_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -870,6 +1037,13 @@ impl PreparedQuery {
     ///
     /// # Parameters
     /// - `parameters`: Optional map of named parameters
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - SQL query is invalid or fails to execute;
+    /// - parameter binding fails;
+    /// - row decoding fails due to an unsupported or mismatched database type;
+    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
     pub fn query_all_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
