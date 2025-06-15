@@ -1,6 +1,10 @@
 <?php
 //$sql = new Sqlx("postgres://localhost/postgres");
-$sql = new Sqlx(['url' => 'postgres://localhost/postgres', 'persistent_name' => 'test']);
+$sql = new Sqlx([
+    'url' => 'postgres://localhost/postgres',
+    'persistent_name' => 'test',
+    'assoc_arrays' => false
+]);
 var_dump($sql->queryOne('select $1::json', ['{"a":1,"b":2}']));
 
 //$sql->query('SELECT $1 {{WHERE id = $id}}', [123]);

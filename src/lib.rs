@@ -10,6 +10,7 @@ use anyhow::{anyhow, bail};
 use dashmap::DashMap;
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
+use ext_php_rs::ffi::zend_object;
 use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
 use sqlx::postgres::{PgPoolOptions, PgRow};
@@ -33,6 +34,7 @@ const SQLX_OPTION_URL: &'static str = "url";
 const SQLX_OPTION_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
 const SQLX_OPTION_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
 const SQLX_OPTION_PERSISTENT_NAME: &'static str = "persistent_name";
+const SQLX_OPTION_ASSOC_ARRAYS: &'static str = "assoc_arrays";
 
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<DriverInner>>> =
     LazyLock::new(|| DashMap::new());
@@ -45,6 +47,7 @@ pub struct Driver {
 pub struct DriverInner {
     pub pool: sqlx::PgPool,
     pub ast_cache: LruCache<String, Ast>,
+    pub options: DriverOptions,
 }
 
 impl DriverInner {
@@ -86,7 +89,7 @@ impl DriverInner {
         let (query, values) = self.render_query(query, parameters);
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?
-            .into_zval()
+            .into_zval(self.options.associative_arrays)
     }
 
     /// Execute a query and return all matching rows.
@@ -99,7 +102,7 @@ impl DriverInner {
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
-            .map(PgRow::into_zval)
+            .map(|x| PgRow::into_zval(x, self.options.associative_arrays))
             .try_collect()
     }
 }
@@ -107,10 +110,10 @@ impl DriverInner {
 /// Trait to convert a row into a PHP value.
 trait RowToZval: Row {
     /// Convert the row into a PHP `Zval` associative array.
-    fn into_zval(self) -> anyhow::Result<Zval>;
+    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval>;
 }
 
-fn json_into_zval(value: serde_json::Value) -> anyhow::Result<Zval> {
+fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow::Result<Zval> {
     match value {
         serde_json::Value::String(str) => str
             .into_zval(false)
@@ -129,21 +132,39 @@ fn json_into_zval(value: serde_json::Value) -> anyhow::Result<Zval> {
         }
         serde_json::Value::Array(array) => Ok(array
             .into_iter()
-            .map(json_into_zval)
+            .map(|x| json_into_zval(x, associative_arrays))
             .collect::<anyhow::Result<Vec<Zval>>>()?
             .into_zval(false)
             .map_err(|err| anyhow!("Bool: {err:?}"))?),
-        serde_json::Value::Object(object) => Ok(object
-            .into_iter()
-            .map(|(key, value)| Ok((key, json_into_zval(value)?)))
-            .collect::<anyhow::Result<HashMap<String, Zval>>>()?
-            .into_zval(false)
-            .map_err(|err| anyhow!("Bool: {err:?}"))?),
+        serde_json::Value::Object(object) => {
+            if associative_arrays {
+                Ok(object
+                    .into_iter()
+                    .map(|(key, value)| Ok((key, json_into_zval(value, associative_arrays)?)))
+                    .collect::<anyhow::Result<HashMap<String, Zval>>>()?
+                    .into_zval(false)
+                    .map_err(|err| anyhow!("Bool: {err:?}"))?)
+            } else {
+                Ok(object
+                    .into_iter()
+                    .try_fold(
+                        zend_object::new_stdclass(),
+                        |mut std_object, (key, value)| {
+                            std_object
+                                .set_property(&key, json_into_zval(value, associative_arrays))
+                                .map(|_| std_object)
+                                .map_err(|err| anyhow!("{:?}", err))
+                        },
+                    )?
+                    .into_zval(false)
+                    .map_err(|err| anyhow!("{err:?}"))?)
+            }
+        }
     }
 }
 
 impl RowToZval for PgRow {
-    fn into_zval(self) -> anyhow::Result<Zval> {
+    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval> {
         fn try_cast_into_zval<'r, T>(row: &'r PgRow, name: &str) -> anyhow::Result<Zval>
         where
             T: Decode<'r, <PgRow as Row>::Database> + Type<<PgRow as Row>::Database>,
@@ -156,86 +177,111 @@ impl RowToZval for PgRow {
                 .map_err(|err| anyhow!("{err:?}"))?)
         }
 
-        let mut row: HashMap<String, Zval> = HashMap::with_capacity(self.len());
-        for column in self.columns() {
-            let name = column.name();
-            let value = match column.type_info().name().to_uppercase().as_str() {
-                "BOOL" => try_cast_into_zval::<bool>(&self, name)?,
-                "BYTEA" | "BINARY" => self
-                    .try_get::<&[u8], _>(name)
-                    .map_err(|err| anyhow!("{err:?}"))
-                    .map(|x| Binary::from_iter(x.iter().copied()))?
-                    .into_zval(false)
-                    .map_err(|err| anyhow!("{err:?}"))?,
-                "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
-                    try_cast_into_zval::<String>(&self, name)?
-                }
-                "INT2" => try_cast_into_zval::<i16>(&self, name)?,
-                "INT4" | "INT" => try_cast_into_zval::<i32>(&self, name)?,
-                "INT8" => try_cast_into_zval::<i64>(&self, name)?,
-                "OID" => try_cast_into_zval::<i32>(&self, name)?,
-                "FLOAT4" => try_cast_into_zval::<f32>(&self, name)?,
-                "FLOAT8" | "F64" => try_cast_into_zval::<f64>(&self, name)?,
-                "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(&self, name)?,
-                "UUID" => try_cast_into_zval::<String>(&self, name)?,
-                "JSON" | "JSONB" => self
-                    .try_get::<serde_json::Value, _>(name)
-                    .map_err(|err| anyhow!("{err:?}"))
-                    .map(json_into_zval)?
-                    .into_zval(false)
-                    .map_err(|err| anyhow!("{err:?}"))?,
-                "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
-                    try_cast_into_zval::<String>(&self, name)?
-                }
-                "INET" | "CIDR" | "MACADDR" | "MACADDR8" => {
-                    try_cast_into_zval::<String>(&self, name)?
-                }
-                "BIT" | "VARBIT" => try_cast_into_zval::<String>(&self, name)?,
-                "POINT" | "LSEG" | "PATH" | "BOX" | "POLYGON" | "LINE" | "CIRCLE" => {
-                    try_cast_into_zval::<String>(&self, name)?
-                }
-                "INT4RANGE" | "NUMRANGE" | "TSRANGE" | "TSTZRANGE" | "DATERANGE" | "INT8RANGE" => {
-                    try_cast_into_zval::<String>(&self, name)?
-                }
-                "RECORD" => try_cast_into_zval::<String>(&self, name)?,
-                "JSONPATH" => try_cast_into_zval::<String>(&self, name)?,
+        let row = self.columns().iter().try_fold(
+            HashMap::<String, Zval>::with_capacity(self.len()),
+            |mut row, column| {
+                let name = column.name();
+                let value =
+                    match column.type_info().name().to_uppercase().as_str() {
+                        "BOOL" => try_cast_into_zval::<bool>(&self, name)?,
+                        "BYTEA" | "BINARY" => self
+                            .try_get::<&[u8], _>(name)
+                            .map_err(|err| anyhow!("{err:?}"))
+                            .map(|x| Binary::from_iter(x.iter().copied()))?
+                            .into_zval(false)
+                            .map_err(|err| anyhow!("{err:?}"))?,
+                        "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
+                            try_cast_into_zval::<String>(&self, name)?
+                        }
+                        "INT2" => try_cast_into_zval::<i16>(&self, name)?,
+                        "INT4" | "INT" => try_cast_into_zval::<i32>(&self, name)?,
+                        "INT8" => try_cast_into_zval::<i64>(&self, name)?,
+                        "OID" => try_cast_into_zval::<i32>(&self, name)?,
+                        "FLOAT4" => try_cast_into_zval::<f32>(&self, name)?,
+                        "FLOAT8" | "F64" => try_cast_into_zval::<f64>(&self, name)?,
+                        "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(&self, name)?,
+                        "UUID" => try_cast_into_zval::<String>(&self, name)?,
+                        "JSON" | "JSONB" => self
+                            .try_get::<serde_json::Value, _>(name)
+                            .map_err(|err| anyhow!("{err:?}"))
+                            .map(|x| json_into_zval(x, associative_arrays))?
+                            .into_zval(false)
+                            .map_err(|err| anyhow!("{err:?}"))?,
+                        "_JSON" | "_JSONB" => self
+                            .try_get::<Vec<serde_json::Value>, _>(name)
+                            .map_err(|err| anyhow!("{err:?}"))
+                            .map(|x| {
+                                x.into_iter()
+                                    .map(|x| json_into_zval(x, associative_arrays))
+                                    .collect::<Vec<_>>()
+                            })?
+                            .into_zval(false)
+                            .map_err(|err| anyhow!("{err:?}"))?,
+                        "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
+                            try_cast_into_zval::<String>(&self, name)?
+                        }
+                        "INET" | "CIDR" | "MACADDR" | "MACADDR8" => {
+                            try_cast_into_zval::<String>(&self, name)?
+                        }
+                        "BIT" | "VARBIT" => try_cast_into_zval::<String>(&self, name)?,
+                        "POINT" | "LSEG" | "PATH" | "BOX" | "POLYGON" | "LINE" | "CIRCLE" => {
+                            try_cast_into_zval::<String>(&self, name)?
+                        }
+                        "INT4RANGE" | "NUMRANGE" | "TSRANGE" | "TSTZRANGE" | "DATERANGE"
+                        | "INT8RANGE" => try_cast_into_zval::<String>(&self, name)?,
+                        "RECORD" => try_cast_into_zval::<String>(&self, name)?,
+                        "JSONPATH" => try_cast_into_zval::<String>(&self, name)?,
 
-                // массивы
-                "_BOOL" => try_cast_into_zval::<Vec<bool>>(&self, name)?,
-                "_BYTEA" => try_cast_into_zval::<Vec<Vec<u8>>>(&self, name)?,
-                "_CHAR" | "_NAME" | "_TEXT" | "_BPCHAR" | "_VARCHAR" => {
-                    try_cast_into_zval::<Vec<String>>(&self, name)?
-                }
-                "_INT2" => try_cast_into_zval::<Vec<i16>>(&self, name)?,
-                "_INT4" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
-                "_INT8" => try_cast_into_zval::<Vec<i64>>(&self, name)?,
-                "_OID" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
-                "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(&self, name)?,
-                "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(&self, name)?,
-                "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                "_UUID" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                "_JSON" | "_JSONB" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                "_DATE" | "_TIME" | "_TIMESTAMP" | "_TIMESTAMPTZ" | "_INTERVAL" | "_TIMETZ" => {
-                    try_cast_into_zval::<Vec<String>>(&self, name)?
-                }
-                "_INET" | "_CIDR" | "_MACADDR" | "_MACADDR8" => {
-                    try_cast_into_zval::<Vec<String>>(&self, name)?
-                }
-                "_BIT" | "_VARBIT" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                "_POINT" | "_LSEG" | "_PATH" | "_BOX" | "_POLYGON" | "_LINE" | "_CIRCLE" => {
-                    try_cast_into_zval::<Vec<String>>(&self, name)?
-                }
-                "_INT4RANGE" | "_NUMRANGE" | "_TSRANGE" | "_TSTZRANGE" | "_DATERANGE"
-                | "_INT8RANGE" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                "_RECORD" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                "_JSONPATH" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        // массивы
+                        "_BOOL" => try_cast_into_zval::<Vec<bool>>(&self, name)?,
+                        "_BYTEA" => try_cast_into_zval::<Vec<Vec<u8>>>(&self, name)?,
+                        "_CHAR" | "_NAME" | "_TEXT" | "_BPCHAR" | "_VARCHAR" => {
+                            try_cast_into_zval::<Vec<String>>(&self, name)?
+                        }
+                        "_INT2" => try_cast_into_zval::<Vec<i16>>(&self, name)?,
+                        "_INT4" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
+                        "_INT8" => try_cast_into_zval::<Vec<i64>>(&self, name)?,
+                        "_OID" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
+                        "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(&self, name)?,
+                        "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(&self, name)?,
+                        "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        "_UUID" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        "_DATE" | "_TIME" | "_TIMESTAMP" | "_TIMESTAMPTZ" | "_INTERVAL"
+                        | "_TIMETZ" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        "_INET" | "_CIDR" | "_MACADDR" | "_MACADDR8" => {
+                            try_cast_into_zval::<Vec<String>>(&self, name)?
+                        }
+                        "_BIT" | "_VARBIT" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        "_POINT" | "_LSEG" | "_PATH" | "_BOX" | "_POLYGON" | "_LINE"
+                        | "_CIRCLE" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        "_INT4RANGE" | "_NUMRANGE" | "_TSRANGE" | "_TSTZRANGE" | "_DATERANGE"
+                        | "_INT8RANGE" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        "_RECORD" => try_cast_into_zval::<Vec<String>>(&self, name)?,
+                        "_JSONPATH" => try_cast_into_zval::<Vec<String>>(&self, name)?,
 
-                _ => bail!("unsupported type: {}", column.type_info().name()),
-            };
-
-            row.insert(name.to_string(), value);
+                        _ => bail!("unsupported type: {}", column.type_info().name()),
+                    };
+                row.insert(name.to_string(), value);
+                Ok(row)
+            },
+        )?;
+        if associative_arrays {
+            row.into_zval(false).map_err(|err| anyhow!("{:?}", err))
+        } else {
+            Ok(row
+                .into_iter()
+                .try_fold(
+                    zend_object::new_stdclass(),
+                    |mut std_object, (key, value)| {
+                        std_object
+                            .set_property(&key, value)
+                            .map(|_| std_object)
+                            .map_err(|err| anyhow!("{:?}", err))
+                    },
+                )?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{:?}", err))?)
         }
-        row.into_zval(false).map_err(|err| anyhow!("{:?}", err))
     }
 }
 
@@ -291,6 +337,7 @@ pub struct DriverOptions {
     ast_cache_shard_count: usize,
     ast_cache_shard_size: usize,
     persistent_name: Option<String>,
+    associative_arrays: bool,
 }
 impl Default for DriverOptions {
     fn default() -> Self {
@@ -299,6 +346,7 @@ impl Default for DriverOptions {
             ast_cache_shard_count: 8,
             ast_cache_shard_size: 128,
             persistent_name: None,
+            associative_arrays: false,
         }
     }
 }
@@ -320,13 +368,23 @@ impl Driver {
                     kv.get(SQLX_OPTION_URL)
                         .ok_or_else(|| anyhow!("missing {SQLX_OPTION_URL}"))
                         .and_then(|value| {
-                            if let Value::Str(s) = value {
-                                Ok(s.clone())
+                            if let Value::Str(str) = value {
+                                Ok(str.clone())
                             } else {
                                 Err(anyhow!("{SQLX_OPTION_URL} must be a string"))
                             }
                         })?,
                 ),
+                associative_arrays: kv.get(SQLX_OPTION_ASSOC_ARRAYS).map_or(
+                    Ok(false),
+                    |value| {
+                        if let Value::Bool(bool) = value {
+                            Ok(*bool)
+                        } else {
+                            Err(anyhow!("{SQLX_OPTION_ASSOC_ARRAYS} must be a string"))
+                        }
+                    },
+                )?,
                 ast_cache_shard_count: kv.get(SQLX_OPTION_AST_CACHE_SHARD_COUNT).map_or(
                     Ok(8),
                     |value| {
@@ -373,18 +431,22 @@ impl Driver {
                 });
             }
         }
+        let persistent_name = options.persistent_name.clone();
+        let pool = crate::RUNTIME.block_on(
+            PgPoolOptions::new().max_connections(5).connect(
+                options
+                    .url
+                    .clone()
+                    .ok_or_else(|| anyhow!("URL must be set"))?
+                    .as_str(),
+            ),
+        )?;
         let inner = Arc::new(DriverInner {
-            pool: crate::RUNTIME.block_on(
-                PgPoolOptions::new().max_connections(5).connect(
-                    options
-                        .url
-                        .ok_or_else(|| anyhow!("URL must be set"))?
-                        .as_str(),
-                ),
-            )?,
+            pool,
             ast_cache: LruCache::new(options.ast_cache_shard_count, options.ast_cache_shard_size),
+            options,
         });
-        if let Some(name) = options.persistent_name {
+        if let Some(name) = persistent_name {
             PERSISTENT_DRIVER_REGISTRY.insert(name, inner.clone());
         }
         Ok(Self { inner })
