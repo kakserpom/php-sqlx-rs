@@ -1,8 +1,8 @@
 <?php
 //$sql = new Sqlx("postgres://localhost/postgres");
-$sql = new Sqlx([
-    'url' => 'postgres://localhost/test',
-    'persistent_name' => 'test',
+$sql = new Sqlx\Driver([
+    Sqlx\Driver::OPTION_URL => 'postgres://localhost/test',
+    Sqlx\Driver::OPTION_PERSISTENT_NAME => 'test',
 ]);
 var_dump($sql->queryMaybeOne('select * from my_table'));
 //var_dump($sql->queryOne('select $1::json', ['{"a":1,"b":2}']));

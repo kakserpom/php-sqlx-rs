@@ -29,21 +29,13 @@ use tokio::runtime::Runtime;
 
 /// Global runtime for executing async `SQLx` queries from sync context.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
-
-#[php_const]
-const SQLX_OPTION_URL: &'static str = "url";
-const SQLX_OPTION_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
-const SQLX_OPTION_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
-const SQLX_OPTION_PERSISTENT_NAME: &'static str = "persistent_name";
-const SQLX_OPTION_ASSOC_ARRAYS: &'static str = "assoc_arrays";
-
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<DriverInner>>> =
     LazyLock::new(|| DashMap::new());
 
 /// A database driver using SQLx with query helpers and AST cache.
 ///
 /// This class supports prepared queries, persistent connections, and augmented SQL.
-#[php_class(name = "Sqlx")]
+#[php_class(name = "Sqlx\\Driver")]
 pub struct Driver {
     pub inner: Arc<DriverInner>,
 }
@@ -387,6 +379,14 @@ impl Default for DriverOptions {
 
 #[php_impl]
 impl Driver {
+    const OPTION_URL: &'static str = "url";
+    const OPTION_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
+
+    const OPTION_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
+
+    const OPTION_PERSISTENT_NAME: &'static str = "persistent_name";
+    const OPTION_ASSOC_ARRAYS: &'static str = "assoc_arrays";
+
     /// Constructs a new SQLx driver instance.
     ///
     /// # Parameters
@@ -404,58 +404,61 @@ impl Driver {
             },
             DriverConstructorOptions::Options(kv) => DriverOptions {
                 url: Some(
-                    kv.get(SQLX_OPTION_URL)
-                        .ok_or_else(|| anyhow!("missing {SQLX_OPTION_URL}"))
+                    kv.get(Self::OPTION_URL)
+                        .ok_or_else(|| anyhow!("missing {}", Self::OPTION_URL))
                         .and_then(|value| {
                             if let Value::Str(str) = value {
                                 Ok(str.clone())
                             } else {
-                                Err(anyhow!("{SQLX_OPTION_URL} must be a string"))
+                                Err(anyhow!("{} must be a string", Self::OPTION_URL))
                             }
                         })?,
                 ),
-                associative_arrays: kv.get(SQLX_OPTION_ASSOC_ARRAYS).map_or(
+                associative_arrays: kv.get(Self::OPTION_ASSOC_ARRAYS).map_or(
                     Ok(false),
                     |value| {
                         if let Value::Bool(bool) = value {
                             Ok(*bool)
                         } else {
-                            Err(anyhow!("{SQLX_OPTION_ASSOC_ARRAYS} must be a string"))
+                            Err(anyhow!("{} must be a string", Self::OPTION_ASSOC_ARRAYS))
                         }
                     },
                 )?,
-                ast_cache_shard_count: kv.get(SQLX_OPTION_AST_CACHE_SHARD_COUNT).map_or(
+                ast_cache_shard_count: kv.get(Self::OPTION_AST_CACHE_SHARD_COUNT).map_or(
                     Ok(8),
                     |value| {
                         if let Value::Int(n) = value {
                             Ok(*n as usize)
                         } else {
                             Err(anyhow!(
-                                "{SQLX_OPTION_AST_CACHE_SHARD_COUNT} must be an integer"
+                                "{} must be an integer",
+                                Self::OPTION_AST_CACHE_SHARD_COUNT
                             ))
                         }
                     },
                 )?,
-                ast_cache_shard_size: kv.get(SQLX_OPTION_AST_CACHE_SHARD_SIZE).map_or(
+                ast_cache_shard_size: kv.get(Self::OPTION_AST_CACHE_SHARD_SIZE).map_or(
                     Ok(8),
                     |value| {
                         if let Value::Int(n) = value {
                             Ok(*n as usize)
                         } else {
                             Err(anyhow!(
-                                "{SQLX_OPTION_AST_CACHE_SHARD_SIZE} must be an integer"
+                                "{} must be an integer",
+                                Self::OPTION_AST_CACHE_SHARD_SIZE
                             ))
                         }
                     },
                 )?,
-                persistent_name: match kv.get(SQLX_OPTION_PERSISTENT_NAME) {
+                persistent_name: match kv.get(Self::OPTION_PERSISTENT_NAME) {
                     None => None,
                     Some(value) => {
                         if let Value::Str(str) = value {
                             Some(str.clone())
                         } else {
                             return Err(anyhow!(
-                                "{SQLX_OPTION_PERSISTENT_NAME} must be an integer"
+                                "{} must be an integer",
+                                Self::OPTION_PERSISTENT_NAME
                             ));
                         }
                     }
@@ -670,7 +673,7 @@ impl Driver {
 /// A reusable prepared SQL query with parameter support.
 ///
 /// Created using `Driver::prepare()`, shares context with original driver.
-#[php_class]
+#[php_class(name = "Sqlx\\PreparedQuery")]
 pub struct PreparedQuery {
     query: String,
     driver_inner: Arc<DriverInner>,
