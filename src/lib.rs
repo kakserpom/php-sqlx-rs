@@ -318,14 +318,14 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
     match value {
         serde_json::Value::String(str) => str
             .into_zval(false)
-            .map_err(|err| anyhow!("String: {err:?}")),
+            .map_err(|err| anyhow!("String conversion: {err:?}")),
         serde_json::Value::Number(number) => number
             .to_string()
             .into_zval(false)
-            .map_err(|err| anyhow!("Number: {err:?}")),
+            .map_err(|err| anyhow!("Number conversion: {err:?}")),
         serde_json::Value::Bool(bool) => bool
             .into_zval(false)
-            .map_err(|err| anyhow!("Bool: {err:?}")),
+            .map_err(|err| anyhow!("Bool conversion: {err:?}")),
         serde_json::Value::Null => {
             let mut null = Zval::new();
             null.set_null();
@@ -336,7 +336,7 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
             .map(|x| json_into_zval(x, associative_arrays))
             .collect::<anyhow::Result<Vec<Zval>>>()?
             .into_zval(false)
-            .map_err(|err| anyhow!("Bool: {err:?}"))?),
+            .map_err(|err| anyhow!("Array conversion: {err:?}"))?),
         serde_json::Value::Object(object) => {
             if associative_arrays {
                 Ok(object
@@ -344,7 +344,7 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
                     .map(|(key, value)| Ok((key, json_into_zval(value, associative_arrays)?)))
                     .collect::<anyhow::Result<HashMap<String, Zval>>>()?
                     .into_zval(false)
-                    .map_err(|err| anyhow!("Bool: {err:?}"))?)
+                    .map_err(|err| anyhow!("Object conversion: {err:?}"))?)
             } else {
                 Ok(object
                     .into_iter()
@@ -354,11 +354,11 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
                             std_object
                                 .set_property(&key, json_into_zval(value, associative_arrays))
                                 .map(|()| std_object)
-                                .map_err(|err| anyhow!("{:?}", err))
+                                .map_err(|err| anyhow!("Object conversion: {:?}", err))
                         },
                     )?
                     .into_zval(false)
-                    .map_err(|err| anyhow!("{err:?}"))?)
+                    .map_err(|err| anyhow!("Object conversion: {err:?}"))?)
             }
         }
     }
@@ -667,6 +667,15 @@ impl Driver {
             PERSISTENT_DRIVER_REGISTRY.insert(name, inner.clone());
         }
         Ok(Self { inner })
+    }
+
+    /// Returns whether results are returned as associative arrays.
+    ///
+    /// If true, result rows are returned as PHP associative arrays (key-value pairs).
+    /// If false, result rows are returned as PHP `stdClass` objects.
+    #[getter]
+    fn assoc_arrays(&self) -> bool {
+        self.inner.options.associative_arrays
     }
 
     /// Executes a SQL query and returns a single result.
