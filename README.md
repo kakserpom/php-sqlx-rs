@@ -1,7 +1,8 @@
 # php-sqlx-rs
 
 A PHP extension powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
-database access with additional SQL syntax. It's built using the [ext-php-rs]((https://github.com/davidcole1340/ext-php-rs))
+database access with additional SQL syntax. It's built using
+the [ext-php-rs]((https://github.com/davidcole1340/ext-php-rs))
 crate.
 
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBM systems
@@ -93,10 +94,10 @@ $driver = new Sqlx\Driver([
 ]);
 ```
 
-#### queryOne / queryAll
+#### queryRow / queryAll
 
 ```php
-$row = $driver->queryOne('SELECT * FROM users WHERE id = $id', [
+$row = $driver->queryRow('SELECT * FROM users WHERE id = $id', [
     'id' => 1,
 ]);
 
@@ -108,16 +109,16 @@ $rows = $driver->queryAll("SELECT * FROM users WHERE status = \$status", [
 You can also use `:param` and `:1` placeholders:
 
 ```php
-$row = $driver->queryOne("SELECT * FROM users WHERE id = :id", [
+$row = $driver->queryRow("SELECT * FROM users WHERE id = :id", [
     'id' => 1,
 ]);
 
-$row = $driver->queryOne("SELECT * FROM users WHERE id = :1", [1]);
+$row = $driver->queryRow("SELECT * FROM users WHERE id = :1", [1]);
 ```
 
 #### queryMaybeOne
 
-Same as `queryOne`, but returns `null` if not found.
+Same as `queryRow`, but returns `null` if not found.
 
 #### execute
 
@@ -159,7 +160,7 @@ $rows = $query->queryAll(['level' => 'warn']);
 All the same methods as `Driver` are supported:
 
 - `execute()`
-- `queryOne()` / `queryOneAssoc()` / `queryOneObj()`
+- `queryRow()` / `queryRowAssoc()` / `queryRowObj()`
 - `queryAll()` / `queryAllAssoc()` / `queryAllObj()`
 
 ---
@@ -234,7 +235,7 @@ array(1) {
 PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects:
 
 ```php
-var_dump($driver->queryOne(
+var_dump($driver->queryRow(
     'SELECT $1::json AS json',
     ['{"foo": ["bar", "baz"]}'
 ]));
@@ -249,7 +250,7 @@ object(stdClass)#3 (1) {
     }
   }
 } */
-var_dump($driver->queryOneAssoc(
+var_dump($driver->queryRowAssoc(
     'SELECT $1::json AS json',
     ['{"foo": ["bar", "baz"]}'
 ]));
@@ -273,7 +274,7 @@ var_dump($driver->queryOneAssoc(
 PostgreSQL `BIGINT` values are safely mapped to PHP integers:
 
 ```php
-var_dump($driver->queryOne('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 AS largest')->largest);
+var_dump($driver->queryRow('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 AS largest')->largest);
 ```
 
 Output:

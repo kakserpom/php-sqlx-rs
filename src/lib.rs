@@ -45,9 +45,9 @@ pub enum OrderFieldDefinition {
     Short(String),
 }
 impl OrderBy {
-    /// ASCending order
+    /// ASCending order (A to Z)
     const _ASC: &'static str = "ASC";
-    /// DESCending order
+    /// DESCending order (Z to A)
     const _DESC: &'static str = "DESC";
 }
 
@@ -76,9 +76,9 @@ impl OrderBy {
 
 #[php_impl]
 impl OrderBy {
-    /// ASCending order
+    /// ASCending order (A to Z)
     const ASC: &'static str = "ASC";
-    /// DESCending order
+    /// DESCending order (Z to A)
     const DESC: &'static str = "DESC";
 
     /// Constructs an OrderBy helper with allowed sortable fields.
@@ -240,7 +240,7 @@ impl DriverInner {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_one(
+    pub fn query_row(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
@@ -724,12 +724,12 @@ impl Driver {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_one(
+    pub fn query_row(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_one(query, parameters, None)
+        self.inner.query_row(query, parameters, None)
     }
 
     /// Executes a SQL query and returns one row as an associative array.
@@ -744,12 +744,12 @@ impl Driver {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_one_assoc(
+    pub fn query_row_assoc(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_one(query, parameters, Some(true))
+        self.inner.query_row(query, parameters, Some(true))
     }
 
     /// Executes a SQL query and returns one row as an object.
@@ -764,12 +764,12 @@ impl Driver {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_one_obj(
+    pub fn query_row_obj(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_one(query, parameters, Some(false))
+        self.inner.query_row(query, parameters, Some(false))
     }
 
     /// Executes a SQL query and returns a single result.
@@ -797,7 +797,7 @@ impl Driver {
     /// # Parameters
     /// - `query`: SQL query string
     /// - `parameters`: Optional map of named parameters
-    pub fn query_one_maybe_assoc(
+    pub fn query_row_maybe_assoc(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
@@ -1009,32 +1009,32 @@ impl PreparedQuery {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_one(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<Zval> {
-        self.driver_inner.query_one(&self.query, parameters, None)
+    pub fn query_row(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<Zval> {
+        self.driver_inner.query_row(&self.query, parameters, None)
     }
 
     /// Executes the prepared query and returns one row as an associative array.
     ///
     /// # Parameters
     /// - `parameters`: Optional map of named parameters
-    pub fn query_one_assoc(
+    pub fn query_row_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_one(&self.query, parameters, Some(true))
+            .query_row(&self.query, parameters, Some(true))
     }
 
     /// Executes the prepared query and returns one row as an object.
     ///
     /// # Parameters
     /// - `parameters`: Optional map of named parameters
-    pub fn query_one_obj(
+    pub fn query_row_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_one(&self.query, parameters, Some(false))
+            .query_row(&self.query, parameters, Some(false))
     }
 
     /// Executes the prepared query and returns all rows.

@@ -13,15 +13,15 @@ var_dump($order_by);
 $order_by = new Sqlx\OrderBy([
     "name",
     "age",
-    "total_posts" => "COUNT(posts.*)"
 ]);
-var_dump($sql->dry(
-    'SELECT * FROM people WHERE name in (?) ORDER BY :order_by',
+var_dump($sql->queryAll(
+    'SELECT * FROM people WHERE name in (?) ORDER BY :order_by LIMIT :limit',
      [
         ["Peter", "John", "Jane"],
+                "limit" => 1,
         "order_by" => $order_by([
             ["age","desc"],
-            ["total_posts", "ASC"]
+            ["total_posts", "ASC"],
         ])
     ]
 ));
@@ -40,15 +40,15 @@ var_dump($sql->dry(
   }
 */
 
-//var_dump($sql->queryOne('select $1::json', ['{"foo": ["bar", "baz"]}']));
-//var_dump($sql->queryOneAssoc('select $1::json', ['{"foo": ["bar", "baz"]}']));
-//var_dump($sql->queryOneAssoc('select 9223372036854775807'));
-//var_dump($sql->queryOne('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 largest')->largest);
+//var_dump($sql->queryRow('select $1::json', ['{"foo": ["bar", "baz"]}']));
+//var_dump($sql->queryRowAssoc('select $1::json', ['{"foo": ["bar", "baz"]}']));
+//var_dump($sql->queryRowAssoc('select 9223372036854775807'));
+//var_dump($sql->queryRow('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 largest')->largest);
 // int(9223372036854775807)
 
 //$sql->query('SELECT $1 {{WHERE id = $id}}', [123]);
-//var_dump($sql->queryOne('SELECT ? IN (?) as result', [123, [111, 123, 333]]));
+//var_dump($sql->queryRow('SELECT ? IN (?) as result', [123, [111, 123, 333]]));
 //var_dump($sql->prepare('SELECT ? IN (?) as result')->execute([123, [111, 123, 333]]));
-//var_dump($sql->queryOne('SELECT 1 + $1 {{WHERE id = $id}}', [1, 'id']));
-//var_dump()$sql->prepare("SELECT 1212313 as test")->queryOne())
+//var_dump($sql->queryRow('SELECT 1 + $1 {{WHERE id = $id}}', [1, 'id']));
+//var_dump()$sql->prepare("SELECT 1212313 as test")->queryRow())
 //ORDER BY :order_by(id, username, birthdate) :order_dir(ASC)

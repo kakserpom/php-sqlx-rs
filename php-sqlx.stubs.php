@@ -59,7 +59,7 @@ namespace Sqlx {
          * - the row contains unsupported database types;
          * - conversion to PHP object fails.
          */
-        public function queryOne(string $query, ?array $parameters): mixed {}
+        public function queryRow(string $query, ?array $parameters): mixed {}
 
         /**
          * Executes a SQL query and returns one row as an associative array.
@@ -75,7 +75,7 @@ namespace Sqlx {
          * - the row contains unsupported database types;
          * - conversion to PHP object fails.
          */
-        public function queryOneAssoc(string $query, ?array $parameters): mixed {}
+        public function queryRowAssoc(string $query, ?array $parameters): mixed {}
 
         /**
          * Executes a SQL query and returns one row as an object.
@@ -91,7 +91,7 @@ namespace Sqlx {
          * - the row contains unsupported database types;
          * - conversion to PHP object fails.
          */
-        public function queryOneObj(string $query, ?array $parameters): mixed {}
+        public function queryRowObj(string $query, ?array $parameters): mixed {}
 
         /**
          * Executes a SQL query and returns a single result.
@@ -116,7 +116,7 @@ namespace Sqlx {
          * - `query`: SQL query string
          * - `parameters`: Optional map of named parameters
          */
-        public function queryOneMaybeAssoc(string $query, ?array $parameters): mixed {}
+        public function queryRowMaybeAssoc(string $query, ?array $parameters): mixed {}
 
         /**
          * Executes a SQL query and returns one row as an object.
@@ -284,7 +284,7 @@ namespace Sqlx {
          * - the row contains unsupported database types;
          * - conversion to PHP object fails.
          */
-        public function queryOne(?array $parameters): mixed {}
+        public function queryRow(?array $parameters): mixed {}
 
         /**
          * Executes the prepared query and returns one row as an associative array.
@@ -292,7 +292,7 @@ namespace Sqlx {
          * # Parameters
          * - `parameters`: Optional map of named parameters
          */
-        public function queryOneAssoc(?array $parameters): mixed {}
+        public function queryRowAssoc(?array $parameters): mixed {}
 
         /**
          * Executes the prepared query and returns one row as an object.
@@ -300,7 +300,7 @@ namespace Sqlx {
          * # Parameters
          * - `parameters`: Optional map of named parameters
          */
-        public function queryOneObj(?array $parameters): mixed {}
+        public function queryRowObj(?array $parameters): mixed {}
 
         /**
          * Executes the prepared query and returns all rows.
@@ -353,12 +353,12 @@ namespace Sqlx {
 
     class OrderBy {
         /**
-         * ASCending order
+         * ASCending order (A to Z)
          */
         const ASC = null;
 
         /**
-         * DESCending order
+         * DESCending order (Z to A)
          */
         const DESC = null;
 
