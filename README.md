@@ -26,9 +26,9 @@ Wrap parts of your query with double braces `{{ ... }}` to make them conditional
 ```sql
 SELECT *
 FROM users
-WHERE TRUE {{ AND name = $name }}
-    {{
-  AND status = $status }}
+WHERE TRUE
+    {{ AND name = $name }}
+    {{ AND status = $status }}
 ```
 
 If a named parameter used inside the block is not provided, the entire block is omitted from the final query.
@@ -38,8 +38,7 @@ Nested conditional blocks are supported:
 ```sql
 SELECT *
 FROM logs
-WHERE TRUE {{AND date > $since {{
-  AND level = $level}} }}
+WHERE TRUE {{ AND date > $since {{ AND level = $level }} }}
 ```
 
 In the above example the `level` condition will only be rendered when both `$level` and `$since` are set.
