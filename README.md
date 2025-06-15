@@ -1,19 +1,286 @@
-# php-sqlx
+# php-sqlx-rs
 
-An alternative to PDO.
+A PHP extension powered by Rust and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
+database access with optional AST-based SQL augmentation and caching.
 
-## EXPERIMENTAL
-If you are reading this, the project is highly experimental. Use with caution.
+## Features
 
-## Docker
-```shell
-docker build -t php-sqlx .
-docker run php-sql
+- Optional persistent connections
+- AST-based SQL augmentation (e.g., conditional blocks)
+- Named parameters with `$param`, `:param`, or positional `:1` syntax
+- Automatic result conversion to PHP arrays or objects
+- Native JSON and bigint support
+- Painless `IN (?)` clause expansion
+
+---
+
+## Augmented SQL Syntax
+
+This extension introduces a powerful SQL preprocessor that supports conditional blocks, optional fragments, and named
+parameters.
+
+### Conditional Blocks
+
+Wrap parts of your query with double braces `{{ ... }}` to make them conditional:
+
+```sql
+SELECT *
+FROM users
+WHERE TRUE {{ AND name = $name }}
+    {{
+  AND status = $status }}
 ```
 
-## Build on Mac OS
-```sh
-export MACOSX_DEPLOYMENT_TARGET=15.5.0
+If a named parameter used inside the block is not provided, the entire block is omitted from the final query.
+
+Nested conditional blocks are supported:
+
+```sql
+SELECT *
+FROM logs
+WHERE TRUE {{AND date > $since {{
+  AND level = $level}} }}
+```
+
+In the above example the `level` condition will only be rendered when both `$level` and `$since` are set.
+
+---
+
+## Installation
+
+Install with [`cargo-php`](https://github.com/danog/php-ext-rs):
+
+```bash
+cargo install cargo-php --locked
+cargo php install --release --yes
+```
+
+For macOS:
+
+```bash
+export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | tr -d '\n')
 export RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup"
-cargo php install --release --yes 
+cargo install cargo-php --locked
+cargo php install --release --yes
 ```
+
+---
+
+## API
+
+### Sqlx\Driver
+
+```php
+$driver = new Sqlx\Driver("postgres://user:pass@localhost/db");
+```
+
+Or with options:
+
+```php
+$driver = new Sqlx\Driver([
+    Sqlx\Driver::OPT_URL => 'postgres://user:pass@localhost/db',
+    Sqlx\Driver::OPT_ASSOC_ARRAYS => true,
+    Sqlx\Driver::OPT_PERSISTENT_NAME => 'main_db'
+]);
+```
+
+#### queryOne / queryAll
+
+```php
+$row = $driver->queryOne("SELECT * FROM users WHERE id = \$id", [
+    'id' => 1,
+]);
+
+$rows = $driver->queryAll("SELECT * FROM users WHERE status = \$status", [
+    'status' => 'active',
+]);
+```
+
+You can also use `:param` and `:1` placeholders:
+
+```php
+$row = $driver->queryOne("SELECT * FROM users WHERE id = :id", [
+    'id' => 1,
+]);
+
+$row = $driver->queryOne("SELECT * FROM users WHERE id = :1", [1]);
+```
+
+#### queryMaybeOne
+
+Same as `queryOne`, but returns `null` if not found.
+
+#### execute
+
+```php
+$affected = $driver->execute("UPDATE users SET status = \$status WHERE id = \$id", [
+    'id' => 1,
+    'status' => 'inactive'
+]);
+```
+
+#### insert
+
+```php
+$affected = $driver->insert("users", [
+    'name' => 'Alice',
+    'email' => 'alice@example.com'
+]);
+```
+
+#### dry
+
+```php
+[$sql, $params] = $driver->dry("SELECT * FROM logs WHERE level = \$level", [
+    'level' => 'warn',
+]);
+```
+
+---
+
+### Sqlx\PreparedQuery
+
+Prepared query bound to a driver:
+
+```php
+$query = $driver->prepare("SELECT * FROM logs WHERE level = \$level");
+$rows = $query->queryAll(['level' => 'warn']);
+```
+
+All the same methods as `Driver` are supported:
+
+- `execute()`
+- `queryOne()` / `queryOneAssoc()` / `queryOneObj()`
+- `queryAll()` / `queryAllAssoc()` / `queryAllObj()`
+
+---
+
+### Sqlx\OrderBy
+
+A helper class for rendering safe `ORDER BY` clauses from user input.
+
+```php
+$orderBy = new Sqlx\OrderBy([
+    "name",
+    "created_at",
+    "posts" => "COUNT(posts.*)"
+]);
+
+// Equivalent to: ORDER BY name ASC, COUNT(posts.*) DESC
+$rendered = $orderBy([
+    ["name", "ASC"],
+    ["posts", "DESC"]
+]);
+```
+
+The `$rendered` value can be passed as a parameter to an SQL query with a placeholder:
+
+```php
+$driver->queryAll("SELECT * FROM users ORDER BY ?", [$rendered]);
+```
+
+---
+
+## Data Binding
+
+Supported parameter types:
+
+```php
+"text"
+123
+3.14
+true
+[1, 2, 3]
+```
+
+Nested arrays are automatically flattened and bound in-order.
+
+### Painless `IN (?)`
+
+Passing an array as a parameter to a single placeholder automatically expands it:
+
+```php
+var_dump($driver->queryAll(
+    'SELECT * FROM people WHERE name IN (?)',
+    [['Peter', 'John', 'Jane']]
+));
+```
+
+Example output:
+
+```php
+array(1) {
+  [0] =>
+  object(stdClass)#2 (2) {
+    ["name"] => string(4) "John"
+    ["age"] => int(22)
+  }
+}
+```
+
+---
+
+## JSON Support
+
+PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects:
+
+```php
+var_dump($driver->queryOne('SELECT $1::json AS json', ['{"foo": ["bar", "baz"]}']));
+var_dump($driver->queryOneAssoc('SELECT $1::json AS json', ['{"foo": ["bar", "baz"]}']));
+```
+
+Example output:
+
+```php
+object(stdClass)#3 (1) {
+  ["json"] =>
+  object(stdClass)#2 (1) {
+    ["foo"] =>
+    array(2) {
+      [0] => string(3) "bar"
+      [1] => string(3) "baz"
+    }
+  }
+}
+
+array(1) {
+  ["json"] =>
+  array(1) {
+    ["foo"] =>
+    array(2) {
+      [0] => string(3) "bar"
+      [1] => string(3) "baz"
+    }
+  }
+}
+```
+
+---
+
+## BigInt Support
+
+PostgreSQL `BIGINT` values are safely mapped to PHP integers:
+
+```php
+var_dump($driver->queryOne('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 AS largest')->largest);
+```
+
+Output:
+
+```php
+int(9223372036854775807)
+```
+
+---
+
+## Notes
+
+- The AST cache reduces repeated parsing overhead and speeds up query rendering.
+- Supports both positional `$1`, `:1` and named `$param`, `:param` placeholders automatically.
+
+---
+
+## License
+
+MIT
+

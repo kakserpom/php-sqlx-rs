@@ -1,8 +1,8 @@
 <?php
 //$sql = new Sqlx("postgres://localhost/postgres");
 $sql = new Sqlx\Driver([
-    Sqlx\Driver::OPTION_URL => 'postgres://localhost/test',
-    Sqlx\Driver::OPTION_PERSISTENT_NAME => 'test',
+    Sqlx\Driver::OPT_URL => 'postgres://localhost/test',
+    Sqlx\Driver::OPT_PERSISTENT_NAME => 'test',
 ]);
 $order_by = new Sqlx\OrderBy(["name", "age", "total_posts" => "COUNT(posts.*)"])
     ->apply([["age","desc"], ["total_posts", "ASC"]]);

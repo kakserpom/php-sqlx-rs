@@ -557,13 +557,13 @@ impl Default for DriverOptions {
 
 #[php_impl]
 impl Driver {
-    const OPTION_URL: &'static str = "url";
-    const OPTION_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
+    const OPT_URL: &'static str = "url";
+    const OPT_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
 
-    const OPTION_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
+    const OPT_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
 
-    const OPTION_PERSISTENT_NAME: &'static str = "persistent_name";
-    const OPTION_ASSOC_ARRAYS: &'static str = "assoc_arrays";
+    const OPT_PERSISTENT_NAME: &'static str = "persistent_name";
+    const OPT_ASSOC_ARRAYS: &'static str = "assoc_arrays";
 
     /// Constructs a new SQLx driver instance.
     ///
@@ -582,27 +582,27 @@ impl Driver {
             },
             DriverConstructorOptions::Options(kv) => DriverOptions {
                 url: Some(
-                    kv.get(Self::OPTION_URL)
-                        .ok_or_else(|| anyhow!("missing {}", Self::OPTION_URL))
+                    kv.get(Self::OPT_URL)
+                        .ok_or_else(|| anyhow!("missing {}", Self::OPT_URL))
                         .and_then(|value| {
                             if let Value::Str(str) = value {
                                 Ok(str.clone())
                             } else {
-                                Err(anyhow!("{} must be a string", Self::OPTION_URL))
+                                Err(anyhow!("{} must be a string", Self::OPT_URL))
                             }
                         })?,
                 ),
-                associative_arrays: kv.get(Self::OPTION_ASSOC_ARRAYS).map_or(
+                associative_arrays: kv.get(Self::OPT_ASSOC_ARRAYS).map_or(
                     Ok(false),
                     |value| {
                         if let Value::Bool(bool) = value {
                             Ok(*bool)
                         } else {
-                            Err(anyhow!("{} must be a string", Self::OPTION_ASSOC_ARRAYS))
+                            Err(anyhow!("{} must be a string", Self::OPT_ASSOC_ARRAYS))
                         }
                     },
                 )?,
-                ast_cache_shard_count: kv.get(Self::OPTION_AST_CACHE_SHARD_COUNT).map_or(
+                ast_cache_shard_count: kv.get(Self::OPT_AST_CACHE_SHARD_COUNT).map_or(
                     Ok(DEFAULT_AST_CACHE_SHARD_COUNT),
                     |value| {
                         if let Value::Int(n) = value {
@@ -610,12 +610,12 @@ impl Driver {
                         } else {
                             Err(anyhow!(
                                 "{} must be an integer",
-                                Self::OPTION_AST_CACHE_SHARD_COUNT
+                                Self::OPT_AST_CACHE_SHARD_COUNT
                             ))
                         }
                     },
                 )?,
-                ast_cache_shard_size: kv.get(Self::OPTION_AST_CACHE_SHARD_SIZE).map_or(
+                ast_cache_shard_size: kv.get(Self::OPT_AST_CACHE_SHARD_SIZE).map_or(
                     Ok(DEFAULT_AST_CACHE_SHARD_SIZE),
                     |value| {
                         if let Value::Int(n) = value {
@@ -623,12 +623,12 @@ impl Driver {
                         } else {
                             Err(anyhow!(
                                 "{} must be an integer",
-                                Self::OPTION_AST_CACHE_SHARD_SIZE
+                                Self::OPT_AST_CACHE_SHARD_SIZE
                             ))
                         }
                     },
                 )?,
-                persistent_name: match kv.get(Self::OPTION_PERSISTENT_NAME) {
+                persistent_name: match kv.get(Self::OPT_PERSISTENT_NAME) {
                     None => None,
                     Some(value) => {
                         if let Value::Str(str) = value {
@@ -636,7 +636,7 @@ impl Driver {
                         } else {
                             return Err(anyhow!(
                                 "{} must be an integer",
-                                Self::OPTION_PERSISTENT_NAME
+                                Self::OPT_PERSISTENT_NAME
                             ));
                         }
                     }
