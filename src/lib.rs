@@ -44,6 +44,35 @@ pub enum OrderFieldDefinition {
     Full(Vec<String>),
     Short(String),
 }
+impl OrderBy {
+    /// ASCending order
+    const _ASC: &'static str = "ASC";
+    /// DESCending order
+    const _DESC: &'static str = "DESC";
+}
+
+impl OrderBy {
+    pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        Self {
+            defined_fields: defined_fields
+                .into_iter()
+                .map(|(key, value)| {
+                    let key: String = key.into();
+                    let value: String = value.into();
+                    if key.parse::<u32>().is_ok() {
+                        (value, None)
+                    } else {
+                        (key, Some(value))
+                    }
+                })
+                .collect(),
+        }
+    }
+}
 
 #[php_impl]
 impl OrderBy {
@@ -67,18 +96,7 @@ impl OrderBy {
     /// ```
 
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        Ok(Self {
-            defined_fields: defined_fields
-                .into_iter()
-                .map(|(key, value)| {
-                    if key.parse::<u32>().is_ok() {
-                        (value, None)
-                    } else {
-                        (key, Some(value))
-                    }
-                })
-                .collect(),
-        })
+        Ok(OrderBy::new(defined_fields))
     }
 
     /// __invoke magic for apply()
@@ -102,6 +120,12 @@ impl OrderBy {
     /// Use validation separately if strict input is required.
     #[must_use]
     pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
+        self._apply(order_by)
+    }
+}
+impl OrderBy {
+    #[must_use]
+    pub fn _apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
         RenderedOrderBy {
             __inner: order_by
                 .into_iter()
@@ -139,6 +163,13 @@ pub struct RenderedOrderBy {
     pub(crate) __inner: Vec<String>,
 }
 
+impl RenderedOrderBy {
+    #[must_use]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.__inner.is_empty()
+    }
+}
+
 /// A database driver using SQLx with query helpers and AST cache.
 ///
 /// This class supports prepared queries, persistent connections, and augmented SQL.
@@ -172,7 +203,7 @@ impl DriverInner {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<u64> {
-        let (query, values) = self.render_query(query, parameters);
+        let (query, values) = self.render_query(query, parameters)?;
         Ok(RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))?
             .rows_affected())
@@ -183,15 +214,15 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> (String, Vec<Value>) {
+    ) -> anyhow::Result<(String, Vec<Value>)> {
         let parameters = parameters.unwrap_or_default();
         if let Some(ast) = self.ast_cache.get(query) {
             ast.render(parameters)
         } else {
             let ast = Ast::parse(query).unwrap();
-            let rendered = ast.render(parameters);
+            let rendered = ast.render(parameters)?;
             self.ast_cache.insert(query.to_owned(), ast);
-            rendered
+            Ok(rendered)
         }
     }
 
@@ -215,7 +246,7 @@ impl DriverInner {
         parameters: Option<HashMap<String, Value>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
-        let (query, values) = self.render_query(query, parameters);
+        let (query, values) = self.render_query(query, parameters)?;
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?
             .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
@@ -228,7 +259,7 @@ impl DriverInner {
         parameters: Option<HashMap<String, Value>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
-        let (query, values) = self.render_query(query, parameters);
+        let (query, values) = self.render_query(query, parameters)?;
         Ok(RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
             .map(Some)
@@ -267,7 +298,7 @@ impl DriverInner {
         parameters: Option<HashMap<String, Value>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
-        let (query, values) = self.render_query(query, parameters);
+        let (query, values) = self.render_query(query, parameters)?;
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
@@ -300,7 +331,7 @@ impl DriverInner {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Vec<Zval>> {
-        let (query, values) = self.render_query(query, parameters);
+        let (query, values) = self.render_query(query, parameters)?;
         Ok(vec![
             query.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
             values.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,

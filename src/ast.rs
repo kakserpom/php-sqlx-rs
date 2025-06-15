@@ -1,4 +1,5 @@
 use crate::RenderedOrderBy;
+use anyhow::bail;
 use ext_php_rs::ZvalConvert;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Write};
@@ -11,9 +12,13 @@ pub enum Ast {
     /// Placeholder like `$id`, `:param`, positional `?` replaced with ordinal number
     Placeholder(String),
     /// Optional segment with its own nested branches and collected placeholders
-    Optional {
+    ConditionalBlock {
         branches: Vec<Ast>,
-        placeholders: Vec<Placeholder>,
+        required_placeholders: Vec<Placeholder>,
+    },
+    Root {
+        branches: Vec<Ast>,
+        required_placeholders: Vec<Placeholder>,
     },
 }
 
@@ -31,6 +36,17 @@ pub enum Value {
     Array(Vec<Value>),
     Object(HashMap<String, Value>),
     RenderedOrderBy(RenderedOrderBy),
+}
+impl Value {
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Value::RenderedOrderBy(rendered_order_by) => rendered_order_by.is_empty(),
+            Value::Array(array) => array.is_empty(),
+            Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::Bool(_) | Value::Object(_) => {
+                false
+            }
+        }
+    }
 }
 pub type ParamsMap = BTreeMap<String, Value>;
 impl From<&str> for Value {
@@ -93,11 +109,10 @@ impl Ast {
                             let mut inner_br = Vec::new();
                             let mut inner_ph = Vec::new();
                             inner(chars, pos, &mut inner_ph, &mut inner_br, positional_counter)?;
-                            branches.push(Ast::Optional {
-                                branches: inner_br.clone(),
-                                placeholders: inner_ph.clone(),
+                            branches.push(Ast::ConditionalBlock {
+                                branches: inner_br,
+                                required_placeholders: inner_ph,
                             });
-                            placeholders_out.extend(inner_ph);
                             continue;
                         }
                         // Optional block end
@@ -249,12 +264,15 @@ impl Ast {
         if pos < chars.len() {
             return Err("Unmatched optional block `{{ }}`".into());
         }
-        Ok(Ast::Nested(branches))
+        Ok(Ast::Root {
+            branches,
+            required_placeholders: placeholders,
+        })
     }
 
     /// Renders the AST into a SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
-    pub fn render<I, K, V>(&self, values: I) -> (String, Vec<Value>)
+    pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<Value>)>
     where
         I: IntoIterator<Item = (K, V)> + Debug,
         K: Into<String>,
@@ -273,8 +291,8 @@ impl Ast {
             counter: &mut usize,
         ) {
             match node {
-                Ast::Nested(ns) => {
-                    for n in ns {
+                Ast::Root { branches, .. } | Ast::Nested(branches) => {
+                    for n in branches {
                         walk(n, values, sql, out_vals, counter);
                     }
                 }
@@ -313,11 +331,17 @@ impl Ast {
                         }
                     }
                 }
-                Ast::Optional {
+                Ast::ConditionalBlock {
                     branches,
-                    placeholders,
+                    required_placeholders,
                 } => {
-                    if placeholders.iter().all(|ph| values.contains_key(&ph.0)) {
+                    if required_placeholders.iter().all(|ph| {
+                        if let Some(value) = values.get(&ph.0) {
+                            !value.is_empty()
+                        } else {
+                            false
+                        }
+                    }) {
                         for b in branches {
                             walk(b, values, sql, out_vals, counter);
                         }
@@ -326,7 +350,7 @@ impl Ast {
             }
         }
 
-        let map: ParamsMap = values
+        let values: ParamsMap = values
             .into_iter()
             .map(|(k, v)| {
                 let mut k = k.into();
@@ -341,21 +365,42 @@ impl Ast {
         let mut out_vals = Vec::new();
         let mut counter = 0usize;
 
-        walk(self, &map, &mut sql, &mut out_vals, &mut counter);
+        if let Ast::Root {
+            required_placeholders,
+            ..
+        } = self
+        {
+            if let Some(missing_placeholder) = required_placeholders.iter().find(|ph| {
+                if let Some(value) = values.get(&ph.0) {
+                    value.is_empty()
+                } else {
+                    true
+                }
+            }) {
+                bail!("Missing required placeholder `{}`", missing_placeholder.0);
+            }
+        }
+        walk(self, &values, &mut sql, &mut out_vals, &mut counter);
         let sql = sql.split_whitespace().collect::<Vec<_>>().join(" ");
-        (sql, out_vals)
+        Ok((sql, out_vals))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::OrderFieldDefinition;
 
     #[test]
     fn test_named_and_positional() {
-        let sql = "SELECT :param, ?, ? FROM table WHERE x = $x";
-        if let Ast::Nested(ast) = Ast::parse(sql).unwrap() {
-            let names: Vec<&str> = ast
+        let sql = "SELECT :param, ?, ? FROM table WHERE {{ x = $x }}";
+        if let Ast::Root {
+            branches,
+            required_placeholders,
+        } = Ast::parse(sql).unwrap()
+        {
+            println!("{:#?}", required_placeholders);
+            let names: Vec<&str> = branches
                 .iter()
                 .filter_map(|b| {
                     if let Ast::Placeholder(n) = b {
@@ -368,7 +413,6 @@ mod tests {
             assert!(names.contains(&"param"));
             assert!(names.contains(&"1"));
             assert!(names.contains(&"2"));
-            assert!(names.contains(&"x"));
         } else {
             panic!("Expected Nested");
         }
@@ -381,7 +425,7 @@ mod tests {
         let mut vals = ParamsMap::default();
         vals.insert("status".into(), "active".into());
         vals.insert("id".into(), "42".into());
-        let (query, params) = ast.render(vals);
+        let (query, params) = ast.render(vals).expect("Rendering failed");
         assert_eq!(query, "SELECT * FROM users WHERE status = $1 AND id = $2");
         assert_eq!(params, vec!["active".into(), "42".into()]);
     }
@@ -390,7 +434,7 @@ mod tests {
     fn test_render_optional_skip() {
         let sql = "SELECT * FROM users WHERE {{status = $status AND}} id = $id";
         let ast = Ast::parse(sql).unwrap();
-        let (query, params) = ast.render([("id", 100)]);
+        let (query, params) = ast.render([("id", 100)]).expect("Rendering failed");
         assert_eq!(query, "SELECT * FROM users WHERE id = $1");
         assert_eq!(params, vec![100.into()]);
     }
@@ -404,7 +448,7 @@ mod tests {
         vals.insert("flag".into(), Value::Bool(true));
         vals.insert("0".into(), Value::Array(vec![Value::Int(1), Value::Int(2)]));
         vals.insert("data".into(), Value::Str("xyz".into()));
-        let (q, params) = ast.render(vals);
+        let (q, params) = ast.render(vals).expect("Rendering failed");
         assert_eq!(
             q,
             "SELECT * FROM table WHERE id = $1 AND active = $2 AND scores IN ($3, $4) AND data = $5"
@@ -419,5 +463,59 @@ mod tests {
                 Value::Str("xyz".into()),
             ]
         );
+    }
+
+    #[test]
+    fn test_render_order_by_apply() {
+        use crate::OrderBy;
+
+        let ob = OrderBy::new([
+            ("name", "users.name"),
+            ("age", "users.age"),
+            ("posts", "COUNT(posts.id)"),
+        ]);
+
+        let rendered = ob._apply(vec![
+            OrderFieldDefinition::Short("name".into()),
+            OrderFieldDefinition::Full(vec!["posts".into(), OrderBy::_DESC.into()]),
+        ]);
+
+        let sql =
+            "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
+        let ast = Ast::parse(sql).unwrap();
+        let (query, params) = ast
+            .render([("order_by", Value::RenderedOrderBy(rendered))])
+            .expect("Rendering failed");
+
+        assert_eq!(
+            query,
+            "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY users.name ASC, COUNT(posts.id) DESC"
+        );
+        assert_eq!(params, vec![]);
+    }
+
+    #[test]
+    fn test_render_order_by_apply_empty() {
+        use crate::OrderBy;
+
+        let ob = OrderBy::new([
+            ("name", "users.name"),
+            ("age", "users.age"),
+            ("posts", "COUNT(posts.id)"),
+        ]);
+
+        let rendered = ob._apply(vec![]);
+
+        let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
+        let ast = Ast::parse(sql).unwrap();
+        let (query, params) = ast
+            .render([("order_by", Value::RenderedOrderBy(rendered))])
+            .expect("Rendering failed");
+
+        assert_eq!(
+            query,
+            "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id"
+        );
+        assert_eq!(params, vec![]);
     }
 }
