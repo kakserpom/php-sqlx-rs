@@ -236,7 +236,7 @@ Note that field names are case-sensitive. Incorrect `direction` string silently 
 | `queryDictionaryObj()`   | `array<string, object>`         | ∟ forces objects                       |
 
 > ⚠️ First column **must** be convertible to string, otherwise an error is thrown.  
-> 🔀 The iteration order is NOT guaranteed.
+> 🔀 The iteration order is preserved.
 
 ```php
 var_dump($driver->queryDictionary(

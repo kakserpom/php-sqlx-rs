@@ -16,6 +16,7 @@ use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::{zend_array, zend_object};
 use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
+use ordermap::OrderMap;
 use sqlx::postgres::{PgColumn, PgPoolOptions, PgRow};
 use sqlx::{Column, Row};
 use sqlx_core::Error;
@@ -545,7 +546,7 @@ impl DriverInner {
     /// - the result rows cannot be converted into PHP values.
     ///
     /// # Notes
-    /// - The iteration order of the resulting `HashMap` is not guaranteed.
+    /// - The iteration order is preserved.
     /// - If the first column is `NULL`, a non-string type, or fails to convert to a PHP string, an error is returned.
     /// - This is useful for loading lookup tables, settings, or deduplicated result sets.
     pub fn query_dictionary(
@@ -633,14 +634,15 @@ impl DriverInner {
     /// - Any row cannot be fully converted to a PHP value.
     ///
     /// # Notes
-    /// - Row order within each group is preserved, but the outer dictionary order is not guaranteed.
+    /// - Row order within each group is preserved.
+    /// - The outer dictionary order is preserved.
     /// - Use this method when your result naturally groups by a field, e.g., for building nested structures or aggregations.
     pub fn query_grouped_dictionary(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         associative_arrays: Option<bool>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
         RUNTIME
@@ -656,11 +658,26 @@ impl DriverInner {
                     bail!("First column must be convertible to string")
                 }
             })
-            .try_fold(HashMap::<String, Vec<Zval>>::new(), |mut map, item| {
-                let (key, value) = item?;
-                map.entry(key).or_default().push(value);
-                Ok(map)
-            })
+            .try_fold(
+                OrderMap::<String, Vec<Zval>>::new(),
+                |mut map, item| -> anyhow::Result<_> {
+                    let (key, value) = item?;
+                    map.entry(key).or_default().push(value);
+                    Ok(map)
+                },
+            )?
+            .into_iter()
+            .try_fold(
+                zend_array::new(),
+                |mut array, (key, value)| -> anyhow::Result<ZBox<zend_array>> {
+                    array
+                        .insert(&key, value)
+                        .map_err(|err| anyhow!("{err:?}"))?;
+                    Ok(array)
+                },
+            )?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))
     }
 
     /// Executes the given SQL query and returns a grouped dictionary where:
@@ -703,7 +720,7 @@ impl DriverInner {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         associative_arrays: Option<bool>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
         RUNTIME
@@ -719,11 +736,26 @@ impl DriverInner {
                     bail!("First column must be convertible to string")
                 }
             })
-            .try_fold(HashMap::<String, Vec<Zval>>::new(), |mut map, item| {
-                let (key, value) = item?;
-                map.entry(key).or_default().push(value);
-                Ok(map)
-            })
+            .try_fold(
+                OrderMap::<String, Vec<Zval>>::new(),
+                |mut map, item| -> anyhow::Result<_> {
+                    let (key, value) = item?;
+                    map.entry(key).or_default().push(value);
+                    Ok(map)
+                },
+            )?
+            .into_iter()
+            .try_fold(
+                zend_array::new(),
+                |mut array, (key, value)| -> anyhow::Result<ZBox<zend_array>> {
+                    array
+                        .insert(&key, value)
+                        .map_err(|err| anyhow!("{err:?}"))?;
+                    Ok(array)
+                },
+            )?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))
     }
 
     /// Executes a SQL query and returns a dictionary mapping the first column to the second column.
@@ -751,7 +783,7 @@ impl DriverInner {
     ///
     /// # Notes
     /// - The result must contain **at least two columns**, otherwise a runtime panic or undefined behavior may occur.
-    /// - The order of items in the resulting map is not guaranteed.
+    /// - The order of items in the resulting map is preserved.
     /// - Useful for loading key–value configurations or lookup tables.
     pub fn query_column_dictionary(
         &self,
@@ -1732,13 +1764,14 @@ impl Driver {
     /// - Any row cannot be fully converted to a PHP value.
     ///
     /// # Notes
-    /// - Row order within each group is preserved, but the outer dictionary order is not guaranteed.
+    /// - Row order within each group is preserved
+    /// - The outer dictionary order is preserved.
     /// - Use this method when your result naturally groups by a field, e.g., for building nested structures or aggregations.
     pub fn query_grouped_dictionary(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, None)
     }
@@ -1754,7 +1787,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, Some(true))
     }
@@ -1770,7 +1803,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, Some(false))
     }
@@ -1795,7 +1828,7 @@ impl Driver {
     /// - the second column cannot be converted to a PHP value.
     ///
     /// # Notes
-    /// - The order of dictionary entries is not guaranteed.
+    /// - The iteration order of dictionary entries is preserved.
     /// - The query must return at least two columns per row.
     pub fn query_column_dictionary(
         &self,
@@ -1858,7 +1891,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, Some(true))
     }
@@ -1869,7 +1902,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, Some(false))
     }
@@ -1895,7 +1928,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, None)
     }
@@ -2015,7 +2048,7 @@ impl PreparedQuery {
     /// - the second column cannot be converted to a PHP value.
     ///
     /// # Notes
-    /// - The order of dictionary entries is not guaranteed.
+    /// - The order of dictionary entries is preserved.
     /// - The query must return at least two columns per row.
     pub fn query_column_dictionary(
         &self,
@@ -2156,7 +2189,7 @@ impl PreparedQuery {
     pub fn query_grouped_dictionary(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(&self.query, parameters, None)
     }
@@ -2165,7 +2198,7 @@ impl PreparedQuery {
     pub fn query_grouped_dictionary_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(&self.query, parameters, Some(true))
     }
@@ -2174,7 +2207,7 @@ impl PreparedQuery {
     pub fn query_grouped_dictionary_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(&self.query, parameters, Some(false))
     }
@@ -2190,7 +2223,7 @@ impl PreparedQuery {
     pub fn query_grouped_column_dictionary(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(&self.query, parameters, None)
     }
@@ -2203,7 +2236,7 @@ impl PreparedQuery {
     pub fn query_grouped_column_dictionary_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(&self.query, parameters, Some(true))
     }
@@ -2216,7 +2249,7 @@ impl PreparedQuery {
     pub fn query_grouped_column_dictionary_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(&self.query, parameters, Some(false))
     }
