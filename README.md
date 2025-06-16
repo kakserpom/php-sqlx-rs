@@ -280,6 +280,36 @@ array(1) {
 
 ---
 
+### Grouped Dictionary helpers (first column as key, many rows per key)
+
+| Method                          | Returns                                | Notes                                             |
+|---------------------------------|----------------------------------------|---------------------------------------------------|
+| `queryGroupedDictionary()`      | `array<string, array<array \| object>>` | key = first column, value = list of matching rows |
+| `queryGroupedDictionaryAssoc()` | `array<string, array<array>`           | ∟ forces associative arrays                       |
+| `queryGroupedDictionaryObj()`   | `array<string, array<object>>`         | ∟ forces objects                                  |
+
+```php
+var_dump($driver->queryGroupedDictionary(
+    'SELECT department, name FROM employees WHERE department IN (?)',
+    [['IT', 'HR']]
+));
+/* Output:
+array(2) {
+  ["IT"]=>
+  array(2) {
+    [0]=> array("department" => "IT", "name" => "Alice")
+    [1]=> array("department" => "IT", "name" => "Bob")
+  },
+  ["HR"]=>
+  array(1) {
+    [0]=> array("department" => "HR", "name" => "Eve")
+  }
+}
+*/
+```
+
+---
+
 ## Data Binding
 
 Supported parameter types:
