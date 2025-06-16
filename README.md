@@ -107,20 +107,20 @@ $driver = new Sqlx\Driver([
 
 #### Row helpers
 
-| Method                 | Returns                             | Notes                     |
-|------------------------|-------------------------------------|---------------------------|
-| `queryRow()`           | first row (array \| object)         | error if no rows returned |
-| `queryRowAssoc()`      | first row (array)                   | ∟ enforces array mode     |
-| `queryRowObj()`        | first row (object)                  | ∟ enforces object mode    |
-| `queryMaybeRow()`      | first row (array \| object \| null) | null if no rows returned  |
-| `queryMaybeRowAssoc()` | first row (array \| null)           | ∟ enforces array mode     |
-| `queryMaybeRowObj()`   | first row (object \| null)          | ∟ enforces object mode    |            
+| Method                 | Returns                             | Notes                         |
+|------------------------|-------------------------------------|-------------------------------|
+| `queryRow()`           | first row (array \| object)         | exception if no rows returned |
+| `queryRowAssoc()`      | first row (array)                   | ∟ enforces array mode         |
+| `queryRowObj()`        | first row (object)                  | ∟ enforces object mode        |
+| `queryMaybeRow()`      | first row (array \| object \| null) | null if no rows returned      |
+| `queryMaybeRowAssoc()` | first row (array \| null)           | ∟ enforces array mode         |
+| `queryMaybeRowObj()`   | first row (object \| null)          | ∟ enforces object mode        |            
 
 #### Column helpers (single-row)
 
 | Method                   | Returns                        | Notes                                   |
 |--------------------------|--------------------------------|-----------------------------------------|
-| `queryValue()`           | first row column value         | error if no rows returned               |
+| `queryValue()`           | first row column value         | exception if no rows returned           |
 | `queryValueAssoc()`      | ↑                              | ∟ enforces array mode for JSON objects  |
 | `queryValueObj()`        | ↑                              | ∟ enforces object mode for JSON objects |
 | `queryMaybeValue()`      | first row column value or null | null if no rows returned                |
@@ -131,7 +131,7 @@ $driver = new Sqlx\Driver([
 
 | Method               | Returns                                | Notes                                   |
 |----------------------|----------------------------------------|-----------------------------------------|
-| `queryColumn()`      | array of column's values from each row | error if no rows returned               |
+| `queryColumn()`      | array of column's values from each row | exception if no rows returned           |
 | `queryColumnAssoc()` | ↑                                      | ∟ enforces array mode for JSON objects  |
 | `queryColumnObj()`   | ↑                                      | ∟ enforces object mode for JSON objects |
 
@@ -145,7 +145,7 @@ $driver = new Sqlx\Driver([
 
 #### Mutation helpers
 
-- `execute(string $sql, array $param``s = null): int` – run **INSERT/UPDATE/DELETE** and return affected count.
+- `execute(string $sql, array $params = null): int` – run **INSERT/UPDATE/DELETE** and return affected count.
 - `insert(string $table, array $row): int` – convenience wrapper around `INSERT`.
 
 #### Utilities
@@ -235,7 +235,7 @@ Note that field names are case-sensitive. Incorrect `direction` string silently 
 | `queryDictionaryAssoc()` | `array<string, array>`          | ∟ forces associative arrays            |
 | `queryDictionaryObj()`   | `array<string, object>`         | ∟ forces objects                       |
 
-> ⚠️ First column **must** be convertible to string, otherwise an error is thrown.  
+> ⚠️ First column **must** be convertible to string, otherwise an exception will be thrown.  
 > 🔀 The iteration order is preserved.
 
 ```php
