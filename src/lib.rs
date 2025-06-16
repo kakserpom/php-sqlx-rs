@@ -176,7 +176,7 @@ impl RenderedOrderBy {
 /// This class supports prepared queries, persistent connections, and augmented SQL.
 #[php_class(name = "Sqlx\\Driver")]
 pub struct Driver {
-    pub inner: Arc<DriverInner>,
+    pub driver_inner: Arc<DriverInner>,
 }
 pub struct DriverInner {
     pub pool: sqlx::PgPool,
@@ -892,9 +892,9 @@ impl Driver {
         };
 
         if let Some(name) = options.persistent_name.as_ref() {
-            if let Some(inner) = PERSISTENT_DRIVER_REGISTRY.get(name) {
+            if let Some(driver_inner) = PERSISTENT_DRIVER_REGISTRY.get(name) {
                 return Ok(Self {
-                    inner: inner.clone(),
+                    driver_inner: driver_inner.clone(),
                 });
             }
         }
@@ -908,15 +908,15 @@ impl Driver {
                     .as_str(),
             ),
         )?;
-        let inner = Arc::new(DriverInner {
+        let driver_inner = Arc::new(DriverInner {
             pool,
             ast_cache: LruCache::new(options.ast_cache_shard_count, options.ast_cache_shard_size),
             options,
         });
         if let Some(name) = persistent_name {
-            PERSISTENT_DRIVER_REGISTRY.insert(name, inner.clone());
+            PERSISTENT_DRIVER_REGISTRY.insert(name, driver_inner.clone());
         }
-        Ok(Self { inner })
+        Ok(Self { driver_inner })
     }
 
     /// Returns whether results are returned as associative arrays.
@@ -925,7 +925,7 @@ impl Driver {
     /// If false, result rows are returned as PHP `stdClass` objects.
     #[getter]
     fn assoc_arrays(&self) -> bool {
-        self.inner.options.associative_arrays
+        self.driver_inner.options.associative_arrays
     }
 
     /// Executes a SQL query and returns a single result.
@@ -948,7 +948,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_row(query, parameters, None)
+        self.driver_inner.query_row(query, parameters, None)
     }
 
     /// Executes a SQL query and returns a single column value from the first row.
@@ -972,7 +972,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_row_column(query, parameters, column, None)
+        self.driver_inner.query_row_column(query, parameters, column, None)
     }
 
     pub fn query_row_column_assoc(
@@ -981,7 +981,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
-        self.inner
+        self.driver_inner
             .query_row_column(query, parameters, column, Some(true))
     }
 
@@ -991,7 +991,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
-        self.inner
+        self.driver_inner
             .query_row_column(query, parameters, column, Some(false))
     }
 
@@ -1016,7 +1016,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
-        self.inner
+        self.driver_inner
             .query_maybe_row_column(query, parameters, column, None)
     }
 
@@ -1040,7 +1040,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
-        self.inner
+        self.driver_inner
             .query_maybe_row_column(query, parameters, column, Some(true))
     }
 
@@ -1064,7 +1064,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
-        self.inner
+        self.driver_inner
             .query_maybe_row_column(query, parameters, column, Some(false))
     }
 
@@ -1085,7 +1085,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_row(query, parameters, Some(true))
+        self.driver_inner.query_row(query, parameters, Some(true))
     }
 
     /// Executes a SQL query and returns one row as an object.
@@ -1105,10 +1105,10 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_row(query, parameters, Some(false))
+        self.driver_inner.query_row(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a single result.
+    /// Executes a SQL query and returns a single result, or `null` if no row matched..
     ///
     /// # Parameters
     /// - `query`: SQL query string
@@ -1125,7 +1125,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_maybe_row(query, parameters, None)
+        self.driver_inner.query_maybe_row(query, parameters, None)
     }
 
     /// Executes a SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
@@ -1148,7 +1148,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_maybe_row(query, parameters, Some(true))
+        self.driver_inner.query_maybe_row(query, parameters, Some(true))
     }
 
     /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
@@ -1170,7 +1170,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.inner.query_maybe_row(query, parameters, Some(false))
+        self.driver_inner.query_maybe_row(query, parameters, Some(false))
     }
 
     /// Executes a SQL query and returns the specified column values from all result rows.
@@ -1194,7 +1194,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner.query_column(query, parameters, column, None)
+        self.driver_inner.query_column(query, parameters, column, None)
     }
 
     /// Executes a SQL query and returns the specified column values from all rows in associative array mode.
@@ -1215,7 +1215,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner
+        self.driver_inner
             .query_column(query, parameters, column, Some(true))
     }
 
@@ -1237,7 +1237,7 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner
+        self.driver_inner
             .query_column(query, parameters, column, Some(false))
     }
 
@@ -1261,7 +1261,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner.query_all(query, parameters, None)
+        self.driver_inner.query_all(query, parameters, None)
     }
 
     /// Executes a SQL query and returns all rows as associative arrays.
@@ -1281,7 +1281,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner.query_all(query, parameters, Some(true))
+        self.driver_inner.query_all(query, parameters, Some(true))
     }
 
     /// Executes a SQL query and returns all rows as objects.
@@ -1301,7 +1301,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner.query_all(query, parameters, Some(false))
+        self.driver_inner.query_all(query, parameters, Some(false))
     }
 
     /// Creates a prepared query object with the given SQL string.
@@ -1314,7 +1314,7 @@ impl Driver {
     #[must_use]
     pub fn prepare(&self, query: &str) -> PreparedQuery {
         PreparedQuery {
-            driver_inner: self.inner.clone(),
+            driver_inner: self.driver_inner.clone(),
             query: query.to_owned(),
         }
     }
@@ -1338,7 +1338,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<u64> {
-        self.inner.execute(query, parameters)
+        self.driver_inner.execute(query, parameters)
     }
 
     /// Inserts a row into the given table using a map of fields.
@@ -1386,7 +1386,7 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.inner.dry(query, parameters)
+        self.driver_inner.dry(query, parameters)
     }
 }
 
