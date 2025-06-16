@@ -84,7 +84,7 @@ impl OrderBy {
 
     /// Constructs an OrderBy helper with allowed sortable fields.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
     ///
     /// # Example
@@ -109,7 +109,7 @@ impl OrderBy {
 
     /// Applies ordering rules to a user-defined input.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `order_by`: List of fields (as strings or [field, direction] arrays)
     ///
     /// # Returns
@@ -193,7 +193,7 @@ pub enum ColumnArgument<'a> {
 impl DriverInner {
     /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -235,7 +235,7 @@ impl DriverInner {
 
     /// Executes a SQL query and returns a single column from the first row.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column index or name to retrieve
@@ -280,7 +280,7 @@ impl DriverInner {
 
     /// Executes a SQL query and returns a single column across all rows.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column index or name to retrieve. Defaults to the first column.
@@ -338,7 +338,7 @@ impl DriverInner {
 
     /// Executes a SQL query and returns a single column from the first row or null.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column index or name to retrieve. Defaults to the first column.
@@ -396,7 +396,7 @@ impl DriverInner {
 
     /// Executes the prepared query and returns a single result.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
@@ -422,7 +422,7 @@ impl DriverInner {
 
     /// Executes a SQL query and returns a single row if available, or `null` if no rows are returned.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `associative_arrays`: Whether to return the row as an associative array (`true`)
@@ -461,7 +461,7 @@ impl DriverInner {
 
     /// Executes a SQL query and returns all results.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -499,7 +499,7 @@ impl DriverInner {
     /// This method does not execute the query but returns the SQL string with placeholders
     /// and the bound parameter values for debugging or logging purposes.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -530,7 +530,7 @@ trait RowToZval: Row {
 
 /// Converts a JSON value into a PHP value, respecting associative array settings.
 ///
-/// # Parameters
+/// # Arguments
 /// - `value`: A `serde_json::Value` to convert
 /// - `associative_arrays`: Whether to convert objects into PHP associative arrays or `stdClass`
 ///
@@ -589,7 +589,7 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
 trait ColumnToZval {
     /// Converts a specific column from a row to a PHP value.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `column`: Reference to the column in the row.
     /// - `associative_arrays`: Whether to render complex types as associative arrays
     ///
@@ -817,7 +817,7 @@ impl Driver {
 
     /// Constructs a new SQLx driver instance.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `options`: Connection URL as string or associative array with options:
     ///   - `url`: (string) database connection string (required)
     ///   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
@@ -930,7 +930,7 @@ impl Driver {
 
     /// Executes a SQL query and returns a single result.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -953,7 +953,7 @@ impl Driver {
 
     /// Executes a SQL query and returns a single column value from the first row.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column name or index to extract from the result row. Defaults to the first column.
@@ -985,6 +985,25 @@ impl Driver {
             .query_row_column(query, parameters, column, Some(true))
     }
 
+    /**
+    * Executes a SQL query and returns a single column value as a PHP object from the first row.
+    *
+    * Same as `queryRowColumn`, but forces object mode for decoding structured types (e.g., JSON, composite).
+    *
+    * # Parameters
+    * - `query`: SQL query string to execute.
+    * - `parameters`: Optional array of indexed or named parameters to bind.
+    * - `column`: Optional column name or zero-based index to extract. Defaults to the first column.
+    *
+    * # Returns
+    * The value from the specified column of the first row, decoded as a PHP object.
+    *
+    * # Errors
+    * Returns an error if:
+    * - the query is invalid or fails to execute;
+    * - the column does not exist;
+    * - the value cannot be converted to a PHP object (e.g., due to encoding or type mismatch).
+    */
     pub fn query_row_column_obj(
         &self,
         query: &str,
@@ -997,7 +1016,7 @@ impl Driver {
 
     /// Executes a SQL query and returns a single column value from the first row, or null if no rows matched.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column name or index to extract from the result row.
@@ -1024,7 +1043,7 @@ impl Driver {
     ///
     /// Same as `query_maybe_row_column`, but forces associative array mode for complex values.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column name or index to extract.
@@ -1048,7 +1067,7 @@ impl Driver {
     ///
     /// Same as `query_maybe_row_column`, but forces object mode for complex values.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column name or index to extract.
@@ -1070,7 +1089,7 @@ impl Driver {
 
     /// Executes a SQL query and returns one row as an associative array.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1090,7 +1109,7 @@ impl Driver {
 
     /// Executes a SQL query and returns one row as an object.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1108,9 +1127,9 @@ impl Driver {
         self.driver_inner.query_row(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a single result, or `null` if no row matched..
+    /// Executes a SQL query and returns a single result, or `null` if no row matched.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1130,7 +1149,7 @@ impl Driver {
 
     /// Executes a SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1153,7 +1172,7 @@ impl Driver {
 
     /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1175,7 +1194,7 @@ impl Driver {
 
     /// Executes a SQL query and returns the specified column values from all result rows.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to execute.
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     /// - `column`: Optional column name or index to extract.
@@ -1199,7 +1218,7 @@ impl Driver {
 
     /// Executes a SQL query and returns the specified column values from all rows in associative array mode.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string.
     /// - `parameters`: Optional named parameters.
     /// - `column`: Column index or name to extract.
@@ -1221,7 +1240,7 @@ impl Driver {
 
     /// Executes a SQL query and returns the specified column values from all rows in object mode.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string.
     /// - `parameters`: Optional named parameters.
     /// - `column`: Column index or name to extract.
@@ -1243,7 +1262,7 @@ impl Driver {
 
     /// Executes a SQL query and returns all results.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1266,7 +1285,7 @@ impl Driver {
 
     /// Executes a SQL query and returns all rows as associative arrays.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1286,7 +1305,7 @@ impl Driver {
 
     /// Executes a SQL query and returns all rows as objects.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1306,7 +1325,7 @@ impl Driver {
 
     /// Creates a prepared query object with the given SQL string.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string to prepare
     ///
     /// # Returns
@@ -1321,7 +1340,7 @@ impl Driver {
 
     /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1343,7 +1362,7 @@ impl Driver {
 
     /// Inserts a row into the given table using a map of fields.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `table`: Table name
     /// - `row`: Map of column names to values
     ///
@@ -1371,7 +1390,7 @@ impl Driver {
     /// This method does not execute the query but returns the SQL string with placeholders
     /// and the bound parameter values for debugging or logging purposes.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
@@ -1403,7 +1422,7 @@ pub struct PreparedQuery {
 impl PreparedQuery {
     /// Executes the prepared query with optional parameters.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
@@ -1420,7 +1439,7 @@ impl PreparedQuery {
 
     /// Executes the prepared query and returns a single result.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
@@ -1438,7 +1457,7 @@ impl PreparedQuery {
 
     /// Executes the prepared query and returns one row as an associative array.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     pub fn query_row_assoc(
         &self,
@@ -1450,7 +1469,7 @@ impl PreparedQuery {
 
     /// Executes the prepared query and returns one row as an object.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     pub fn query_row_obj(
         &self,
@@ -1460,9 +1479,133 @@ impl PreparedQuery {
             .query_row(&self.query, parameters, Some(false))
     }
 
+    /// Executes a SQL query and returns a single result, or `null` if no row matched.
+    ///
+    /// # Arguments
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// Single row as array or object depending on config
+    ///
+    /// # Errors
+    /// Returns an error if the query fails for reasons other than no matching rows.
+    /// For example, syntax errors, type mismatches, or database connection issues.
+    pub fn query_maybe_row(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.driver_inner.query_maybe_row(&self.query, parameters, None)
+    }
+
+    /// Executes the SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
+    ///
+    /// # Arguments
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query is invalid or fails to execute;
+    /// - parameters are invalid or cannot be bound;
+    /// - the row contains unsupported or unconvertible data types.
+
+    pub fn query_maybe_row_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.driver_inner.query_maybe_row(&self.query, parameters, Some(true))
+    }
+
+    /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
+    ///
+    /// # Arguments
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// The result row as a `stdClass` PHP object, or `null` if no matching row is found.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query is invalid or fails to execute;
+    /// - parameters are invalid or cannot be bound;
+    /// - the row contains unsupported or unconvertible data types.
+    pub fn query_maybe_row_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<Zval> {
+        self.driver_inner.query_maybe_row(&self.query, parameters, Some(false))
+    }
+
+    /// Executes the SQL query and returns the specified column values from all result rows.
+    ///
+    /// # Arguments
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column name or index to extract.
+    ///
+    /// # Returns
+    /// An array of column values, one for each row.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query fails to execute;
+    /// - the specified column is not found;
+    /// - a column value cannot be converted to PHP.
+    pub fn query_column(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.driver_inner.query_column(&self.query, parameters, column, None)
+    }
+
+    /// Executes the SQL query and returns the specified column values from all rows in associative array mode.
+    ///
+    /// # Arguments
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional named parameters.
+    /// - `column`: Column index or name to extract.
+    ///
+    /// # Returns
+    /// An array of column values (associative arrays for structured data).
+    ///
+    /// # Errors
+    /// Same as `query_column`.
+    pub fn query_column_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.driver_inner
+            .query_column(&self.query, parameters, column, Some(true))
+    }
+
+    /// Executes the SQL query and returns the specified column values from all rows in object mode.
+    ///
+    /// # Arguments
+    /// - `parameters`: Optional named parameters.
+    /// - `column`: Column index or name to extract.
+    ///
+    /// # Returns
+    /// An array of column values (objects for structured data).
+    ///
+    /// # Errors
+    /// Same as `query_column`.
+    pub fn query_column_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.driver_inner
+            .query_column(&self.query, parameters, column, Some(false))
+    }
+    
     /// Executes the prepared query and returns all rows.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
@@ -1483,7 +1626,7 @@ impl PreparedQuery {
 
     /// Executes the prepared query and returns all rows as associative arrays.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
@@ -1502,7 +1645,7 @@ impl PreparedQuery {
 
     /// Executes the prepared query and returns all rows as objects.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
