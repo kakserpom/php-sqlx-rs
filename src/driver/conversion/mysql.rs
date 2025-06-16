@@ -1,9 +1,7 @@
 use crate::driver::conversion::{Conversion, json_into_zval};
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
-use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
-use ext_php_rs::ffi::{zend_array, zend_object};
 use ext_php_rs::types::Zval;
 use sqlx::Column;
 use sqlx::TypeInfo;
@@ -11,42 +9,6 @@ use sqlx::mysql::MySqlRow;
 use sqlx::{Decode, Row, Type};
 
 impl Conversion for MySqlRow {
-    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval> {
-        if associative_arrays {
-            Ok(self
-                .columns()
-                .iter()
-                .try_fold(
-                    zend_array::new(),
-                    |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
-                        array
-                            .insert(
-                                column.name(),
-                                self.column_value_into_zval(column, associative_arrays)?,
-                            )
-                            .map_err(|err| anyhow!("{err:?}"))?;
-                        Ok(array)
-                    },
-                )?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?)
-        } else {
-            Ok(self
-                .columns()
-                .iter()
-                .try_fold(zend_object::new_stdclass(), |mut object, column| {
-                    object
-                        .set_property(
-                            column.name(),
-                            self.column_value_into_zval(column, associative_arrays)?,
-                        )
-                        .map(|()| object)
-                        .map_err(|err| anyhow!("{:?}", err))
-                })?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{:?}", err))?)
-        }
-    }
     fn column_value_into_zval<MySqlColumn: Column, MySql>(
         &self,
         column: &MySqlColumn,

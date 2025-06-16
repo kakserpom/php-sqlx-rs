@@ -6,7 +6,6 @@
 
 mod ast;
 mod driver;
-#[cfg(test)]
 mod tests;
 mod orderby;
 mod prepared_query;

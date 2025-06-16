@@ -24,7 +24,7 @@ pub struct DriverInner {
 
 impl DriverInner {
     pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
-        let pool = crate::RUNTIME.block_on(
+        let pool = RUNTIME.block_on(
             PgPoolOptions::new().max_connections(5).connect(
                 options
                     .url

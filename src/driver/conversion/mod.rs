@@ -1,8 +1,11 @@
 use anyhow::anyhow;
+use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
+use ext_php_rs::ffi::zend_array;
 use ext_php_rs::ffi::zend_object;
 use ext_php_rs::types::Zval;
-use sqlx::{Column, Row};
+use sqlx::Column;
+use sqlx::Row;
 use std::collections::HashMap;
 
 #[feature(mysql)]
@@ -13,7 +16,45 @@ mod postgres;
 /// Trait to convert a row into a PHP value.
 pub trait Conversion: Row {
     /// Convert the row into a PHP associative array.
-    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval>;
+    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval>
+    where
+        Self: Sized,
+    {
+        if associative_arrays {
+            Ok(self
+                .columns()
+                .iter()
+                .try_fold(
+                    zend_array::new(),
+                    |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
+                        array
+                            .insert(
+                                column.name(),
+                                self.column_value_into_zval(column, associative_arrays)?,
+                            )
+                            .map_err(|err| anyhow!("{err:?}"))?;
+                        Ok(array)
+                    },
+                )?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))?)
+        } else {
+            Ok(self
+                .columns()
+                .iter()
+                .try_fold(zend_object::new_stdclass(), |mut object, column| {
+                    object
+                        .set_property(
+                            column.name(),
+                            self.column_value_into_zval(column, associative_arrays)?,
+                        )
+                        .map(|()| object)
+                        .map_err(|err| anyhow!("{:?}", err))
+                })?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{:?}", err))?)
+        }
+    }
 
     /// Converts a specific column from a row to a PHP value.
     ///
