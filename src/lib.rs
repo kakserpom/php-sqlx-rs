@@ -521,6 +521,32 @@ impl DriverInner {
             values.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
         ])
     }
+
+    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row.
+    ///
+    /// The resulting `HashMap<String, Zval>` maps the stringified value of the first column to the full row,
+    /// which is converted into a PHP value (either associative array or object).
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string with placeholders (`$name`, `:name`, `?`, etc.).
+    /// - `parameters`: Optional map of named parameters to bind into the query.
+    /// - `associative_arrays`: If `Some(true)`, rows are returned as associative arrays; if `Some(false)`, as objects.
+    ///   If `None`, the default behavior is taken from `self.options.associative_arrays`.
+    ///
+    /// # Returns
+    /// A map from the first column (as `String`) to each corresponding row (`Zval`) in the result set.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query cannot be rendered or executed;
+    /// - parameter binding fails;
+    /// - the first column of any row cannot be converted to a PHP string;
+    /// - the result rows cannot be converted into PHP values.
+    ///
+    /// # Notes
+    /// - The iteration order of the resulting `HashMap` is not guaranteed.
+    /// - If the first column is `NULL`, a non-string type, or fails to convert to a PHP string, an error is returned.
+    /// - This is useful for loading lookup tables, settings, or deduplicated result sets.
     pub fn query_dictionary(
         &self,
         query: &str,
@@ -538,6 +564,57 @@ impl DriverInner {
                     .string()
                 {
                     Ok((key, row.into_zval(assoc)?))
+                } else {
+                    bail!("First column must be convertible to string")
+                }
+            })
+            .try_collect()
+    }
+
+    /// Executes a SQL query and returns a dictionary mapping the first column to the second column.
+    ///
+    /// This method expects each row of the result to contain **at least two columns**.
+    /// It constructs a `HashMap<String, Zval>` where:
+    /// - the **key** is the value of the first column, converted to a PHP string;
+    /// - the **value** is the second column, converted to a PHP value (array or object depending on `associative_arrays`).
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string with optional placeholders (e.g., `$name`, `:name`, `?`, etc.).
+    /// - `parameters`: Optional map of named parameters to bind into the query.
+    /// - `associative_arrays`: Whether to render complex values as associative arrays (`true`) or objects (`false`).
+    ///   If `None`, the default behavior is taken from `self.options.associative_arrays`.
+    ///
+    /// # Returns
+    /// A dictionary (`HashMap<String, Zval>`) mapping first-column keys to second-column values.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the SQL query is invalid, fails to render, or cannot be executed;
+    /// - parameter binding fails;
+    /// - the first column of any row is `NULL` or cannot be converted into a PHP string;
+    /// - the second column cannot be converted to a PHP value.
+    ///
+    /// # Notes
+    /// - The result must contain **at least two columns**, otherwise a runtime panic or undefined behavior may occur.
+    /// - The order of items in the resulting map is not guaranteed.
+    /// - Useful for loading key–value configurations or lookup tables.
+    pub fn query_column_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        let (query, values) = self.render_query(query, parameters)?;
+        let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+        RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .into_iter()
+            .map(|row| {
+                if let Some(key) = (&row)
+                    .column_value_into_zval(row.column(0), false)?
+                    .string()
+                {
+                    Ok((key, (&row).column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
                 }
@@ -1433,6 +1510,83 @@ impl Driver {
             .query_dictionary(query, parameters, Some(false))
     }
 
+    /// Executes a SQL query and returns a dictionary mapping the first column to the second column.
+    ///
+    /// This method expects each result row to contain at least two columns. It converts the first column
+    /// into a PHP string (used as the key), and the second column into a PHP value (used as the value).
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string with optional placeholders (e.g., `$param`, `:param`, etc.).
+    /// - `parameters`: Optional associative array of parameters to bind into the query.
+    ///
+    /// # Returns
+    /// An associative array (`array<string, mixed>`) where each key is the first column (as string),
+    /// and the value is the second column.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query fails to render or execute;
+    /// - the first column cannot be converted to a PHP string;
+    /// - the second column cannot be converted to a PHP value.
+    ///
+    /// # Notes
+    /// - The order of dictionary entries is not guaranteed.
+    /// - The query must return at least two columns per row.
+    pub fn query_column_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_column_dictionary(query, parameters, None)
+    }
+
+    /// Executes a SQL query and returns a dictionary using associative array mode for values.
+    ///
+    /// Same as `query_column_dictionary`, but forces JSON objects to be represented as associative arrays.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional associative array of bind parameters.
+    ///
+    /// # Returns
+    /// Dictionary where each key is the first column, and the value is the second column
+    /// converted into an associative PHP array.
+    ///
+    /// # Errors
+    /// Same as `query_column_dictionary`.
+    pub fn query_column_dictionary_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_column_dictionary(query, parameters, Some(true))
+    }
+
+    /// Executes a SQL query and returns a dictionary using object mode for values.
+    ///
+    /// Same as `query_column_dictionary`, but forces JSON objects to be represented as PHP objects.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional associative array of bind parameters.
+    ///
+    /// # Returns
+    /// Dictionary where each key is the first column, and the value is the second column
+    /// converted into a PHP object.
+    ///
+    /// # Errors
+    /// Same as `query_column_dictionary`.
+    pub fn query_column_dictionary_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_column_dictionary(query, parameters, Some(false))
+    }
+
     /// Creates a prepared query object with the given SQL string.
     ///
     /// # Arguments
@@ -1530,6 +1684,77 @@ pub struct PreparedQuery {
 
 #[php_impl]
 impl PreparedQuery {
+    /// Executes the prepared query and returns a dictionary mapping the first column to the second column.
+    ///
+    /// This method expects each result row to contain at least two columns. It converts the first column
+    /// into a PHP string (used as the key), and the second column into a PHP value (used as the value).
+    ///
+    /// # Parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// An associative array (`array<string, mixed>`) where each key is the first column (as string),
+    /// and the value is the second column.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query fails to execute;
+    /// - the first column cannot be converted to a PHP string;
+    /// - the second column cannot be converted to a PHP value.
+    ///
+    /// # Notes
+    /// - The order of dictionary entries is not guaranteed.
+    /// - The query must return at least two columns per row.
+    pub fn query_column_dictionary(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_column_dictionary(&self.query, parameters, None)
+    }
+
+    /// Executes the prepared query and returns a dictionary in associative array mode.
+    ///
+    /// Same as `query_column_dictionary`, but forces JSON objects to be represented as associative arrays.
+    ///
+    /// # Parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// A dictionary where each key is the first column (as string),
+    /// and each value is the second column as an associative PHP array.
+    ///
+    /// # Errors
+    /// Same as `query_column_dictionary`.
+    pub fn query_column_dictionary_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_column_dictionary(&self.query, parameters, Some(true))
+    }
+
+    /// Executes the prepared query and returns a dictionary in object mode.
+    ///
+    /// Same as `query_column_dictionary`, but forces JSON objects to be represented as objects.
+    ///
+    /// # Parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// A dictionary where each key is the first column (as string),
+    /// and each value is the second column as a PHP object.
+    ///
+    /// # Errors
+    /// Same as `query_column_dictionary`.
+    pub fn query_column_dictionary_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_column_dictionary(&self.query, parameters, Some(false))
+    }
+
     /// Executes the prepared query and returns a dictionary (map) indexed by the first column of each row.
     ///
     /// The result is a `HashMap` where the key is the stringified first column from each row,

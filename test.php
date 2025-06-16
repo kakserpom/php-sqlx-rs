@@ -11,6 +11,12 @@ var_dump($driver->queryDictionary(
         ["Peter", "John", "Jane"],
     ]
 ));
+var_dump($driver->queryColumnDictionary(
+    'SELECT * FROM people WHERE name in (?)',
+     [
+        ["Peter", "John", "Jane"],
+    ]
+));
 
 return;
 
