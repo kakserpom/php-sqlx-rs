@@ -214,7 +214,7 @@ $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' =>
 ])]);
 ```
 
-Note that field names are case-sensitive.
+Note that field names are case-sensitive. Incorrect `direction` string silently defaults to `ASC`. 
 
 ---
 
