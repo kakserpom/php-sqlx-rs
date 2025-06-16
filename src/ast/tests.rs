@@ -86,7 +86,7 @@ fn test_render_order_by_apply() {
         ("posts", "COUNT(posts.id)"),
     ]);
 
-    let rendered = ob._apply(vec![
+    let rendered = ob.internal_apply(vec![
         OrderFieldDefinition::Short("name".into()),
         OrderFieldDefinition::Full(vec!["posts".into(), OrderBy::_DESC.into()]),
     ]);
@@ -114,7 +114,7 @@ fn test_render_order_by_apply_empty() {
         ("posts", "COUNT(posts.id)"),
     ]);
 
-    let rendered = ob._apply(vec![]);
+    let rendered = ob.internal_apply(vec![]);
 
     let sql =
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";

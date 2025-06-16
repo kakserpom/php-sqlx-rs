@@ -13,9 +13,9 @@ pub enum OrderFieldDefinition {
 }
 impl OrderBy {
     /// Ascending order (A to Z)
-    const _ASC: &'static str = "ASC";
+    pub const _ASC: &'static str = "ASC";
     /// Descending order (Z to A)
-    const _DESC: &'static str = "DESC";
+    pub const _DESC: &'static str = "DESC";
 }
 
 impl OrderBy {
