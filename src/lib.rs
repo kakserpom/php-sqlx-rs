@@ -534,7 +534,7 @@ impl DriverInner {
     ///   If `None`, the default behavior is taken from `self.options.associative_arrays`.
     ///
     /// # Returns
-    /// A map from the first column (as `String`) to each corresponding row (`Zval`) in the result set.
+    /// A map from the first column (as `String`) to each corresponding row in the result set.
     ///
     /// # Errors
     /// Returns an error if:
@@ -569,6 +569,70 @@ impl DriverInner {
                 }
             })
             .try_collect()
+    }
+
+    /// Executes a SQL query and returns a dictionary grouping rows by the first column.
+    ///
+    /// Each row in the result must contain at least one column. The **first column** is used as the **key**, and the
+    /// **entire row** is converted to a PHP value and added to the list associated with that key.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string, optionally using `$param`, `:param`, or positional `?` placeholders.
+    /// - `parameters`: Optional key–value map of parameters to bind into the query.
+    /// - `associative_arrays`: If `true`, rows are rendered as PHP associative arrays. If `false`, rows are rendered as objects.
+    ///   If `None`, falls back to the value in `self.options.associative_arrays`.
+    ///
+    /// # Returns
+    /// A `HashMap<String, Vec<Zval>>` mapping each unique value of the first column to a `Vec` of corresponding rows.
+    ///
+    /// # Example
+    /// A query like:
+    /// ```sql
+    /// SELECT category, name FROM products
+    /// ```
+    /// could produce:
+    /// ```php
+    /// [
+    ///   "Books" => [ ["category" => "Books", "name" => "Rust in Action"], ... ],
+    ///   "Toys"  => [ ["category" => "Toys", "name" => "Lego Set"], ... ],
+    /// ]
+    /// ```
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - The query fails to render or execute.
+    /// - The first column in any row is `NULL` or cannot be converted to a PHP string.
+    /// - Any row cannot be fully converted to a PHP value.
+    ///
+    /// # Notes
+    /// - Row order within each group is preserved, but the outer dictionary order is not guaranteed.
+    /// - Use this method when your result naturally groups by a field, e.g., for building nested structures or aggregations.
+    pub fn query_grouped_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        let (query, values) = self.render_query(query, parameters)?;
+        let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+        RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .into_iter()
+            .map(|row| {
+                if let Some(key) = (&row)
+                    .column_value_into_zval(row.column(0), false)?
+                    .string()
+                {
+                    Ok((key, row.into_zval(assoc)?))
+                } else {
+                    bail!("First column must be convertible to string")
+                }
+            })
+            .try_fold(HashMap::<String, Vec<Zval>>::new(), |mut map, item| {
+                let (key, value) = item?;
+                map.entry(key).or_default().push(value);
+                Ok(map)
+            })
     }
 
     /// Executes a SQL query and returns a dictionary mapping the first column to the second column.
@@ -1510,6 +1574,83 @@ impl Driver {
             .query_dictionary(query, parameters, Some(false))
     }
 
+    /// Executes a SQL query and returns a dictionary grouping rows by the first column.
+    ///
+    /// Each row in the result must contain at least one column. The **first column** is used as the **key**, and the
+    /// **entire row** is converted to a PHP value and added to the list associated with that key.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string, optionally using `$param`, `:param`, or positional `?` placeholders.
+    /// - `parameters`: Optional key–value map of parameters to bind into the query.
+    /// - `associative_arrays`: If `true`, rows are rendered as PHP associative arrays. If `false`, rows are rendered as objects.
+    ///   If `None`, falls back to the value in `OPT_ASSOC_ARRAYS`.
+    ///
+    /// # Returns
+    /// A `HashMap<String, Vec<Zval>>` mapping each unique value of the first column to a `Vec` of corresponding rows.
+    ///
+    /// # Example
+    /// A query like:
+    /// ```sql
+    /// SELECT category, name FROM products
+    /// ```
+    /// could produce:
+    /// ```php
+    /// [
+    ///   "Books" => [ ["category" => "Books", "name" => "Rust in Action"], ... ],
+    ///   "Toys"  => [ ["category" => "Toys", "name" => "Lego Set"], ... ],
+    /// ]
+    /// ```
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - The query fails to render or execute.
+    /// - The first column in any row is `NULL` or cannot be converted to a PHP string.
+    /// - Any row cannot be fully converted to a PHP value.
+    ///
+    /// # Notes
+    /// - Row order within each group is preserved, but the outer dictionary order is not guaranteed.
+    /// - Use this method when your result naturally groups by a field, e.g., for building nested structures or aggregations.
+    pub fn query_grouped_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_dictionary(query, parameters, None)
+    }
+
+    /// Same as `query_grouped_dictionary`, but forces each row to be represented as a PHP associative array.
+    ///
+    /// This overrides the driver’s default associative/object mode for this call only.
+    ///
+    /// # Errors
+    /// - If the first column is not convertible to string.
+    /// - If any row fails to convert to an associative array.
+    pub fn query_grouped_dictionary_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_dictionary(query, parameters, Some(true))
+    }
+
+    /// Same as `query_grouped_dictionary`, but forces each row to be represented as a PHP object.
+    ///
+    /// This overrides the driver’s default associative/object mode for this call only.
+    ///
+    /// # Errors
+    /// - If the first column is not convertible to string.
+    /// - If any row fails to convert to an object.
+    pub fn query_grouped_dictionary_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_dictionary(query, parameters, Some(false))
+    }
+
     /// Executes a SQL query and returns a dictionary mapping the first column to the second column.
     ///
     /// This method expects each result row to contain at least two columns. It converts the first column
@@ -1830,6 +1971,44 @@ impl PreparedQuery {
     ) -> anyhow::Result<HashMap<String, Zval>> {
         self.driver_inner
             .query_dictionary(&self.query, parameters, Some(false))
+    }
+
+    /// Executes a query and returns a grouped dictionary (Vec of rows per key).
+    ///
+    /// Same as [`queryGroupedDictionary`](crate::Driver::query_grouped_dictionary), but works on a prepared query.
+    ///
+    /// The first column is used as the key (must be convertible to string),
+    /// and each resulting row is appended to the corresponding key's Vec.
+    ///
+    /// # Errors
+    /// Fails if the query fails, or the first column is not string-convertible.
+    #[php_method]
+    pub fn query_grouped_dictionary(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_dictionary(&self.query, parameters, None)
+    }
+
+    /// Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
+    #[php_method]
+    pub fn query_grouped_dictionary_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_dictionary(&self.query, parameters, Some(true))
+    }
+
+    /// Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
+    #[php_method]
+    pub fn query_grouped_dictionary_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_dictionary(&self.query, parameters, Some(false))
     }
 
     /// Executes the prepared query with optional parameters.

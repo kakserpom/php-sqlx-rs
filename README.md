@@ -118,8 +118,8 @@ $driver = new Sqlx\Driver([
 
 #### Column helpers (single-row)
 
-| Method                       | Returns                        | Notes                                   |
-|------------------------------|--------------------------------|-----------------------------------------|
+| Method                   | Returns                        | Notes                                   |
+|--------------------------|--------------------------------|-----------------------------------------|
 | `queryValue()`           | first row column value         | error if no rows returned               |
 | `queryValueAssoc()`      | ↑                              | ∟ enforces array mode for JSON objects  |
 | `queryValueObj()`        | ↑                              | ∟ enforces object mode for JSON objects |
@@ -167,9 +167,10 @@ $rows  = $query->queryAll(['level' => 'warn']);
 All helpers listed above have their prepared-query counterparts:
 
 - `execute()`
-- `queryRow*()` / `queryMaybeRow*()`
-- `queryValue*()` / `queryMaybeValue*()`
-- `queryAll*()` / `queryColumn*()`
+- `queryRow()` / `queryRowAssoc()` / `queryRowObj()`
+- `queryAll()` / `queryAllAssoc()` / `queryAllObj()`
+- `queryDictionary()` / `queryDictionaryAssoc()` / `queryDictionaryObj()`
+- `queryColumnDictionary()` / `queryColumnDictionaryAssoc()` / `queryColumnDictionaryObj()`
 
 ---
 
@@ -225,6 +226,60 @@ Note that field names are case-sensitive. Incorrect `direction` string silently 
 
 ---
 
+### Dictionary helpers (first column as key, row as value)
+
+| Method                   | Returns                         | Notes                                  |
+|--------------------------|---------------------------------|----------------------------------------|
+| `queryDictionary()`      | `array<string, array \|object>` | key = first column, value = entire row |
+| `queryDictionaryAssoc()` | `array<string, array>`          | ∟ forces associative arrays            |
+| `queryDictionaryObj()`   | `array<string, object>`         | ∟ forces objects                       |
+
+> ⚠️ First column **must** be convertible to string, otherwise an error is thrown.  
+> 🔀 The iteration order is NOT guaranteed.
+
+```php
+var_dump($driver->queryDictionary(
+    'SELECT name, * FROM people WHERE name IN (?)',
+    [["Peter", "John", "Jane"]]
+));
+/* Output:
+array(1) {
+  ["John"]=>
+  object(stdClass)#2 (2) {
+    ["name"]=>
+    string(4) "John"
+    ["age"]=>
+    int(22)
+  }
+}
+*/
+```
+
+---
+
+### Column Dictionary helpers (first column as key, second as value)
+
+| Method                         | Returns                | Notes                                                   |
+|--------------------------------|------------------------|---------------------------------------------------------|
+| `queryColumnDictionary()`      | `array<string, mixed>` | key = first column, value = second column               |
+| `queryColumnDictionaryAssoc()` | ↑                      | ∟ enforces array mode for second column if it's a JSON  |
+| `queryColumnDictionaryObj()`   | ↑                      | ∟ enforces object mode for second column if it's a JSON |
+
+```php
+var_dump($driver->queryColumnDictionary(
+    'SELECT name, age FROM people WHERE name IN (?)',
+    [["Peter", "John", "Jane"]]
+));
+/* Output:
+array(1) {
+  ["John"]=>
+  int(22)
+}
+*/
+```
+
+---
+
 ## Data Binding
 
 Supported parameter types:
@@ -245,8 +300,8 @@ Passing an array as a parameter to a single placeholder automatically expands it
 
 ```php
 var_dump($driver->queryAll(
-    'SELECT * FROM people WHERE name IN (?)',
-    [['Peter', 'John', 'Jane']]
+    'SELECT * FROM people WHERE name IN (:names)',
+    ['names' => ['Peter', 'John', 'Jane']]
 ));
 ```
 

@@ -6,17 +6,35 @@ $driver = new Sqlx\Driver([
 ]);
 
 var_dump($driver->queryDictionary(
-    'SELECT * FROM people WHERE name in (?)',
+    'SELECT name, * FROM people WHERE name in (?)',
      [
         ["Peter", "John", "Jane"],
     ]
 ));
+/* Output:
+array(1) {
+  ["John"]=>
+  object(stdClass)#2 (2) {
+    ["name"]=>
+    string(4) "John"
+    ["age"]=>
+    int(22)
+  }
+}
+
+*/
 var_dump($driver->queryColumnDictionary(
-    'SELECT * FROM people WHERE name in (?)',
+    'SELECT name, age FROM people WHERE name in (?)',
      [
         ["Peter", "John", "Jane"],
     ]
 ));
+/* Output:
+array(1) {
+  ["John"]=>
+  int(22)
+}
+*/
 
 return;
 
