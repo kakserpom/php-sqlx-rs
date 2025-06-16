@@ -1,97 +1,53 @@
-use std::collections::HashMap;
+use crate::driver::conversion::{Conversion, json_into_zval};
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::{zend_array, zend_object};
 use ext_php_rs::types::Zval;
-use sqlx::postgres::{PgColumn, PgRow};
-use sqlx::{Decode, Row, Type};
-use sqlx::TypeInfo;
 use sqlx::Column;
+use sqlx::TypeInfo;
+use sqlx::postgres::PgRow;
+use sqlx::{Decode, Row, Type};
 
-
-/// Trait to convert a row into a PHP value.
-pub trait RowToZval: Row {
-    /// Convert the row into a PHP associative array.
-    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval>;
-}
-
-/// Converts a JSON value into a PHP value, respecting associative array settings.
-///
-/// # Arguments
-/// - `value`: A `serde_json::Value` to convert
-/// - `associative_arrays`: Whether to convert objects into PHP associative arrays or `stdClass`
-///
-/// # Returns
-/// Converted `Zval` or an error if conversion fails
-fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow::Result<Zval> {
-    match value {
-        serde_json::Value::String(str) => str
-            .into_zval(false)
-            .map_err(|err| anyhow!("String conversion: {err:?}")),
-        serde_json::Value::Number(number) => number
-            .to_string()
-            .into_zval(false)
-            .map_err(|err| anyhow!("Number conversion: {err:?}")),
-        serde_json::Value::Bool(bool) => bool
-            .into_zval(false)
-            .map_err(|err| anyhow!("Bool conversion: {err:?}")),
-        serde_json::Value::Null => {
-            let mut null = Zval::new();
-            null.set_null();
-            Ok(null)
-        }
-        serde_json::Value::Array(array) => Ok(array
-            .into_iter()
-            .map(|x| json_into_zval(x, associative_arrays))
-            .collect::<anyhow::Result<Vec<Zval>>>()?
-            .into_zval(false)
-            .map_err(|err| anyhow!("Array conversion: {err:?}"))?),
-        serde_json::Value::Object(object) => {
-            if associative_arrays {
-                Ok(object
-                    .into_iter()
-                    .map(|(key, value)| Ok((key, json_into_zval(value, associative_arrays)?)))
-                    .collect::<anyhow::Result<HashMap<String, Zval>>>()?
-                    .into_zval(false)
-                    .map_err(|err| anyhow!("Object conversion: {err:?}"))?)
-            } else {
-                Ok(object
-                    .into_iter()
-                    .try_fold(
-                        zend_object::new_stdclass(),
-                        |mut std_object, (key, value)| {
-                            std_object
-                                .set_property(&key, json_into_zval(value, associative_arrays))
-                                .map(|()| std_object)
-                                .map_err(|err| anyhow!("Object conversion: {:?}", err))
-                        },
-                    )?
-                    .into_zval(false)
-                    .map_err(|err| anyhow!("Object conversion: {err:?}"))?)
-            }
+impl Conversion for PgRow {
+    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval> {
+        if associative_arrays {
+            Ok(self
+                .columns()
+                .iter()
+                .try_fold(
+                    zend_array::new(),
+                    |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
+                        array
+                            .insert(
+                                column.name(),
+                                self.column_value_into_zval(column, associative_arrays)?,
+                            )
+                            .map_err(|err| anyhow!("{err:?}"))?;
+                        Ok(array)
+                    },
+                )?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))?)
+        } else {
+            Ok(self
+                .columns()
+                .iter()
+                .try_fold(zend_object::new_stdclass(), |mut object, column| {
+                    object
+                        .set_property(
+                            column.name(),
+                            self.column_value_into_zval(column, associative_arrays)?,
+                        )
+                        .map(|()| object)
+                        .map_err(|err| anyhow!("{:?}", err))
+                })?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{:?}", err))?)
         }
     }
-}
-/// Trait to convert a column value into a PHP value.
-pub trait ColumnToZval {
-    /// Converts a specific column from a row to a PHP value.
-    ///
-    /// # Arguments
-    /// - `column`: Reference to the column in the row.
-    /// - `associative_arrays`: Whether to render complex types as associative arrays
-    ///
-    /// # Returns
-    /// A PHP-compatible `Zval` value
-    fn column_value_into_zval(
-        &self,
-        column: &PgColumn,
-        associative_arrays: bool,
-    ) -> anyhow::Result<Zval>;
-}
-impl ColumnToZval for &PgRow {
-    fn column_value_into_zval(
+    fn column_value_into_zval<PgColumn: Column, Postgres>(
         &self,
         column: &PgColumn,
         associative_arrays: bool,
@@ -191,43 +147,5 @@ impl ColumnToZval for &PgRow {
 
             _ => bail!("unsupported type: {column_type}"),
         })
-    }
-}
-impl RowToZval for PgRow {
-    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval> {
-        if associative_arrays {
-            Ok(self
-                .columns()
-                .iter()
-                .try_fold(
-                    zend_array::new(),
-                    |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
-                        array
-                            .insert(
-                                column.name(),
-                                (&self).column_value_into_zval(column, associative_arrays)?,
-                            )
-                            .map_err(|err| anyhow!("{err:?}"))?;
-                        Ok(array)
-                    },
-                )?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?)
-        } else {
-            Ok(self
-                .columns()
-                .iter()
-                .try_fold(zend_object::new_stdclass(), |mut object, column| {
-                    object
-                        .set_property(
-                            column.name(),
-                            (&self).column_value_into_zval(column, associative_arrays)?,
-                        )
-                        .map(|()| object)
-                        .map_err(|err| anyhow!("{:?}", err))
-                })?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{:?}", err))?)
-        }
     }
 }

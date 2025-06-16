@@ -10,8 +10,12 @@ ext-php-rs = { version = "0.13.1", features = ["anyhow"] }
 itertools = "0.14.0"
 ordermap = "0.5.7"
 serde_json = "1.0.140"
-sqlx = { version = "0.8.6", features = ["postgres", "json", "runtime-tokio"] }
+sqlx = { version = "0.8.6", features = ["json", "runtime-tokio"], optional = true }
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
-[lib]
-crate-type = ["cdylib"]
+
+[features]
+default = ["postgres", "mysql"]
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"]
+

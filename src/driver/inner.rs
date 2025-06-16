@@ -1,26 +1,25 @@
-use std::collections::HashMap;
+use crate::ast::{Ast, Value};
+use crate::driver::conversion::Conversion;
+use crate::{ColumnArgument, DriverOptions, RUNTIME};
 use anyhow::{anyhow, bail};
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::{zend_array, zend_object};
 use ext_php_rs::types::Zval;
-use ordermap::OrderMap;
-use sqlx::{Database, Encode, Error, Type};
-use sqlx::Row;
-use sqlx::Column;
-use threadsafe_lru::LruCache;
-use crate::ast::{Ast, Value};
-use crate::{ColumnArgument, DriverOptions, RUNTIME};
-use crate::driver::conversion::{ColumnToZval, RowToZval};
 use itertools::Itertools;
+use ordermap::OrderMap;
+use sqlx::Column;
+use sqlx::Row;
 use sqlx::query::Query;
+use sqlx::{Database, Encode, Error, Type};
+use std::collections::HashMap;
+use threadsafe_lru::LruCache;
 
 pub struct DriverInner {
     pub pool: sqlx::PgPool,
     pub ast_cache: LruCache<String, Ast>,
     pub options: DriverOptions,
 }
-
 
 impl DriverInner {
     /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
@@ -104,7 +103,7 @@ impl DriverInner {
             }
             None => 0,
         };
-        (&row).column_value_into_zval(
+        row.column_value_into_zval(
             row.try_column(column_idx)?,
             associative_arrays.unwrap_or(self.options.associative_arrays),
         )
@@ -160,12 +159,12 @@ impl DriverInner {
             None => 0,
         };
         it.map(|row| {
-            (&row).column_value_into_zval(
+            row.column_value_into_zval(
                 row.column(column_idx),
                 associative_arrays.unwrap_or(self.options.associative_arrays),
             )
         })
-            .try_collect()
+        .try_collect()
     }
 
     /// Executes an SQL query and returns a single column from the first row or null.
@@ -213,7 +212,7 @@ impl DriverInner {
                     }
                     None => 0,
                 };
-                (&row).column_value_into_zval(
+                row.column_value_into_zval(
                     row.try_column(column_idx)?,
                     associative_arrays.unwrap_or(self.options.associative_arrays),
                 )
@@ -385,7 +384,7 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = (&row)
+                if let Some(key) = row
                     .column_value_into_zval(row.column(0), false)?
                     .string()
                 {
@@ -406,8 +405,8 @@ impl DriverInner {
                     Ok(array)
                 },
             )?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
         } else {
             it.try_fold(
                 zend_object::new_stdclass(),
@@ -419,8 +418,8 @@ impl DriverInner {
                     Ok(object)
                 },
             )?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
         })
     }
 
@@ -473,7 +472,7 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = (&row)
+                if let Some(key) = row
                     .column_value_into_zval(row.column(0), false)?
                     .string()
                 {
@@ -551,11 +550,11 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = (&row)
+                if let Some(key) = row
                     .column_value_into_zval(row.column(0), false)?
                     .string()
                 {
-                    Ok((key, (&row).column_value_into_zval(row.column(1), assoc)?))
+                    Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
                 }
@@ -621,11 +620,11 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = (&row)
+                if let Some(key) = row
                     .column_value_into_zval(row.column(0), false)?
                     .string()
                 {
-                    Ok((key, (&row).column_value_into_zval(row.column(1), assoc)?))
+                    Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
                 }
@@ -641,8 +640,8 @@ impl DriverInner {
                     Ok(array)
                 },
             )?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
         } else {
             it.try_fold(
                 zend_object::new_stdclass(),
@@ -654,12 +653,11 @@ impl DriverInner {
                     Ok(object)
                 },
             )?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
         })
     }
 }
-
 
 /// Binds a list of `Value` arguments to an `SQLx` query.
 fn bind_values<'a, D: Database>(
@@ -704,4 +702,3 @@ where
 
     values.iter().fold(query, walker)
 }
-
