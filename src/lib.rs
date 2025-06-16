@@ -116,7 +116,7 @@ impl OrderBy {
     /// A `RenderedOrderBy` object containing validated SQL ORDER BY clauses
     /// The returning value is to be used as a placeholder value
     ///
-    /// # Errors
+    /// # Exceptions
     /// This method does not return an error but silently ignores unknown fields.
     /// Use validation separately if strict input is required.
     #[must_use]
@@ -205,8 +205,8 @@ impl DriverInner {
     /// # Returns
     /// Number of affected rows
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
@@ -249,8 +249,8 @@ impl DriverInner {
     /// # Returns
     /// A single column value.
     ///
-    /// # Errors
-    /// Returns an error if the query fails, column doesn't exist, or conversion fails
+    /// # Exceptions
+    /// Throws an exception if the query fails, column doesn't exist, or conversion fails
     pub fn query_value(
         &self,
         query: &str,
@@ -294,8 +294,8 @@ impl DriverInner {
     /// # Returns
     /// An array containing values from the specified column
     ///
-    /// # Errors
-    /// Returns an error if the query fails or conversion fails
+    /// # Exceptions
+    /// Throws an exception if the query fails or conversion fails
     pub fn query_column(
         &self,
         query: &str,
@@ -352,8 +352,8 @@ impl DriverInner {
     /// # Returns
     /// A single column value as `Zval` or null if no row is found
     ///
-    /// # Errors
-    /// Returns an error if the query fails, column doesn't exist, or conversion fails
+    /// # Exceptions
+    /// Throws an exception if the query fails, column doesn't exist, or conversion fails
     pub fn query_maybe_value(
         &self,
         query: &str,
@@ -407,8 +407,8 @@ impl DriverInner {
     /// # Returns
     /// Single row as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or execution fails;
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
@@ -436,8 +436,8 @@ impl DriverInner {
     /// # Returns
     /// A PHP value representing the result row or `null` if no row matched the query.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query is invalid or cannot be executed;
     /// - parameter binding fails due to incorrect types or unsupported values;
     /// - the row cannot be converted into a PHP value (e.g., unsupported Postgres types).
@@ -473,12 +473,12 @@ impl DriverInner {
     /// # Returns
     /// Array of rows as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or fails to execute;
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
-    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+    /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
 
     pub fn query_all(
         &self,
@@ -511,8 +511,8 @@ impl DriverInner {
     /// # Returns
     /// An array where the first element is the rendered SQL query (string), and the second is an array of bound values
     ///
-    /// # Errors
-    /// Returns an error if the query can't be parsed, rendered, or if parameters
+    /// # Exceptions
+    /// Throws an exception if the query can't be parsed, rendered, or if parameters
     /// cannot be converted from PHP values.
     pub fn dry(
         &self,
@@ -942,8 +942,8 @@ impl Driver {
     /// # Returns
     /// Single row as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or execution fails;
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
@@ -966,8 +966,8 @@ impl Driver {
     /// # Returns
     /// The value from the specified column of the first row.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query is invalid or fails to execute;
     /// - the specified column does not exist;
     /// - the value cannot be converted to a PHP-compatible type.
@@ -1004,8 +1004,8 @@ impl Driver {
      * # Returns
      * The value from the specified column of the first row, decoded as a PHP object.
      *
-     * # Errors
-     * Returns an error if:
+     * # Exceptions
+     * Throws an exception if:
      * - the query is invalid or fails to execute;
      * - the column does not exist;
      * - the value cannot be converted to a PHP object (e.g., due to encoding or type mismatch).
@@ -1030,8 +1030,8 @@ impl Driver {
     /// # Returns
     /// The value from the specified column of the first row as a PHP value`, or `null` if no row was found.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query is invalid or fails to execute;
     /// - the specified column does not exist;
     /// - the value cannot be converted to a PHP-compatible type.
@@ -1057,7 +1057,7 @@ impl Driver {
     /// # Returns
     /// The column value from the first row, or `null` if no row found.
     ///
-    /// # Errors
+    /// # Exceptions
     /// Same as `query_maybe_value`.
     pub fn query_maybe_value_assoc(
         &self,
@@ -1081,7 +1081,7 @@ impl Driver {
     /// # Returns
     /// The column value from the first row, or `null` if no row found.
     ///
-    /// # Errors
+    /// # Exceptions
     /// Same as `query_maybe_value`.
     pub fn query_maybe_value_obj(
         &self,
@@ -1099,8 +1099,8 @@ impl Driver {
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or execution fails;
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
@@ -1119,8 +1119,8 @@ impl Driver {
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or execution fails;
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
@@ -1142,8 +1142,8 @@ impl Driver {
     /// # Returns
     /// Single row as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if the query fails for reasons other than no matching rows.
+    /// # Exceptions
+    /// Throws an exception if the query fails for reasons other than no matching rows.
     /// For example, syntax errors, type mismatches, or database connection issues.
     pub fn query_maybe_row(
         &self,
@@ -1162,8 +1162,8 @@ impl Driver {
     /// # Returns
     /// The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
@@ -1186,8 +1186,8 @@ impl Driver {
     /// # Returns
     /// The result row as a `stdClass` PHP object, or `null` if no matching row is found.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
@@ -1210,8 +1210,8 @@ impl Driver {
     /// # Returns
     /// An array of column values, one for each row.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query fails to execute;
     /// - the specified column is not found;
     /// - a column value cannot be converted to PHP.
@@ -1235,7 +1235,7 @@ impl Driver {
     /// # Returns
     /// An array of column values (associative arrays for structured data).
     ///
-    /// # Errors
+    /// # Exceptions
     /// Same as `query_column`.
     pub fn query_column_assoc(
         &self,
@@ -1257,7 +1257,7 @@ impl Driver {
     /// # Returns
     /// An array of column values (objects for structured data).
     ///
-    /// # Errors
+    /// # Exceptions
     /// Same as `query_column`.
     pub fn query_column_obj(
         &self,
@@ -1278,12 +1278,12 @@ impl Driver {
     /// # Returns
     /// Array of rows as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or fails to execute;
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
-    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+    /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all(
         &self,
         query: &str,
@@ -1298,12 +1298,12 @@ impl Driver {
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or fails to execute;
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
-    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+    /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all_assoc(
         &self,
         query: &str,
@@ -1318,12 +1318,12 @@ impl Driver {
     /// - `query`: SQL query string
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or fails to execute;
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
-    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+    /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all_obj(
         &self,
         query: &str,
@@ -1356,8 +1356,8 @@ impl Driver {
     /// # Returns
     /// Number of affected rows
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
@@ -1378,8 +1378,8 @@ impl Driver {
     /// # Returns
     /// Number of inserted rows
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
@@ -1406,8 +1406,8 @@ impl Driver {
     /// # Returns
     /// A list where the first element is the rendered SQL query (string), and the second is an array of bound values
     ///
-    /// # Errors
-    /// Returns an error if the query can't be parsed, rendered, or if parameters
+    /// # Exceptions
+    /// Throws an exception if the query can't be parsed, rendered, or if parameters
     /// cannot be converted from PHP values.
     pub fn dry(
         &self,
@@ -1437,8 +1437,8 @@ impl PreparedQuery {
     /// # Returns
     /// Number of affected rows
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
@@ -1454,8 +1454,8 @@ impl PreparedQuery {
     /// # Returns
     /// Single row as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or execution fails;
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
@@ -1496,8 +1496,8 @@ impl PreparedQuery {
     /// # Returns
     /// Single row as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if the query fails for reasons other than no matching rows.
+    /// # Exceptions
+    /// Throws an exception if the query fails for reasons other than no matching rows.
     /// For example, syntax errors, type mismatches, or database connection issues.
     pub fn query_maybe_row(
         &self,
@@ -1516,8 +1516,8 @@ impl PreparedQuery {
     /// # Returns
     /// The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
@@ -1538,8 +1538,8 @@ impl PreparedQuery {
     /// # Returns
     /// The result row as a `stdClass` PHP object, or `null` if no matching row is found.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
@@ -1561,8 +1561,8 @@ impl PreparedQuery {
     /// # Returns
     /// An array of column values, one for each row.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - the query fails to execute;
     /// - the specified column is not found;
     /// - a column value cannot be converted to PHP.
@@ -1585,7 +1585,7 @@ impl PreparedQuery {
     /// # Returns
     /// An array of column values (associative arrays for structured data).
     ///
-    /// # Errors
+    /// # Exceptions
     /// Same as `query_column`.
     pub fn query_column_assoc(
         &self,
@@ -1605,7 +1605,7 @@ impl PreparedQuery {
     /// # Returns
     /// An array of column values (objects for structured data).
     ///
-    /// # Errors
+    /// # Exceptions
     /// Same as `query_column`.
     pub fn query_column_obj(
         &self,
@@ -1624,12 +1624,12 @@ impl PreparedQuery {
     /// # Returns
     /// Array of rows as array or object depending on config
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or fails to execute;
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
-    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+    /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -1642,12 +1642,12 @@ impl PreparedQuery {
     /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or fails to execute;
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
-    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+    /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -1661,12 +1661,12 @@ impl PreparedQuery {
     /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
-    /// # Errors
-    /// Returns an error if:
+    /// # Exceptions
+    /// Throws an exception if:
     /// - SQL query is invalid or fails to execute;
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
-    /// - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+    /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
