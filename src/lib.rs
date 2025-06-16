@@ -972,7 +972,8 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
-        self.driver_inner.query_row_column(query, parameters, column, None)
+        self.driver_inner
+            .query_row_column(query, parameters, column, None)
     }
 
     pub fn query_row_column_assoc(
@@ -986,24 +987,24 @@ impl Driver {
     }
 
     /**
-    * Executes a SQL query and returns a single column value as a PHP object from the first row.
-    *
-    * Same as `queryRowColumn`, but forces object mode for decoding structured types (e.g., JSON, composite).
-    *
-    * # Parameters
-    * - `query`: SQL query string to execute.
-    * - `parameters`: Optional array of indexed or named parameters to bind.
-    * - `column`: Optional column name or zero-based index to extract. Defaults to the first column.
-    *
-    * # Returns
-    * The value from the specified column of the first row, decoded as a PHP object.
-    *
-    * # Errors
-    * Returns an error if:
-    * - the query is invalid or fails to execute;
-    * - the column does not exist;
-    * - the value cannot be converted to a PHP object (e.g., due to encoding or type mismatch).
-    */
+     * Executes a SQL query and returns a single column value as a PHP object from the first row.
+     *
+     * Same as `queryRowColumn`, but forces object mode for decoding structured types (e.g., JSON, composite).
+     *
+     * # Parameters
+     * - `query`: SQL query string to execute.
+     * - `parameters`: Optional array of indexed or named parameters to bind.
+     * - `column`: Optional column name or zero-based index to extract. Defaults to the first column.
+     *
+     * # Returns
+     * The value from the specified column of the first row, decoded as a PHP object.
+     *
+     * # Errors
+     * Returns an error if:
+     * - the query is invalid or fails to execute;
+     * - the column does not exist;
+     * - the value cannot be converted to a PHP object (e.g., due to encoding or type mismatch).
+     */
     pub fn query_row_column_obj(
         &self,
         query: &str,
@@ -1167,7 +1168,8 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.driver_inner.query_maybe_row(query, parameters, Some(true))
+        self.driver_inner
+            .query_maybe_row(query, parameters, Some(true))
     }
 
     /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
@@ -1189,7 +1191,8 @@ impl Driver {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.driver_inner.query_maybe_row(query, parameters, Some(false))
+        self.driver_inner
+            .query_maybe_row(query, parameters, Some(false))
     }
 
     /// Executes a SQL query and returns the specified column values from all result rows.
@@ -1213,7 +1216,8 @@ impl Driver {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.driver_inner.query_column(query, parameters, column, None)
+        self.driver_inner
+            .query_column(query, parameters, column, None)
     }
 
     /// Executes a SQL query and returns the specified column values from all rows in associative array mode.
@@ -1494,7 +1498,8 @@ impl PreparedQuery {
         &self,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.driver_inner.query_maybe_row(&self.query, parameters, None)
+        self.driver_inner
+            .query_maybe_row(&self.query, parameters, None)
     }
 
     /// Executes the SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
@@ -1516,7 +1521,8 @@ impl PreparedQuery {
         &self,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.driver_inner.query_maybe_row(&self.query, parameters, Some(true))
+        self.driver_inner
+            .query_maybe_row(&self.query, parameters, Some(true))
     }
 
     /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
@@ -1536,7 +1542,8 @@ impl PreparedQuery {
         &self,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<Zval> {
-        self.driver_inner.query_maybe_row(&self.query, parameters, Some(false))
+        self.driver_inner
+            .query_maybe_row(&self.query, parameters, Some(false))
     }
 
     /// Executes the SQL query and returns the specified column values from all result rows.
@@ -1559,7 +1566,8 @@ impl PreparedQuery {
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
-        self.driver_inner.query_column(&self.query, parameters, column, None)
+        self.driver_inner
+            .query_column(&self.query, parameters, column, None)
     }
 
     /// Executes the SQL query and returns the specified column values from all rows in associative array mode.
@@ -1602,7 +1610,7 @@ impl PreparedQuery {
         self.driver_inner
             .query_column(&self.query, parameters, column, Some(false))
     }
-    
+
     /// Executes the prepared query and returns all rows.
     ///
     /// # Arguments
