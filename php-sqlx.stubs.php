@@ -15,56 +15,6 @@ namespace Sqlx {
         const OPT_ASSOC_ARRAYS = null;
     }
 
-    class OrderBy {
-        /**
-         * Ascending order (A to Z)
-         */
-        const ASC = null;
-
-        /**
-         * Descending order (Z to A)
-         */
-        const DESC = null;
-
-        /**
-         * Constructs an OrderBy helper with allowed sortable fields.
-         *
-         * # Arguments
-         * - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
-         *
-         * # Example
-         * ```php
-         * $order_by = new Sqlx\OrderBy([
-         *     "name",
-         *     "age",
-         *     "total_posts" => "COUNT(posts.*)"
-         * ]);
-         * ```
-         */
-        public function __construct(array $defined_fields) {}
-
-        /**
-         * __invoke magic for apply()
-         */
-        public function __invoke(array $order_by): object {}
-
-        /**
-         * Applies ordering rules to a user-defined input.
-         *
-         * # Arguments
-         * - `order_by`: List of fields (as strings or [field, direction] arrays)
-         *
-         * # Returns
-         * A `RenderedOrderBy` object containing validated SQL ORDER BY clauses
-         * The returning value is to be used as a placeholder value
-         *
-         * # Exceptions
-         * This method does not return an error but silently ignores unknown fields.
-         * Use validation separately if strict input is required.
-         */
-        public function apply(array $order_by): object {}
-    }
-
     /**
      * A reusable prepared SQL query with parameter support.
      *
@@ -1072,5 +1022,55 @@ namespace Sqlx {
          * cannot be converted from PHP values.
          */
         public function dry(string $query, ?array $parameters): array {}
+    }
+
+    class OrderBy {
+        /**
+         * Ascending order (A to Z)
+         */
+        const ASC = null;
+
+        /**
+         * Descending order (Z to A)
+         */
+        const DESC = null;
+
+        /**
+         * Constructs an OrderBy helper with allowed sortable fields.
+         *
+         * # Arguments
+         * - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
+         *
+         * # Example
+         * ```php
+         * $order_by = new Sqlx\OrderBy([
+         *     "name",
+         *     "age",
+         *     "total_posts" => "COUNT(posts.*)"
+         * ]);
+         * ```
+         */
+        public function __construct(array $defined_fields) {}
+
+        /**
+         * __invoke magic for apply()
+         */
+        public function __invoke(array $order_by): object {}
+
+        /**
+         * Applies ordering rules to a user-defined input.
+         *
+         * # Arguments
+         * - `order_by`: List of fields (as strings or [field, direction] arrays)
+         *
+         * # Returns
+         * A `RenderedOrderBy` object containing validated SQL ORDER BY clauses
+         * The returning value is to be used as a placeholder value
+         *
+         * # Exceptions
+         * This method does not return an error but silently ignores unknown fields.
+         * Use validation separately if strict input is required.
+         */
+        public function apply(array $order_by): object {}
     }
 }

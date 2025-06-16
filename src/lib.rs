@@ -22,6 +22,7 @@ use tokio::runtime::Runtime;
 
 /// Global runtime for executing async `SQLx` queries from sync context.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
+
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<DriverInner>>> =
     LazyLock::new(DashMap::new);
 

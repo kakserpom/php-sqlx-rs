@@ -8,16 +8,16 @@ use ext_php_rs::ffi::{zend_array, zend_object};
 use ext_php_rs::types::Zval;
 use itertools::Itertools;
 use ordermap::OrderMap;
-use sqlx::Column;
 use sqlx::Row;
+use sqlx::pool::Pool;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::query::Query;
+use sqlx::{Column, Postgres};
 use sqlx::{Database, Encode, Error, Type};
 use std::collections::HashMap;
 use threadsafe_lru::LruCache;
-
 pub struct DriverInner {
-    pub pool: sqlx::PgPool,
+    pub pool: Pool<Postgres>,
     pub ast_cache: LruCache<String, Ast>,
     pub options: DriverInnerOptions,
 }
