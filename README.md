@@ -207,7 +207,7 @@ You can pass strings (case-insensitive).
 
 So this code works:
 
-```
+```php
 // Equivalent to: SELECT * FROM users ORDER BY `name` DESC
 $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
 ['  name  ', "  DeSc  "],
