@@ -51,6 +51,14 @@ WHERE TRUE {{ AND date > $since {{ AND level = $level }} }}
 
 In the above example the `level` condition will only be rendered when both `$level` and `$since` are set.
 
+```
+SELECT *
+FROM logs
+WHERE date > $since {{ AND level = $level }}
+```
+
+The above example will throw an exception if `$since` is not set.
+
 ---
 
 ## Installation
