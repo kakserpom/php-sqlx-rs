@@ -239,19 +239,14 @@ Note that field names are case-sensitive. Incorrect `direction` string silently 
 > 🔀 The iteration order is preserved.
 
 ```php
-var_dump($driver->queryDictionary(
-    'SELECT name, * FROM people WHERE name IN (?)',
-    [["Peter", "John", "Jane"]]
+var_dump($driver->queryGroupedColumnDictionary(
+    'SELECT department, name FROM employees WHERE department IN (?)',
+    [['IT', 'HR']]
 ));
 /* Output:
-array(1) {
-  ["John"]=>
-  object(stdClass)#2 (2) {
-    ["name"]=>
-    string(4) "John"
-    ["age"]=>
-    int(22)
-  }
+array(2) {
+  ["IT"]=> array("Alice", "Bob")
+  ["HR"]=> array("Eve")
 }
 */
 ```
