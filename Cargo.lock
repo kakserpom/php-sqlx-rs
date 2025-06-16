@@ -1282,7 +1282,6 @@ dependencies = [
  "anyhow",
  "dashmap",
  "ext-php-rs",
- "indexmap",
  "itertools",
  "serde_json",
  "sqlx",

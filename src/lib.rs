@@ -553,10 +553,10 @@ impl DriverInner {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         associative_arrays: Option<bool>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-        RUNTIME
+        let mut it = RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
@@ -568,8 +568,35 @@ impl DriverInner {
                 } else {
                     bail!("First column must be convertible to string")
                 }
-            })
-            .try_collect()
+            });
+
+        Ok(if assoc {
+            it.try_fold(
+                zend_array::new(),
+                |mut array, item| -> anyhow::Result<ZBox<zend_array>> {
+                    let (key, value) = item?;
+                    array
+                        .insert(&key, value)
+                        .map_err(|err| anyhow!("{err:?}"))?;
+                    Ok(array)
+                },
+            )?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
+        } else {
+            it.try_fold(
+                zend_object::new_stdclass(),
+                |mut object, item| -> anyhow::Result<ZBox<zend_object>> {
+                    let (key, value) = item?;
+                    object
+                        .set_property(&key, value)
+                        .map_err(|err| anyhow!("{err:?}"))?;
+                    Ok(object)
+                },
+            )?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
+        })
     }
 
     /// Executes a SQL query and returns a dictionary grouping rows by the first column.
@@ -731,10 +758,10 @@ impl DriverInner {
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         associative_arrays: Option<bool>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-        RUNTIME
+        let mut it = RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
@@ -746,8 +773,34 @@ impl DriverInner {
                 } else {
                     bail!("First column must be convertible to string")
                 }
-            })
-            .try_collect()
+            });
+        Ok(if assoc {
+            it.try_fold(
+                zend_array::new(),
+                |mut array, item| -> anyhow::Result<ZBox<zend_array>> {
+                    let (key, value) = item?;
+                    array
+                        .insert(&key, value)
+                        .map_err(|err| anyhow!("{err:?}"))?;
+                    Ok(array)
+                },
+            )?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
+        } else {
+            it.try_fold(
+                zend_object::new_stdclass(),
+                |mut object, item| -> anyhow::Result<ZBox<zend_object>> {
+                    let (key, value) = item?;
+                    object
+                        .set_property(&key, value)
+                        .map_err(|err| anyhow!("{err:?}"))?;
+                    Ok(object)
+                },
+            )?
+            .into_zval(false)
+            .map_err(|err| anyhow!("{err:?}"))?
+        })
     }
 }
 
@@ -1589,7 +1642,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner.query_dictionary(query, parameters, None)
     }
 
@@ -1614,7 +1667,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(query, parameters, Some(true))
     }
@@ -1640,7 +1693,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(query, parameters, Some(false))
     }
@@ -1748,7 +1801,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, None)
     }
@@ -1771,7 +1824,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, Some(true))
     }
@@ -1794,7 +1847,7 @@ impl Driver {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, Some(false))
     }
@@ -1967,7 +2020,7 @@ impl PreparedQuery {
     pub fn query_column_dictionary(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(&self.query, parameters, None)
     }
@@ -1988,7 +2041,7 @@ impl PreparedQuery {
     pub fn query_column_dictionary_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(&self.query, parameters, Some(true))
     }
@@ -2009,7 +2062,7 @@ impl PreparedQuery {
     pub fn query_column_dictionary_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(&self.query, parameters, Some(false))
     }
@@ -2036,7 +2089,7 @@ impl PreparedQuery {
     pub fn query_dictionary(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(&self.query, parameters, None)
     }
@@ -2061,7 +2114,7 @@ impl PreparedQuery {
     pub fn query_dictionary_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(&self.query, parameters, Some(true))
     }
@@ -2086,7 +2139,7 @@ impl PreparedQuery {
     pub fn query_dictionary_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
-    ) -> anyhow::Result<HashMap<String, Zval>> {
+    ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(&self.query, parameters, Some(false))
     }
