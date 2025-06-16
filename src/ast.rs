@@ -270,7 +270,7 @@ impl Ast {
         })
     }
 
-    /// Renders the AST into a SQL string with numbered placeholders like `$1`, `$2`, ...
+    /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
     pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<Value>)>
     where

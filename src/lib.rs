@@ -241,7 +241,7 @@ impl DriverInner {
         }
     }
 
-    /// Executes a SQL query and returns a single column from the first row.
+    /// Executes an SQL query and returns a single column from the first row.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -286,7 +286,7 @@ impl DriverInner {
         )
     }
 
-    /// Executes a SQL query and returns a single column across all rows.
+    /// Executes an SQL query and returns a single column across all rows.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -344,7 +344,7 @@ impl DriverInner {
         .try_collect()
     }
 
-    /// Executes a SQL query and returns a single column from the first row or null.
+    /// Executes an SQL query and returns a single column from the first row or null.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -428,7 +428,7 @@ impl DriverInner {
             .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
     }
 
-    /// Executes a SQL query and returns a single row if available, or `null` if no rows are returned.
+    /// Executes an SQL query and returns a single row if available, or `null` if no rows are returned.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -467,7 +467,7 @@ impl DriverInner {
             }))
     }
 
-    /// Executes a SQL query and returns all results.
+    /// Executes an SQL query and returns all results.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -524,7 +524,7 @@ impl DriverInner {
         ])
     }
 
-    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row.
+    /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row.
     ///
     /// The resulting `HashMap<String, Zval>` maps the stringified value of the first column to the full row,
     /// which is converted into a PHP value (either associative array or object).
@@ -600,7 +600,7 @@ impl DriverInner {
         })
     }
 
-    /// Executes a SQL query and returns a dictionary grouping rows by the first column.
+    /// Executes an SQL query and returns a dictionary grouping rows by the first column.
     ///
     /// Each row in the result must contain at least one column. The **first column** is used as the **key**, and the
     /// **entire row** is converted to a PHP value and added to the list associated with that key.
@@ -758,7 +758,7 @@ impl DriverInner {
             .map_err(|err| anyhow!("{err:?}"))
     }
 
-    /// Executes a SQL query and returns a dictionary mapping the first column to the second column.
+    /// Executes an SQL query and returns a dictionary mapping the first column to the second column.
     ///
     /// This method expects each row of the result to contain **at least two columns**.
     /// It constructs a `HashMap<String, Zval>` where:
@@ -1249,7 +1249,7 @@ impl Driver {
         self.driver_inner.options.associative_arrays
     }
 
-    /// Executes a SQL query and returns a single result.
+    /// Executes an SQL query and returns a single result.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -1272,7 +1272,7 @@ impl Driver {
         self.driver_inner.query_row(query, parameters, None)
     }
 
-    /// Executes a SQL query and returns a single column value from the first row.
+    /// Executes an SQL query and returns a single column value from the first row.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -1308,7 +1308,7 @@ impl Driver {
     }
 
     /**
-     * Executes a SQL query and returns a single column value as a PHP object from the first row.
+     * Executes an SQL query and returns a single column value as a PHP object from the first row.
      *
      * Same as `queryValue`, but forces object mode for decoding structured types (e.g., JSON, composite).
      *
@@ -1336,7 +1336,7 @@ impl Driver {
             .query_value(query, parameters, column, Some(false))
     }
 
-    /// Executes a SQL query and returns a single column value from the first row, or null if no rows matched.
+    /// Executes an SQL query and returns a single column value from the first row, or null if no rows matched.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -1361,7 +1361,7 @@ impl Driver {
             .query_maybe_value(query, parameters, column, None)
     }
 
-    /// Executes a SQL query and returns a single column value as a PHP value (array mode), or null if no row matched.
+    /// Executes an SQL query and returns a single column value as a PHP value (array mode), or null if no row matched.
     ///
     /// Same as `query_maybe_value`, but forces associative array mode for complex values.
     ///
@@ -1385,7 +1385,7 @@ impl Driver {
             .query_maybe_value(query, parameters, column, Some(true))
     }
 
-    /// Executes a SQL query and returns a single column value as a PHP object, or null if no row matched.
+    /// Executes an SQL query and returns a single column value as a PHP object, or null if no row matched.
     ///
     /// Same as `query_maybe_value`, but forces object mode for complex values.
     ///
@@ -1409,7 +1409,7 @@ impl Driver {
             .query_maybe_value(query, parameters, column, Some(false))
     }
 
-    /// Executes a SQL query and returns one row as an associative array.
+    /// Executes an SQL query and returns one row as an associative array.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -1429,7 +1429,7 @@ impl Driver {
         self.driver_inner.query_row(query, parameters, Some(true))
     }
 
-    /// Executes a SQL query and returns one row as an object.
+    /// Executes an SQL query and returns one row as an object.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -1449,7 +1449,7 @@ impl Driver {
         self.driver_inner.query_row(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a single result, or `null` if no row matched.
+    /// Executes an SQL query and returns a single result, or `null` if no row matched.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -1469,7 +1469,7 @@ impl Driver {
         self.driver_inner.query_maybe_row(query, parameters, None)
     }
 
-    /// Executes a SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
+    /// Executes an SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -1493,7 +1493,7 @@ impl Driver {
             .query_maybe_row(query, parameters, Some(true))
     }
 
-    /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
+    /// Executes an SQL query and returns a single row as a PHP object, or `null` if no row matched.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -1516,7 +1516,7 @@ impl Driver {
             .query_maybe_row(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns the specified column values from all result rows.
+    /// Executes an SQL query and returns the specified column values from all result rows.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -1541,7 +1541,7 @@ impl Driver {
             .query_column(query, parameters, column, None)
     }
 
-    /// Executes a SQL query and returns the specified column values from all rows in associative array mode.
+    /// Executes an SQL query and returns the specified column values from all rows in associative array mode.
     ///
     /// # Arguments
     /// - `query`: SQL query string.
@@ -1563,7 +1563,7 @@ impl Driver {
             .query_column(query, parameters, column, Some(true))
     }
 
-    /// Executes a SQL query and returns the specified column values from all rows in object mode.
+    /// Executes an SQL query and returns the specified column values from all rows in object mode.
     ///
     /// # Arguments
     /// - `query`: SQL query string.
@@ -1585,7 +1585,7 @@ impl Driver {
             .query_column(query, parameters, column, Some(false))
     }
 
-    /// Executes a SQL query and returns all results.
+    /// Executes an SQL query and returns all results.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -1608,7 +1608,7 @@ impl Driver {
         self.driver_inner.query_all(query, parameters, None)
     }
 
-    /// Executes a SQL query and returns all rows as associative arrays.
+    /// Executes an SQL query and returns all rows as associative arrays.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -1628,7 +1628,7 @@ impl Driver {
         self.driver_inner.query_all(query, parameters, Some(true))
     }
 
-    /// Executes a SQL query and returns all rows as objects.
+    /// Executes an SQL query and returns all rows as objects.
     ///
     /// # Arguments
     /// - `query`: SQL query string
@@ -1648,7 +1648,7 @@ impl Driver {
         self.driver_inner.query_all(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row.
+    /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row.
     ///
     /// # Description
     /// The result is a `HashMap` where each key is the string value of the first column in a row,
@@ -1678,7 +1678,7 @@ impl Driver {
         self.driver_inner.query_dictionary(query, parameters, None)
     }
 
-    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row,
+    /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row,
     /// returning each row as an associative array.
     ///
     /// # Parameters
@@ -1704,7 +1704,7 @@ impl Driver {
             .query_dictionary(query, parameters, Some(true))
     }
 
-    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row,
+    /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row,
     /// returning each row as a PHP object.
     ///
     /// # Parameters
@@ -1730,7 +1730,7 @@ impl Driver {
             .query_dictionary(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a dictionary grouping rows by the first column.
+    /// Executes an SQL query and returns a dictionary grouping rows by the first column.
     ///
     /// Each row in the result must contain at least one column. The **first column** is used as the **key**, and the
     /// **entire row** is converted to a PHP value and added to the list associated with that key.
@@ -1808,7 +1808,7 @@ impl Driver {
             .query_grouped_dictionary(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a dictionary mapping the first column to the second column.
+    /// Executes an SQL query and returns a dictionary mapping the first column to the second column.
     ///
     /// This method expects each result row to contain at least two columns. It converts the first column
     /// into a PHP string (used as the key), and the second column into a PHP value (used as the value).
@@ -1839,7 +1839,7 @@ impl Driver {
             .query_column_dictionary(query, parameters, None)
     }
 
-    /// Executes a SQL query and returns a dictionary using associative array mode for values.
+    /// Executes an SQL query and returns a dictionary using associative array mode for values.
     ///
     /// Same as `query_column_dictionary`, but forces JSON objects to be represented as associative arrays.
     ///
@@ -1862,7 +1862,7 @@ impl Driver {
             .query_column_dictionary(query, parameters, Some(true))
     }
 
-    /// Executes a SQL query and returns a dictionary using object mode for values.
+    /// Executes an SQL query and returns a dictionary using object mode for values.
     ///
     /// Same as `query_column_dictionary`, but forces JSON objects to be represented as PHP objects.
     ///
@@ -1907,7 +1907,7 @@ impl Driver {
             .query_grouped_column_dictionary(query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a grouped dictionary where:
+    /// Executes an SQL query and returns a grouped dictionary where:
     /// - the key is the **first column** (must be convertible to string),
     /// - the value is a list of values from the **second column** for each group.
     ///
@@ -1994,7 +1994,7 @@ impl Driver {
         )
     }
 
-    /// Executes a SQL query and returns the rendered query and its parameters.
+    /// Executes an SQL query and returns the rendered query and its parameters.
     ///
     /// This method does not execute the query but returns the SQL string with placeholders
     /// and the bound parameter values for debugging or logging purposes.
@@ -2313,7 +2313,7 @@ impl PreparedQuery {
             .query_row(&self.query, parameters, Some(false))
     }
 
-    /// Executes a SQL query and returns a single result, or `null` if no row matched.
+    /// Executes an SQL query and returns a single result, or `null` if no row matched.
     ///
     /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
@@ -2355,7 +2355,7 @@ impl PreparedQuery {
             .query_maybe_row(&self.query, parameters, Some(true))
     }
 
-    /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
+    /// Executes an SQL query and returns a single row as a PHP object, or `null` if no row matched.
     ///
     /// # Arguments
     /// - `parameters`: Optional array of indexed/named parameters to bind.
