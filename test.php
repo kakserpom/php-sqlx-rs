@@ -5,7 +5,7 @@ $driver = new Sqlx\Driver([
     Sqlx\Driver::OPT_PERSISTENT_NAME => 'test',
 ]);
 
-var_dump($driver->queryDictionary(
+var_dump($driver->queryRow(
     'SELECT name, * FROM people WHERE name in (?)',
      [
         ["Peter", "John", "Jane"],

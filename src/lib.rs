@@ -11,8 +11,9 @@ use crate::ast::{Ast, Value};
 use anyhow::{anyhow, bail};
 use dashmap::DashMap;
 use ext_php_rs::binary::Binary;
+use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
-use ext_php_rs::ffi::zend_object;
+use ext_php_rs::ffi::{zend_array, zend_object};
 use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
 use sqlx::postgres::{PgColumn, PgPoolOptions, PgRow};
@@ -256,8 +257,7 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-        #[allow(clippy::needless_pass_by_value)]
-        column: Option<ColumnArgument>,
+        #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -302,8 +302,7 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-        #[allow(clippy::needless_pass_by_value)]
-        column: Option<ColumnArgument>,
+        #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -361,8 +360,7 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
-        #[allow(clippy::needless_pass_by_value)]
-        column: Option<ColumnArgument>,
+        #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -937,30 +935,37 @@ impl ColumnToZval for &PgRow {
 }
 impl RowToZval for PgRow {
     fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval> {
-        let row = self.columns().iter().try_fold(
-            HashMap::<String, Zval>::with_capacity(self.len()),
-            |mut row, column| -> anyhow::Result<HashMap<String, Zval>> {
-                row.insert(
-                    column.name().to_string(),
-                    (&self).column_value_into_zval(column, associative_arrays)?,
-                );
-                Ok(row)
-            },
-        )?;
         if associative_arrays {
-            row.into_zval(false).map_err(|err| anyhow!("{:?}", err))
-        } else {
-            Ok(row
-                .into_iter()
+            Ok(self
+                .columns()
+                .iter()
                 .try_fold(
-                    zend_object::new_stdclass(),
-                    |mut std_object, (key, value)| {
-                        std_object
-                            .set_property(&key, value)
-                            .map(|()| std_object)
-                            .map_err(|err| anyhow!("{:?}", err))
+                    zend_array::new(),
+                    |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
+                        array
+                            .insert(
+                                column.name(),
+                                (&self).column_value_into_zval(column, associative_arrays)?,
+                            )
+                            .map_err(|err| anyhow!("{err:?}"))?;
+                        Ok(array)
                     },
                 )?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))?)
+        } else {
+            Ok(self
+                .columns()
+                .iter()
+                .try_fold(zend_object::new_stdclass(), |mut object, column| {
+                    object
+                        .set_property(
+                            column.name(),
+                            (&self).column_value_into_zval(column, associative_arrays)?,
+                        )
+                        .map(|()| object)
+                        .map_err(|err| anyhow!("{:?}", err))
+                })?
                 .into_zval(false)
                 .map_err(|err| anyhow!("{:?}", err))?)
         }
