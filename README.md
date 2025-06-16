@@ -168,7 +168,14 @@ All helpers listed above have their prepared-query counterparts:
 
 ### Sqlx\OrderBy
 
-A helper class for rendering safe `ORDER BY` clauses from user input.
+A helper class for safe `ORDER BY` clauses from user input.
+
+**SAFETY:**
+
+- You can safely pass any user input as sorting settings.
+- Do NOT pass user input into the `OrderBy` constructor to avoid SQL injection vulnerabilities.
+
+**Examples**:
 
 ```php
 $orderBy = new Sqlx\OrderBy([
@@ -177,14 +184,37 @@ $orderBy = new Sqlx\OrderBy([
     'posts' => 'COUNT(posts.*)'
 ]);
 
-// Equivalent to: ORDER BY name ASC, COUNT(posts.*) DESC
-$rendered = $orderBy([
+// Equivalent to: SELECT * FROM users ORDER BY `name` ASC, COUNT(posts.*) DESC
+$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
     ['name', Sqlx\OrderBy::ASC],
     ['posts', Sqlx\OrderBy::DESC]
-]);
+])]);
 
-$driver->queryAll('SELECT * FROM users ORDER BY ?', [$rendered]);
+// This will throw an exception: Missing required placeholder `order_by`
+$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
+    ['zzzz', Sqlx\OrderBy::ASC],
+])]);
+
+
+// Equivalent to: SELECT * FROM users
+$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
+    ['zzzz', Sqlx\OrderBy::ASC],
+])]);
 ```
+
+Note that the direction constants (`OrderBy::ASC` and `OrderBy::DESC`) are just strings (`'ASC'` and `'DESC'`).
+You can pass strings (case-insensitive).
+
+So this code works:
+
+```
+// Equivalent to: SELECT * FROM users ORDER BY `name` DESC
+$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
+['  name  ', "  DeSc  "],
+])]);
+```
+
+Note that field names are case-sensitive.
 
 ---
 
@@ -220,10 +250,28 @@ var_dump($driver->queryAll(
 PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects.
 
 ```php
-var_dump($driver->queryRow(
-    'SELECT $1::json AS json',
+var_dump($driver->queryRowColumn(
+    'SELECT $1::json',
     ['{"foo": ["bar", "baz"]}']
 ));
+/* Output:
+object(stdClass)#2 (1) {
+  ["foo"]=>
+  array(2) {
+    [0]=>
+    string(3) "bar"
+    [1]=>
+    string(3) "baz"
+  }
+}*/
+
+var_dump($driver->queryRow(
+    'SELECT $1::json AS col',
+    ['{"foo": ["bar", "baz"]}']
+)->col->foo[0]);
+/* Output:
+string(3) "bar"
+}*/
 ```
 
 ---

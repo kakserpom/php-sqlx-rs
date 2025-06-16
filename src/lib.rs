@@ -143,8 +143,13 @@ impl OrderBy {
                             },
                         ),
                     };
-                    if let Some(x) = self.defined_fields.get(&field) {
-                        Some(format!("{} {dir}", x.as_ref().unwrap_or(&field)))
+                    let field = field.trim();
+                    if let Some(definition) = self.defined_fields.get(field) {
+                        if let Some(right_side) = definition {
+                            Some(format!("{right_side} {dir}"))
+                        } else {
+                            Some(format!("`{field}` {dir}"))
+                        }
                     } else {
                         None
                     }
