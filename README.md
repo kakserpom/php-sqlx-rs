@@ -120,9 +120,9 @@ $driver = new Sqlx\Driver([
 
 | Method                       | Returns                        | Notes                                   |
 |------------------------------|--------------------------------|-----------------------------------------|
-| `queryRowColumn()`           | first row column value         | error if no rows returned               |
-| `queryRowColumnAssoc()`      | ↑                              | ∟ enforces array mode for JSON objects  |
-| `queryRowColumnObj()`        | ↑                              | ∟ enforces object mode for JSON objects |
+| `queryValue()`           | first row column value         | error if no rows returned               |
+| `queryValueAssoc()`      | ↑                              | ∟ enforces array mode for JSON objects  |
+| `queryValueObj()`        | ↑                              | ∟ enforces object mode for JSON objects |
 | `queryMaybeRowColumn()`      | first row column value or null | null if no rows returned                |
 | `queryMaybeRowColumnAssoc()` | ↑                              | ∟ enforces array mode for JSON objects  |
 | `queryMaybeRowColumnObj()`   | ↑                              | ∟ enforces object mode for JSON objects |
@@ -168,7 +168,7 @@ All helpers listed above have their prepared-query counterparts:
 
 - `execute()`
 - `queryRow*()` / `queryMaybeRow*()`
-- `queryRowColumn*()` / `queryMaybeRowColumn*()`
+- `queryValue*()` / `queryMaybeRowColumn*()`
 - `queryAll*()` / `queryColumn*()`
 
 ---
@@ -257,7 +257,7 @@ var_dump($driver->queryAll(
 PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects.
 
 ```php
-var_dump($driver->queryRowColumn(
+var_dump($driver->queryValue(
     'SELECT $1::json',
     ['{"foo": ["bar", "baz"]}']
 ));
@@ -286,7 +286,7 @@ var_dump($driver->queryRow(
 PostgreSQL `BIGINT` values are safely mapped to PHP integers:
 
 ```php
-var_dump($driver->queryRowColumn('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
+var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
 // Output: int(9223372036854775807)
 ```
 

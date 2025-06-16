@@ -251,7 +251,7 @@ impl DriverInner {
     ///
     /// # Errors
     /// Returns an error if the query fails, column doesn't exist, or conversion fails
-    pub fn query_row_column(
+    pub fn query_value(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
@@ -971,30 +971,30 @@ impl Driver {
     /// - the query is invalid or fails to execute;
     /// - the specified column does not exist;
     /// - the value cannot be converted to a PHP-compatible type.
-    pub fn query_row_column(
+    pub fn query_value(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_row_column(query, parameters, column, None)
+            .query_value(query, parameters, column, None)
     }
 
-    pub fn query_row_column_assoc(
+    pub fn query_value_assoc(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_row_column(query, parameters, column, Some(true))
+            .query_value(query, parameters, column, Some(true))
     }
 
     /**
      * Executes a SQL query and returns a single column value as a PHP object from the first row.
      *
-     * Same as `queryRowColumn`, but forces object mode for decoding structured types (e.g., JSON, composite).
+     * Same as `queryValue`, but forces object mode for decoding structured types (e.g., JSON, composite).
      *
      * # Parameters
      * - `query`: SQL query string to execute.
@@ -1010,14 +1010,14 @@ impl Driver {
      * - the column does not exist;
      * - the value cannot be converted to a PHP object (e.g., due to encoding or type mismatch).
      */
-    pub fn query_row_column_obj(
+    pub fn query_value_obj(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_row_column(query, parameters, column, Some(false))
+            .query_value(query, parameters, column, Some(false))
     }
 
     /// Executes a SQL query and returns a single column value from the first row, or null if no rows matched.

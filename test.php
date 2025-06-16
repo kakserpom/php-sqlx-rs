@@ -5,7 +5,7 @@ $driver = new Sqlx\Driver([
     Sqlx\Driver::OPT_PERSISTENT_NAME => 'test',
 ]);
 
-var_dump($driver->queryRowColumn('SELECT ((1::BIGINT << 62) - 1) * 2 + 1'));
+var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1'));
 return;
 
 
@@ -22,7 +22,7 @@ $driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orde
 
 
 return;
-//var_dump($driver->queryRowColumn('select $1::json', ['{"foo": ["bar", "baz"]}']));
+//var_dump($driver->queryValue('select $1::json', ['{"foo": ["bar", "baz"]}']));
 // Equivalent to: SELECT * FROM users ORDER BY ORDER BY name ASC, COUNT(posts.*) DESC
 $driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
     ['name', Sqlx\OrderBy::ASC],
