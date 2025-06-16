@@ -1,5 +1,6 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_panics_doc)]
+#![allow(clippy::missing_errors_doc)]
 #![allow(clippy::too_many_lines)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
 
@@ -46,9 +47,9 @@ pub enum OrderFieldDefinition {
     Short(String),
 }
 impl OrderBy {
-    /// ASCending order (A to Z)
+    /// Ascending order (A to Z)
     const _ASC: &'static str = "ASC";
-    /// DESCending order (Z to A)
+    /// Descending order (Z to A)
     const _DESC: &'static str = "DESC";
 }
 
@@ -77,9 +78,9 @@ impl OrderBy {
 
 #[php_impl]
 impl OrderBy {
-    /// ASCending order (A to Z)
+    /// Ascending order (A to Z)
     const ASC: &'static str = "ASC";
-    /// DESCending order (Z to A)
+    /// Descending order (Z to A)
     const DESC: &'static str = "DESC";
 
     /// Constructs an OrderBy helper with allowed sortable fields.
@@ -104,7 +105,7 @@ impl OrderBy {
 
     #[must_use]
     pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
-        self.apply(order_by)
+        self.internal_apply(order_by)
     }
 
     /// Applies ordering rules to a user-defined input.
@@ -121,12 +122,12 @@ impl OrderBy {
     /// Use validation separately if strict input is required.
     #[must_use]
     pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
-        self._apply(order_by)
+        self.internal_apply(order_by)
     }
 }
 impl OrderBy {
     #[must_use]
-    pub fn _apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
+    pub fn internal_apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
         RenderedOrderBy {
             __inner: order_by
                 .into_iter()
@@ -255,6 +256,7 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
+        #[allow(clippy::needless_pass_by_value)]
         column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
@@ -300,6 +302,7 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
+        #[allow(clippy::needless_pass_by_value)]
         column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
@@ -358,6 +361,7 @@ impl DriverInner {
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
+        #[allow(clippy::needless_pass_by_value)]
         column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
@@ -479,7 +483,6 @@ impl DriverInner {
     /// - parameter binding fails;
     /// - row decoding fails due to an unsupported or mismatched database type;
     /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
-
     pub fn query_all(
         &self,
         query: &str,
@@ -624,6 +627,69 @@ impl DriverInner {
                     .string()
                 {
                     Ok((key, row.into_zval(assoc)?))
+                } else {
+                    bail!("First column must be convertible to string")
+                }
+            })
+            .try_fold(HashMap::<String, Vec<Zval>>::new(), |mut map, item| {
+                let (key, value) = item?;
+                map.entry(key).or_default().push(value);
+                Ok(map)
+            })
+    }
+
+    /// Executes the given SQL query and returns a grouped dictionary where:
+    /// - the **key** is the value of the **first column** (must be convertible to string),
+    /// - the **value** is a `Vec<Zval>` containing values from the **second column** for each row with that key.
+    ///
+    /// This method is useful for aggregating results by a common key.
+    ///
+    /// If the first column cannot be converted to a PHP string, an error is returned.
+    ///
+    /// # Arguments
+    ///
+    /// - `query`: SQL string with optional placeholders.
+    /// - `parameters`: Optional map of parameters to bind to the query.
+    /// - `associative_arrays`: Optional override for array/object return mode (e.g., when dealing with JSON).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The SQL execution fails,
+    /// - The first column cannot be converted to a string,
+    /// - Binding or decoding values fails.
+    ///
+    /// # Example SQL
+    ///
+    /// ```sql
+    /// SELECT department, name FROM employees
+    /// ```
+    ///
+    /// Might return:
+    ///
+    /// ```php
+    /// [
+    ///   "Sales" => ["Alice", "Bob"],
+    ///   "Engineering" => ["Carol"]
+    /// ]
+    /// ```
+    pub fn query_grouped_column_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        let (query, values) = self.render_query(query, parameters)?;
+        let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+        RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .into_iter()
+            .map(|row| {
+                if let Some(key) = (&row)
+                    .column_value_into_zval(row.column(0), false)?
+                    .string()
+                {
+                    Ok((key, (&row).column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
                 }
@@ -786,24 +852,24 @@ impl ColumnToZval for &PgRow {
         let column_name = column.name();
         let column_type = column.type_info().name();
         Ok(match column_type {
-            "BOOL" => try_cast_into_zval::<bool>(&self, column_name)?,
-            "BYTEA" | "BINARY" => (&self)
+            "BOOL" => try_cast_into_zval::<bool>(self, column_name)?,
+            "BYTEA" | "BINARY" => (self)
                 .try_get::<&[u8], _>(column_name)
                 .map_err(|err| anyhow!("{err:?}"))
                 .map(|x| x.iter().copied().collect::<Binary<_>>())?
                 .into_zval(false)
                 .map_err(|err| anyhow!("{err:?}"))?,
             "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
-                try_cast_into_zval::<String>(&self, column_name)?
+                try_cast_into_zval::<String>(self, column_name)?
             }
-            "INT2" => try_cast_into_zval::<i16>(&self, column_name)?,
-            "INT4" | "INT" => try_cast_into_zval::<i32>(&self, column_name)?,
-            "INT8" => try_cast_into_zval::<i64>(&self, column_name)?,
-            "OID" => try_cast_into_zval::<i32>(&self, column_name)?,
-            "FLOAT4" => try_cast_into_zval::<f32>(&self, column_name)?,
-            "FLOAT8" | "F64" => try_cast_into_zval::<f64>(&self, column_name)?,
-            "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(&self, column_name)?,
-            "UUID" => try_cast_into_zval::<String>(&self, column_name)?,
+            "INT2" => try_cast_into_zval::<i16>(self, column_name)?,
+            "INT4" | "INT" => try_cast_into_zval::<i32>(self, column_name)?,
+            "INT8" => try_cast_into_zval::<i64>(self, column_name)?,
+            "OID" => try_cast_into_zval::<i32>(self, column_name)?,
+            "FLOAT4" => try_cast_into_zval::<f32>(self, column_name)?,
+            "FLOAT8" | "F64" => try_cast_into_zval::<f64>(self, column_name)?,
+            "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(self, column_name)?,
+            "UUID" => try_cast_into_zval::<String>(self, column_name)?,
             "JSON" | "JSONB" => self
                 .try_get::<serde_json::Value, _>(column_name)
                 .map_err(|err| anyhow!("{err:?}"))
@@ -821,49 +887,49 @@ impl ColumnToZval for &PgRow {
                 .into_zval(false)
                 .map_err(|err| anyhow!("{err:?}"))?,
             "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
-                try_cast_into_zval::<String>(&self, column_name)?
+                try_cast_into_zval::<String>(self, column_name)?
             }
             "INET" | "CIDR" | "MACADDR" | "MACADDR8" => {
-                try_cast_into_zval::<String>(&self, column_name)?
+                try_cast_into_zval::<String>(self, column_name)?
             }
-            "BIT" | "VARBIT" => try_cast_into_zval::<String>(&self, column_name)?,
+            "BIT" | "VARBIT" => try_cast_into_zval::<String>(self, column_name)?,
             "POINT" | "LSEG" | "PATH" | "BOX" | "POLYGON" | "LINE" | "CIRCLE" => {
-                try_cast_into_zval::<String>(&self, column_name)?
+                try_cast_into_zval::<String>(self, column_name)?
             }
             "INT4RANGE" | "NUMRANGE" | "TSRANGE" | "TSTZRANGE" | "DATERANGE" | "INT8RANGE" => {
-                try_cast_into_zval::<String>(&self, column_name)?
+                try_cast_into_zval::<String>(self, column_name)?
             }
-            "RECORD" => try_cast_into_zval::<String>(&self, column_name)?,
-            "JSONPATH" => try_cast_into_zval::<String>(&self, column_name)?,
+            "RECORD" => try_cast_into_zval::<String>(self, column_name)?,
+            "JSONPATH" => try_cast_into_zval::<String>(self, column_name)?,
 
             // массивы
-            "_BOOL" => try_cast_into_zval::<Vec<bool>>(&self, column_name)?,
-            "_BYTEA" => try_cast_into_zval::<Vec<Vec<u8>>>(&self, column_name)?,
+            "_BOOL" => try_cast_into_zval::<Vec<bool>>(self, column_name)?,
+            "_BYTEA" => try_cast_into_zval::<Vec<Vec<u8>>>(self, column_name)?,
             "_CHAR" | "_NAME" | "_TEXT" | "_BPCHAR" | "_VARCHAR" => {
-                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+                try_cast_into_zval::<Vec<String>>(self, column_name)?
             }
-            "_INT2" => try_cast_into_zval::<Vec<i16>>(&self, column_name)?,
-            "_INT4" => try_cast_into_zval::<Vec<i32>>(&self, column_name)?,
-            "_INT8" => try_cast_into_zval::<Vec<i64>>(&self, column_name)?,
-            "_OID" => try_cast_into_zval::<Vec<i32>>(&self, column_name)?,
-            "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(&self, column_name)?,
-            "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(&self, column_name)?,
-            "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
-            "_UUID" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            "_INT2" => try_cast_into_zval::<Vec<i16>>(self, column_name)?,
+            "_INT4" => try_cast_into_zval::<Vec<i32>>(self, column_name)?,
+            "_INT8" => try_cast_into_zval::<Vec<i64>>(self, column_name)?,
+            "_OID" => try_cast_into_zval::<Vec<i32>>(self, column_name)?,
+            "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(self, column_name)?,
+            "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(self, column_name)?,
+            "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
+            "_UUID" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
             "_DATE" | "_TIME" | "_TIMESTAMP" | "_TIMESTAMPTZ" | "_INTERVAL" | "_TIMETZ" => {
-                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+                try_cast_into_zval::<Vec<String>>(self, column_name)?
             }
             "_INET" | "_CIDR" | "_MACADDR" | "_MACADDR8" => {
-                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+                try_cast_into_zval::<Vec<String>>(self, column_name)?
             }
-            "_BIT" | "_VARBIT" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            "_BIT" | "_VARBIT" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
             "_POINT" | "_LSEG" | "_PATH" | "_BOX" | "_POLYGON" | "_LINE" | "_CIRCLE" => {
-                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+                try_cast_into_zval::<Vec<String>>(self, column_name)?
             }
             "_INT4RANGE" | "_NUMRANGE" | "_TSRANGE" | "_TSTZRANGE" | "_DATERANGE"
-            | "_INT8RANGE" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
-            "_RECORD" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
-            "_JSONPATH" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            | "_INT8RANGE" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
+            "_RECORD" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
+            "_JSONPATH" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
 
             _ => bail!("unsupported type: {column_type}"),
         })
@@ -1728,6 +1794,53 @@ impl Driver {
             .query_column_dictionary(query, parameters, Some(false))
     }
 
+    /// Same as `queryGroupedColumnDictionary()`, but forces associative arrays
+    /// for the second column if it's a JSON object.
+    pub fn query_grouped_column_dictionary_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_column_dictionary(query, parameters, Some(true))
+    }
+
+    /// Same as `queryGroupedColumnDictionary()`, but forces PHP objects
+    /// for the second column if it's a JSON object.
+    pub fn query_grouped_column_dictionary_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_column_dictionary(query, parameters, Some(false))
+    }
+
+    /// Executes a SQL query and returns a grouped dictionary where:
+    /// - the key is the **first column** (must be convertible to string),
+    /// - the value is a list of values from the **second column** for each group.
+    ///
+    /// Useful for queries that logically group rows, such as:
+    /// ```sql
+    /// SELECT category, product_name FROM products
+    /// ```
+    /// Result:
+    /// ```php
+    /// [
+    ///   "Books" => ["Rust in Action", "The Pragmatic Programmer"],
+    ///   "Gadgets" => ["Raspberry Pi"]
+    /// ]
+    /// ```
+    ///
+    /// Throws an error if the first column is not a string.
+    pub fn query_grouped_column_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_column_dictionary(query, parameters, None)
+    }
     /// Creates a prepared query object with the given SQL string.
     ///
     /// # Arguments
@@ -1982,7 +2095,6 @@ impl PreparedQuery {
     ///
     /// # Errors
     /// Fails if the query fails, or the first column is not string-convertible.
-    #[php_method]
     pub fn query_grouped_dictionary(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -1992,7 +2104,6 @@ impl PreparedQuery {
     }
 
     /// Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
-    #[php_method]
     pub fn query_grouped_dictionary_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -2002,13 +2113,54 @@ impl PreparedQuery {
     }
 
     /// Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
-    #[php_method]
     pub fn query_grouped_dictionary_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
     ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
         self.driver_inner
             .query_grouped_dictionary(&self.query, parameters, Some(false))
+    }
+
+    /// Executes the prepared query and returns a grouped dictionary where:
+    /// - the key is the **first column** (must be convertible to string),
+    /// - the value is a list of values from the **second column** for each group.
+    ///
+    /// This variant uses the driver's default associative array option for JSON values.
+    ///
+    /// # Errors
+    /// Returns an error if the first column is not convertible to a string.
+    pub fn query_grouped_column_dictionary(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_column_dictionary(&self.query, parameters, None)
+    }
+
+    /// Same as `queryGroupedColumnDictionary()`, but forces associative arrays
+    /// for the second column if it contains JSON objects.
+    ///
+    /// # Errors
+    /// Returns an error if the first column is not convertible to a string.
+    pub fn query_grouped_column_dictionary_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_column_dictionary(&self.query, parameters, Some(true))
+    }
+
+    /// Same as `queryGroupedColumnDictionary()`, but forces PHP objects
+    /// for the second column if it contains JSON objects.
+    ///
+    /// # Errors
+    /// Returns an error if the first column is not convertible to a string.
+    pub fn query_grouped_column_dictionary_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Vec<Zval>>> {
+        self.driver_inner
+            .query_grouped_column_dictionary(&self.query, parameters, Some(false))
     }
 
     /// Executes the prepared query with optional parameters.

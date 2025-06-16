@@ -170,6 +170,7 @@ All helpers listed above have their prepared-query counterparts:
 - `queryRow()` / `queryRowAssoc()` / `queryRowObj()`
 - `queryAll()` / `queryAllAssoc()` / `queryAllObj()`
 - `queryDictionary()` / `queryDictionaryAssoc()` / `queryDictionaryObj()`
+- `queryGroupedDictionary()` / `queryGroupedDictionaryAssoc()` / `queryGroupedDictionaryObj()`
 - `queryColumnDictionary()` / `queryColumnDictionaryAssoc()` / `queryColumnDictionaryObj()`
 
 ---
@@ -282,11 +283,11 @@ array(1) {
 
 ### Grouped Dictionary helpers (first column as key, many rows per key)
 
-| Method                          | Returns                                | Notes                                             |
-|---------------------------------|----------------------------------------|---------------------------------------------------|
+| Method                          | Returns                                 | Notes                                             |
+|---------------------------------|-----------------------------------------|---------------------------------------------------|
 | `queryGroupedDictionary()`      | `array<string, array<array \| object>>` | key = first column, value = list of matching rows |
-| `queryGroupedDictionaryAssoc()` | `array<string, array<array>`           | ∟ forces associative arrays                       |
-| `queryGroupedDictionaryObj()`   | `array<string, array<object>>`         | ∟ forces objects                                  |
+| `queryGroupedDictionaryAssoc()` | `array<string, array<array>`            | ∟ forces associative arrays                       |
+| `queryGroupedDictionaryObj()`   | `array<string, array<object>>`          | ∟ forces objects                                  |
 
 ```php
 var_dump($driver->queryGroupedDictionary(
