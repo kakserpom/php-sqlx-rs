@@ -4,6 +4,7 @@
 #![cfg_attr(windows, feature(abi_vectorcall))]
 
 mod ast;
+mod tests;
 
 use crate::ast::{Ast, Value};
 use anyhow::{anyhow, bail};
@@ -13,7 +14,7 @@ use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_object;
 use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
-use sqlx::postgres::{PgPoolOptions, PgRow};
+use sqlx::postgres::{PgColumn, PgPoolOptions, PgRow};
 use sqlx::{Column, Row};
 use sqlx_core::Error;
 use sqlx_core::database::Database;
@@ -183,12 +184,18 @@ pub struct DriverInner {
     pub options: DriverOptions,
 }
 
+#[derive(Debug, ZvalConvert)]
+pub enum ColumnArgument<'a> {
+    Index(usize),
+    Name(&'a str),
+}
+
 impl DriverInner {
     /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Number of affected rows
@@ -226,10 +233,171 @@ impl DriverInner {
         }
     }
 
+    /// Executes a SQL query and returns a single column from the first row.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column index or name to retrieve
+    /// - `associative_arrays`: Whether to use associative arrays for complex values (optional)
+    ///
+    /// # Returns
+    /// A single column value.
+    ///
+    /// # Errors
+    /// Returns an error if the query fails, column doesn't exist, or conversion fails
+    pub fn query_row_column(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<Zval> {
+        let (query, values) = self.render_query(query, parameters)?;
+        let row =
+            RUNTIME.block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?;
+        let column_idx: usize = match column {
+            Some(ColumnArgument::Index(i)) => i,
+            Some(ColumnArgument::Name(column_name)) => {
+                if let Some((column_idx, _)) = row
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, column)| column.name().eq(column_name))
+                {
+                    column_idx
+                } else {
+                    bail!("Column {} not found", column_name);
+                }
+            }
+            None => 0,
+        };
+        (&row).column_value_into_zval(
+            row.try_column(column_idx)?,
+            associative_arrays.unwrap_or(self.options.associative_arrays),
+        )
+    }
+
+    /// Executes a SQL query and returns a single column across all rows.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column index or name to retrieve. Defaults to the first column.
+    /// - `associative_arrays`: Whether to use associative arrays for complex values (optional)
+    ///
+    /// # Returns
+    /// An array containing values from the specified column
+    ///
+    /// # Errors
+    /// Returns an error if the query fails or conversion fails
+    pub fn query_column(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        let (query, values) = self.render_query(query, parameters)?;
+        let mut it = RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .into_iter()
+            .peekable();
+        let Some(row) = it.peek() else {
+            return Ok(vec![]);
+        };
+        let column_idx: usize = match column {
+            Some(ColumnArgument::Index(i)) => {
+                if row.try_column(i).is_err() {
+                    bail!("Column {} not found", i);
+                }
+                i
+            }
+            Some(ColumnArgument::Name(column_name)) => {
+                if let Some((column_idx, _)) = row
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, column)| column.name().eq(column_name))
+                {
+                    column_idx
+                } else {
+                    bail!("Column {} not found", column_name);
+                }
+            }
+            None => 0,
+        };
+        it.map(|row| {
+            (&row).column_value_into_zval(
+                row.column(column_idx),
+                associative_arrays.unwrap_or(self.options.associative_arrays),
+            )
+        })
+        .try_collect()
+    }
+
+    /// Executes a SQL query and returns a single column from the first row or null.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column index or name to retrieve. Defaults to the first column.
+    /// - `associative_arrays`: Whether to use associative arrays for complex values (optional)
+    ///
+    /// # Returns
+    /// A single column value as `Zval` or null if no row is found
+    ///
+    /// # Errors
+    /// Returns an error if the query fails, column doesn't exist, or conversion fails
+    pub fn query_maybe_row_column(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<Zval> {
+        let (query, values) = self.render_query(query, parameters)?;
+        Ok(RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
+            .map(Some)
+            .or_else(|err: Error| match err {
+                Error::RowNotFound => Ok(None),
+                _ => Err(anyhow!("{:?}", err)),
+            })?
+            .map(|row| {
+                let column_idx: usize = match column {
+                    Some(ColumnArgument::Index(i)) => i,
+                    Some(ColumnArgument::Name(column_name)) => {
+                        if let Some((column_idx, _)) = row
+                            .columns()
+                            .iter()
+                            .enumerate()
+                            .find(|(_, column)| column.name().eq(column_name))
+                        {
+                            column_idx
+                        } else {
+                            bail!("Column {} not found", column_name);
+                        }
+                    }
+                    None => 0,
+                };
+                (&row).column_value_into_zval(
+                    row.try_column(column_idx)?,
+                    associative_arrays.unwrap_or(self.options.associative_arrays),
+                )
+            })
+            .transpose()?
+            .unwrap_or_else(|| {
+                let mut null = Zval::new();
+                null.set_null();
+                null
+            }))
+    }
+
     /// Executes the prepared query and returns a single result.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Single row as array or object depending on config
@@ -252,7 +420,22 @@ impl DriverInner {
             .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
     }
 
-    /// Execute a query and return at most one row.
+    /// Executes a SQL query and returns a single row if available, or `null` if no rows are returned.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `associative_arrays`: Whether to return the row as an associative array (`true`)
+    ///   or as a PHP object (`false`). If `None`, the default configuration is used.
+    ///
+    /// # Returns
+    /// A PHP `Zval` representing the result row or `null` if no row matched the query.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query is invalid or cannot be executed;
+    /// - parameter binding fails due to incorrect types or unsupported values;
+    /// - the row cannot be converted into a PHP value (e.g., unsupported Postgres types).
     pub fn query_maybe_row(
         &self,
         query: &str,
@@ -280,7 +463,7 @@ impl DriverInner {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Array of rows as array or object depending on config
@@ -311,14 +494,14 @@ impl DriverInner {
             .try_collect()
     }
 
-    /// Executes a SQL query and returns the rendered query and its parameters.
+    /// Returns the rendered query and its parameters.
     ///
     /// This method does not execute the query but returns the SQL string with placeholders
     /// and the bound parameter values for debugging or logging purposes.
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// A list where the first element is the rendered SQL query (string), and the second is an array of bound values
@@ -345,6 +528,14 @@ trait RowToZval: Row {
     fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval>;
 }
 
+/// Converts a JSON value into a PHP `Zval`, respecting associative array settings.
+///
+/// # Parameters
+/// - `value`: A `serde_json::Value` to convert
+/// - `associative_arrays`: Whether to convert objects into PHP associative arrays or `stdClass`
+///
+/// # Returns
+/// Converted `Zval` or an error if conversion fails
 fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow::Result<Zval> {
     match value {
         serde_json::Value::String(str) => str
@@ -394,9 +585,28 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
         }
     }
 }
-
-impl RowToZval for PgRow {
-    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval> {
+/// Trait to convert a column value into a PHP value.
+trait ColumnToZval {
+    /// Converts a specific column from a row to a PHP `Zval`.
+    ///
+    /// # Parameters
+    /// - `column`: Reference to the column in the row.
+    /// - `associative_arrays`: Whether to render complex types as associative arrays
+    ///
+    /// # Returns
+    /// A PHP-compatible `Zval` value
+    fn column_value_into_zval(
+        &self,
+        column: &PgColumn,
+        associative_arrays: bool,
+    ) -> anyhow::Result<Zval>;
+}
+impl ColumnToZval for &PgRow {
+    fn column_value_into_zval(
+        &self,
+        column: &PgColumn,
+        associative_arrays: bool,
+    ) -> anyhow::Result<Zval> {
         fn try_cast_into_zval<'r, T>(row: &'r PgRow, name: &str) -> anyhow::Result<Zval>
         where
             T: Decode<'r, <PgRow as Row>::Database> + Type<<PgRow as Row>::Database>,
@@ -408,92 +618,101 @@ impl RowToZval for PgRow {
                 .map_err(|err| anyhow!("{err:?}"))
         }
 
+        let column_name = column.name();
+        let column_type = column.type_info().name();
+        Ok(match column_type {
+            "BOOL" => try_cast_into_zval::<bool>(&self, column_name)?,
+            "BYTEA" | "BINARY" => (&self)
+                .try_get::<&[u8], _>(column_name)
+                .map_err(|err| anyhow!("{err:?}"))
+                .map(|x| x.iter().copied().collect::<Binary<_>>())?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))?,
+            "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
+                try_cast_into_zval::<String>(&self, column_name)?
+            }
+            "INT2" => try_cast_into_zval::<i16>(&self, column_name)?,
+            "INT4" | "INT" => try_cast_into_zval::<i32>(&self, column_name)?,
+            "INT8" => try_cast_into_zval::<i64>(&self, column_name)?,
+            "OID" => try_cast_into_zval::<i32>(&self, column_name)?,
+            "FLOAT4" => try_cast_into_zval::<f32>(&self, column_name)?,
+            "FLOAT8" | "F64" => try_cast_into_zval::<f64>(&self, column_name)?,
+            "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(&self, column_name)?,
+            "UUID" => try_cast_into_zval::<String>(&self, column_name)?,
+            "JSON" | "JSONB" => self
+                .try_get::<serde_json::Value, _>(column_name)
+                .map_err(|err| anyhow!("{err:?}"))
+                .map(|x| json_into_zval(x, associative_arrays))?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))?,
+            "_JSON" | "_JSONB" => self
+                .try_get::<Vec<serde_json::Value>, _>(column_name)
+                .map_err(|err| anyhow!("{err:?}"))
+                .map(|x| {
+                    x.into_iter()
+                        .map(|x| json_into_zval(x, associative_arrays))
+                        .collect::<Vec<_>>()
+                })?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))?,
+            "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
+                try_cast_into_zval::<String>(&self, column_name)?
+            }
+            "INET" | "CIDR" | "MACADDR" | "MACADDR8" => {
+                try_cast_into_zval::<String>(&self, column_name)?
+            }
+            "BIT" | "VARBIT" => try_cast_into_zval::<String>(&self, column_name)?,
+            "POINT" | "LSEG" | "PATH" | "BOX" | "POLYGON" | "LINE" | "CIRCLE" => {
+                try_cast_into_zval::<String>(&self, column_name)?
+            }
+            "INT4RANGE" | "NUMRANGE" | "TSRANGE" | "TSTZRANGE" | "DATERANGE" | "INT8RANGE" => {
+                try_cast_into_zval::<String>(&self, column_name)?
+            }
+            "RECORD" => try_cast_into_zval::<String>(&self, column_name)?,
+            "JSONPATH" => try_cast_into_zval::<String>(&self, column_name)?,
+
+            // массивы
+            "_BOOL" => try_cast_into_zval::<Vec<bool>>(&self, column_name)?,
+            "_BYTEA" => try_cast_into_zval::<Vec<Vec<u8>>>(&self, column_name)?,
+            "_CHAR" | "_NAME" | "_TEXT" | "_BPCHAR" | "_VARCHAR" => {
+                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+            }
+            "_INT2" => try_cast_into_zval::<Vec<i16>>(&self, column_name)?,
+            "_INT4" => try_cast_into_zval::<Vec<i32>>(&self, column_name)?,
+            "_INT8" => try_cast_into_zval::<Vec<i64>>(&self, column_name)?,
+            "_OID" => try_cast_into_zval::<Vec<i32>>(&self, column_name)?,
+            "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(&self, column_name)?,
+            "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(&self, column_name)?,
+            "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            "_UUID" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            "_DATE" | "_TIME" | "_TIMESTAMP" | "_TIMESTAMPTZ" | "_INTERVAL" | "_TIMETZ" => {
+                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+            }
+            "_INET" | "_CIDR" | "_MACADDR" | "_MACADDR8" => {
+                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+            }
+            "_BIT" | "_VARBIT" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            "_POINT" | "_LSEG" | "_PATH" | "_BOX" | "_POLYGON" | "_LINE" | "_CIRCLE" => {
+                try_cast_into_zval::<Vec<String>>(&self, column_name)?
+            }
+            "_INT4RANGE" | "_NUMRANGE" | "_TSRANGE" | "_TSTZRANGE" | "_DATERANGE"
+            | "_INT8RANGE" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            "_RECORD" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+            "_JSONPATH" => try_cast_into_zval::<Vec<String>>(&self, column_name)?,
+
+            _ => bail!("unsupported type: {column_type}"),
+        })
+    }
+}
+impl RowToZval for PgRow {
+    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval> {
         let row = self.columns().iter().try_fold(
             HashMap::<String, Zval>::with_capacity(self.len()),
-            |mut row, column| {
-                let name = column.name();
-                let column_type = column.type_info().name();
-                let value =
-                    match column_type {
-                        "BOOL" => try_cast_into_zval::<bool>(&self, name)?,
-                        "BYTEA" | "BINARY" => self
-                            .try_get::<&[u8], _>(name)
-                            .map_err(|err| anyhow!("{err:?}"))
-                            .map(|x| x.iter().copied().collect::<Binary<_>>())?
-                            .into_zval(false)
-                            .map_err(|err| anyhow!("{err:?}"))?,
-                        "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
-                            try_cast_into_zval::<String>(&self, name)?
-                        }
-                        "INT2" => try_cast_into_zval::<i16>(&self, name)?,
-                        "INT4" | "INT" => try_cast_into_zval::<i32>(&self, name)?,
-                        "INT8" => try_cast_into_zval::<i64>(&self, name)?,
-                        "OID" => try_cast_into_zval::<i32>(&self, name)?,
-                        "FLOAT4" => try_cast_into_zval::<f32>(&self, name)?,
-                        "FLOAT8" | "F64" => try_cast_into_zval::<f64>(&self, name)?,
-                        "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(&self, name)?,
-                        "UUID" => try_cast_into_zval::<String>(&self, name)?,
-                        "JSON" | "JSONB" => self
-                            .try_get::<serde_json::Value, _>(name)
-                            .map_err(|err| anyhow!("{err:?}"))
-                            .map(|x| json_into_zval(x, associative_arrays))?
-                            .into_zval(false)
-                            .map_err(|err| anyhow!("{err:?}"))?,
-                        "_JSON" | "_JSONB" => self
-                            .try_get::<Vec<serde_json::Value>, _>(name)
-                            .map_err(|err| anyhow!("{err:?}"))
-                            .map(|x| {
-                                x.into_iter()
-                                    .map(|x| json_into_zval(x, associative_arrays))
-                                    .collect::<Vec<_>>()
-                            })?
-                            .into_zval(false)
-                            .map_err(|err| anyhow!("{err:?}"))?,
-                        "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
-                            try_cast_into_zval::<String>(&self, name)?
-                        }
-                        "INET" | "CIDR" | "MACADDR" | "MACADDR8" => {
-                            try_cast_into_zval::<String>(&self, name)?
-                        }
-                        "BIT" | "VARBIT" => try_cast_into_zval::<String>(&self, name)?,
-                        "POINT" | "LSEG" | "PATH" | "BOX" | "POLYGON" | "LINE" | "CIRCLE" => {
-                            try_cast_into_zval::<String>(&self, name)?
-                        }
-                        "INT4RANGE" | "NUMRANGE" | "TSRANGE" | "TSTZRANGE" | "DATERANGE"
-                        | "INT8RANGE" => try_cast_into_zval::<String>(&self, name)?,
-                        "RECORD" => try_cast_into_zval::<String>(&self, name)?,
-                        "JSONPATH" => try_cast_into_zval::<String>(&self, name)?,
-
-                        // массивы
-                        "_BOOL" => try_cast_into_zval::<Vec<bool>>(&self, name)?,
-                        "_BYTEA" => try_cast_into_zval::<Vec<Vec<u8>>>(&self, name)?,
-                        "_CHAR" | "_NAME" | "_TEXT" | "_BPCHAR" | "_VARCHAR" => {
-                            try_cast_into_zval::<Vec<String>>(&self, name)?
-                        }
-                        "_INT2" => try_cast_into_zval::<Vec<i16>>(&self, name)?,
-                        "_INT4" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
-                        "_INT8" => try_cast_into_zval::<Vec<i64>>(&self, name)?,
-                        "_OID" => try_cast_into_zval::<Vec<i32>>(&self, name)?,
-                        "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(&self, name)?,
-                        "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(&self, name)?,
-                        "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                        "_UUID" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                        "_DATE" | "_TIME" | "_TIMESTAMP" | "_TIMESTAMPTZ" | "_INTERVAL"
-                        | "_TIMETZ" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                        "_INET" | "_CIDR" | "_MACADDR" | "_MACADDR8" => {
-                            try_cast_into_zval::<Vec<String>>(&self, name)?
-                        }
-                        "_BIT" | "_VARBIT" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                        "_POINT" | "_LSEG" | "_PATH" | "_BOX" | "_POLYGON" | "_LINE"
-                        | "_CIRCLE" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                        "_INT4RANGE" | "_NUMRANGE" | "_TSRANGE" | "_TSTZRANGE" | "_DATERANGE"
-                        | "_INT8RANGE" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                        "_RECORD" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-                        "_JSONPATH" => try_cast_into_zval::<Vec<String>>(&self, name)?,
-
-                        _ => bail!("unsupported type: {column_type}"),
-                    };
-                row.insert(name.to_string(), value);
+            |mut row, column| -> anyhow::Result<HashMap<String, Zval>> {
+                row.insert(
+                    column.name().to_string(),
+                    (&self).column_value_into_zval(column, associative_arrays)?,
+                );
                 Ok(row)
             },
         )?;
@@ -713,7 +932,7 @@ impl Driver {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Single row as array or object depending on config
@@ -732,11 +951,128 @@ impl Driver {
         self.inner.query_row(query, parameters, None)
     }
 
+    /// Executes a SQL query and returns a single column value from the first row.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column name or index to extract from the result row. Defaults to the first column.
+    ///
+    /// # Returns
+    /// The value from the specified column of the first row.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query is invalid or fails to execute;
+    /// - the specified column does not exist;
+    /// - the value cannot be converted to a PHP-compatible type.
+    pub fn query_row_column(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Zval> {
+        self.inner.query_row_column(query, parameters, column, None)
+    }
+
+    pub fn query_row_column_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Zval> {
+        self.inner
+            .query_row_column(query, parameters, column, Some(true))
+    }
+
+    pub fn query_row_column_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Zval> {
+        self.inner
+            .query_row_column(query, parameters, column, Some(false))
+    }
+
+    /// Executes a SQL query and returns a single column value from the first row, or null if no rows matched.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column name or index to extract from the result row.
+    ///
+    /// # Returns
+    /// The value from the specified column of the first row as a PHP `Zval`, or `null` if no row was found.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query is invalid or fails to execute;
+    /// - the specified column does not exist;
+    /// - the value cannot be converted to a PHP-compatible type.
+    pub fn query_maybe_row_column(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Zval> {
+        self.inner
+            .query_maybe_row_column(query, parameters, column, None)
+    }
+
+    /// Executes a SQL query and returns a single column value as a PHP value (array mode), or null if no row matched.
+    ///
+    /// Same as `query_maybe_row_column`, but forces associative array mode for complex values.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column name or index to extract.
+    ///
+    /// # Returns
+    /// The column value from the first row, or `null` if no row found.
+    ///
+    /// # Errors
+    /// Same as `query_maybe_row_column`.
+    pub fn query_maybe_row_column_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Zval> {
+        self.inner
+            .query_maybe_row_column(query, parameters, column, Some(true))
+    }
+
+    /// Executes a SQL query and returns a single column value as a PHP object, or null if no row matched.
+    ///
+    /// Same as `query_maybe_row_column`, but forces object mode for complex values.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column name or index to extract.
+    ///
+    /// # Returns
+    /// The column value from the first row, or `null` if no row found.
+    ///
+    /// # Errors
+    /// Same as `query_maybe_row_column`.
+    pub fn query_maybe_row_column_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Zval> {
+        self.inner
+            .query_maybe_row_column(query, parameters, column, Some(false))
+    }
+
     /// Executes a SQL query and returns one row as an associative array.
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
     /// Returns an error if:
@@ -756,7 +1092,7 @@ impl Driver {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
     /// Returns an error if:
@@ -776,7 +1112,7 @@ impl Driver {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Single row as array or object depending on config
@@ -792,12 +1128,22 @@ impl Driver {
         self.inner.query_maybe_row(query, parameters, None)
     }
 
-    /// Executes a SQL query and returns one row as an associative array.
+    /// Executes a SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
     ///
     /// # Parameters
-    /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
-    pub fn query_row_maybe_assoc(
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query is invalid or fails to execute;
+    /// - parameters are invalid or cannot be bound;
+    /// - the row contains unsupported or unconvertible data types.
+
+    pub fn query_maybe_row_assoc(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
@@ -805,11 +1151,20 @@ impl Driver {
         self.inner.query_maybe_row(query, parameters, Some(true))
     }
 
-    /// Executes a SQL query and returns one row as an object.
+    /// Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
     ///
     /// # Parameters
-    /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    ///
+    /// # Returns
+    /// The result row as a `stdClass` PHP object, or `null` if no matching row is found.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query is invalid or fails to execute;
+    /// - parameters are invalid or cannot be bound;
+    /// - the row contains unsupported or unconvertible data types.
     pub fn query_maybe_row_obj(
         &self,
         query: &str,
@@ -818,11 +1173,79 @@ impl Driver {
         self.inner.query_maybe_row(query, parameters, Some(false))
     }
 
+    /// Executes a SQL query and returns the specified column values from all result rows.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
+    /// - `column`: Optional column name or index to extract.
+    ///
+    /// # Returns
+    /// An array of column values, one for each row.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query fails to execute;
+    /// - the specified column is not found;
+    /// - a column value cannot be converted to PHP.
+    pub fn query_column(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.inner.query_column(query, parameters, column, None)
+    }
+
+    /// Executes a SQL query and returns the specified column values from all rows in associative array mode.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional named parameters.
+    /// - `column`: Column index or name to extract.
+    ///
+    /// # Returns
+    /// An array of column values (associative arrays for structured data).
+    ///
+    /// # Errors
+    /// Same as `query_column`.
+    pub fn query_column_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.inner
+            .query_column(query, parameters, column, Some(true))
+    }
+
+    /// Executes a SQL query and returns the specified column values from all rows in object mode.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string.
+    /// - `parameters`: Optional named parameters.
+    /// - `column`: Column index or name to extract.
+    ///
+    /// # Returns
+    /// An array of column values (objects for structured data).
+    ///
+    /// # Errors
+    /// Same as `query_column`.
+    pub fn query_column_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        column: Option<ColumnArgument>,
+    ) -> anyhow::Result<Vec<Zval>> {
+        self.inner
+            .query_column(query, parameters, column, Some(false))
+    }
+
     /// Executes a SQL query and returns all results.
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Array of rows as array or object depending on config
@@ -845,7 +1268,7 @@ impl Driver {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
     /// Returns an error if:
@@ -865,7 +1288,7 @@ impl Driver {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
     /// Returns an error if:
@@ -900,7 +1323,7 @@ impl Driver {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Number of affected rows
@@ -950,7 +1373,7 @@ impl Driver {
     ///
     /// # Parameters
     /// - `query`: SQL query string
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// A list where the first element is the rendered SQL query (string), and the second is an array of bound values
@@ -981,7 +1404,7 @@ impl PreparedQuery {
     /// Executes the prepared query with optional parameters.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Number of affected rows
@@ -998,7 +1421,7 @@ impl PreparedQuery {
     /// Executes the prepared query and returns a single result.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Single row as array or object depending on config
@@ -1016,7 +1439,7 @@ impl PreparedQuery {
     /// Executes the prepared query and returns one row as an associative array.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     pub fn query_row_assoc(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -1028,7 +1451,7 @@ impl PreparedQuery {
     /// Executes the prepared query and returns one row as an object.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     pub fn query_row_obj(
         &self,
         parameters: Option<HashMap<String, Value>>,
@@ -1040,7 +1463,7 @@ impl PreparedQuery {
     /// Executes the prepared query and returns all rows.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
     /// Array of rows as array or object depending on config
@@ -1061,7 +1484,7 @@ impl PreparedQuery {
     /// Executes the prepared query and returns all rows as associative arrays.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
     /// Returns an error if:
@@ -1080,7 +1503,7 @@ impl PreparedQuery {
     /// Executes the prepared query and returns all rows as objects.
     ///
     /// # Parameters
-    /// - `parameters`: Optional map of named parameters
+    /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Errors
     /// Returns an error if:

@@ -4,9 +4,15 @@ $sql = new Sqlx\Driver([
     Sqlx\Driver::OPT_URL => 'postgres://localhost/test',
     Sqlx\Driver::OPT_PERSISTENT_NAME => 'test',
 ]);
-$order_by = new Sqlx\OrderBy(["name", "age", "total_posts" => "COUNT(posts.*)"])
+//var_dump($sql->queryRowColumn('select $1::json', ['{"foo": ["bar", "baz"]}']));
+var_dump($sql->queryColumn(
+    'select $1::json as foo', ['{"foo": ["bar", "baz"]}'],
+    'foo'
+));
+return;
+/*$order_by = new Sqlx\OrderBy(["name", "age", "total_posts" => "COUNT(posts.*)"])
     ->apply([["age","desc"], ["total_posts", "ASC"]]);
-var_dump($order_by);
+var_dump($order_by);*/
 
 //var_dump(new RenderedOrderBy());
 

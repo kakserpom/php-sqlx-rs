@@ -8,9 +8,8 @@ crate.
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBM systems
 without
 any compromise on performance. The author's not big on PHP, but as a security researcher he understood the necessity of
-modernizing the toolkit of the great many PHP developers. The idea came up, and bish bash bosh, a couple of weekends the
-project
-was all but done. More to come.
+modernizing the toolkit of the great many PHP developers. The idea came up, and bish bash bosh, a couple of weekends
+later the project was all but done. More to come.
 
 The project is still kind of experimental, so any feedback/ideas will be greatly appreciated!
 
