@@ -487,15 +487,11 @@ impl DriverInner {
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters)?;
+        let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
-            .map(|x| {
-                PgRow::into_zval(
-                    x,
-                    associative_arrays.unwrap_or(self.options.associative_arrays),
-                )
-            })
+            .map(|row| row.into_zval(assoc))
             .try_collect()
     }
 
@@ -524,6 +520,29 @@ impl DriverInner {
             query.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
             values.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
         ])
+    }
+    pub fn query_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+        associative_arrays: Option<bool>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        let (query, values) = self.render_query(query, parameters)?;
+        let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+        RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .into_iter()
+            .map(|row| {
+                if let Some(key) = (&row)
+                    .column_value_into_zval(row.column(0), false)?
+                    .string()
+                {
+                    Ok((key, row.into_zval(assoc)?))
+                } else {
+                    bail!("First column must be convertible to string")
+                }
+            })
+            .try_collect()
     }
 }
 
@@ -1332,6 +1351,88 @@ impl Driver {
         self.driver_inner.query_all(query, parameters, Some(false))
     }
 
+    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row.
+    ///
+    /// # Description
+    /// The result is a `HashMap` where each key is the string value of the first column in a row,
+    /// and the corresponding value is the row itself (as an array or object depending on config).
+    ///
+    /// This variant respects the global `assoc_arrays` setting to determine the row format.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional map of named parameters to bind.
+    ///
+    /// # Returns
+    /// A map from the first column (as string) to the full row.
+    ///
+    /// # Errors
+    /// - If the query fails to execute.
+    /// - If the first column cannot be converted to a string.
+    /// - If row decoding or PHP conversion fails.
+    ///
+    /// # Notes
+    /// - The iteration order of the returned map is **not** guaranteed.
+    pub fn query_dictionary(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner.query_dictionary(query, parameters, None)
+    }
+
+    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row,
+    /// returning each row as an associative array.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional map of named parameters to bind.
+    ///
+    /// # Returns
+    /// A map from the first column (as string) to the full row (as an associative array).
+    ///
+    /// # Errors
+    /// - If the query fails to execute.
+    /// - If the first column cannot be converted to a string.
+    /// - If row decoding or PHP conversion fails.
+    ///
+    /// # Notes
+    /// - The iteration order of the returned map is **not** guaranteed.
+    pub fn query_dictionary_assoc(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_dictionary(query, parameters, Some(true))
+    }
+
+    /// Executes a SQL query and returns a dictionary (map) indexed by the first column of each row,
+    /// returning each row as a PHP object.
+    ///
+    /// # Parameters
+    /// - `query`: SQL query string to execute.
+    /// - `parameters`: Optional map of named parameters to bind.
+    ///
+    /// # Returns
+    /// A map from the first column (as string) to the full row (as an object).
+    ///
+    /// # Errors
+    /// - If the query fails to execute.
+    /// - If the first column cannot be converted to a string.
+    /// - If row decoding or PHP conversion fails.
+    ///
+    /// # Notes
+    /// - The iteration order of the returned map is **not** guaranteed.
+    pub fn query_dictionary_obj(
+        &self,
+        query: &str,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_dictionary(query, parameters, Some(false))
+    }
+
     /// Creates a prepared query object with the given SQL string.
     ///
     /// # Arguments
@@ -1429,6 +1530,83 @@ pub struct PreparedQuery {
 
 #[php_impl]
 impl PreparedQuery {
+    /// Executes the prepared query and returns a dictionary (map) indexed by the first column of each row.
+    ///
+    /// The result is a `HashMap` where the key is the stringified first column from each row,
+    /// and the value is the full row, returned as array or object depending on config.
+    ///
+    /// # Parameters
+    /// - `parameters`: Optional map of named parameters to bind.
+    ///
+    /// # Returns
+    /// A map from the first column (as string) to the corresponding row.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query fails to execute;
+    /// - the first column cannot be converted to a string;
+    /// - any row cannot be decoded or converted to a PHP value.
+    ///
+    /// # Notes
+    /// - The iteration order of the returned map is **not** guaranteed.
+    pub fn query_dictionary(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_dictionary(&self.query, parameters, None)
+    }
+
+    /// Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+    /// with each row returned as an associative array.
+    ///
+    /// # Parameters
+    /// - `parameters`: Optional map of named parameters to bind.
+    ///
+    /// # Returns
+    /// A map from the first column (as string) to the corresponding row as an associative array.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query fails to execute;
+    /// - the first column cannot be converted to a string;
+    /// - any row cannot be decoded or converted to a PHP value.
+    ///
+    /// # Notes
+    /// - The iteration order of the returned map is **not** guaranteed.
+    pub fn query_dictionary_assoc(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_dictionary(&self.query, parameters, Some(true))
+    }
+
+    /// Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+    /// with each row returned as an object (`stdClass`).
+    ///
+    /// # Parameters
+    /// - `parameters`: Optional map of named parameters to bind.
+    ///
+    /// # Returns
+    /// A map from the first column (as string) to the corresponding row as an object.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - the query fails to execute;
+    /// - the first column cannot be converted to a string;
+    /// - any row cannot be decoded or converted to a PHP value.
+    ///
+    /// # Notes
+    /// - The iteration order of the returned map is **not** guaranteed.
+    pub fn query_dictionary_obj(
+        &self,
+        parameters: Option<HashMap<String, Value>>,
+    ) -> anyhow::Result<HashMap<String, Zval>> {
+        self.driver_inner
+            .query_dictionary(&self.query, parameters, Some(false))
+    }
+
     /// Executes the prepared query with optional parameters.
     ///
     /// # Arguments

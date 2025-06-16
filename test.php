@@ -5,6 +5,15 @@ $driver = new Sqlx\Driver([
     Sqlx\Driver::OPT_PERSISTENT_NAME => 'test',
 ]);
 
+var_dump($driver->queryDictionary(
+    'SELECT * FROM people WHERE name in (?)',
+     [
+        ["Peter", "John", "Jane"],
+    ]
+));
+
+return;
+
 var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1'));
 return;
 
