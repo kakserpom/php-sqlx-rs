@@ -1,6 +1,6 @@
 use crate::ast::{Ast, Value};
 use crate::driver::conversion::Conversion;
-use crate::{ColumnArgument, DriverOptions, RUNTIME};
+use crate::{ColumnArgument, DriverInnerOptions, RUNTIME};
 use anyhow::{anyhow, bail};
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
@@ -10,6 +10,7 @@ use itertools::Itertools;
 use ordermap::OrderMap;
 use sqlx::Column;
 use sqlx::Row;
+use sqlx::postgres::PgPoolOptions;
 use sqlx::query::Query;
 use sqlx::{Database, Encode, Error, Type};
 use std::collections::HashMap;
@@ -18,10 +19,26 @@ use threadsafe_lru::LruCache;
 pub struct DriverInner {
     pub pool: sqlx::PgPool,
     pub ast_cache: LruCache<String, Ast>,
-    pub options: DriverOptions,
+    pub options: DriverInnerOptions,
 }
 
 impl DriverInner {
+    pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
+        let pool = crate::RUNTIME.block_on(
+            PgPoolOptions::new().max_connections(5).connect(
+                options
+                    .url
+                    .clone()
+                    .ok_or_else(|| anyhow!("URL must be set"))?
+                    .as_str(),
+            ),
+        )?;
+        Ok(DriverInner {
+            pool,
+            ast_cache: LruCache::new(options.ast_cache_shard_count, options.ast_cache_shard_size),
+            options,
+        })
+    }
     /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
     ///
     /// # Arguments
@@ -384,10 +401,7 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .string()
-                {
+                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
                     Ok((key, row.into_zval(assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -472,10 +486,7 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .string()
-                {
+                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
                     Ok((key, row.into_zval(assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -550,10 +561,7 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .string()
-                {
+                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
                     Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -620,10 +628,7 @@ impl DriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .string()
-                {
+                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
                     Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")

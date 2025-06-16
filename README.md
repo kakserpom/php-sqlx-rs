@@ -93,9 +93,9 @@ Or with options:
 
 ```php
 $driver = new Sqlx\Driver([
-    Sqlx\Driver::OPT_URL => 'postgres://user:pass@localhost/db',
-    Sqlx\Driver::OPT_ASSOC_ARRAYS => true,   // return arrays instead of objects
-    Sqlx\Driver::OPT_PERSISTENT_NAME => 'main_db'
+    Sqlx\DriverOptions::OPT_URL => 'postgres://user:pass@localhost/db',
+    Sqlx\DriverOptions::OPT_ASSOC_ARRAYS => true,   // return arrays instead of objects
+    Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'main_db'
 ]);
 ```
 

@@ -19,3 +19,5 @@ default = ["postgres", "mysql"]
 postgres = ["sqlx/postgres"]
 mysql = ["sqlx/mysql"]
 
+[lib]
+crate-type = ["cdylib"]

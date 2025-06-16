@@ -1,8 +1,8 @@
 <?php
 //$driver = new Sqlx("postgres://localhost/postgres");
 $driver = new Sqlx\Driver([
-    Sqlx\Driver::OPT_URL => 'postgres://localhost/test',
-    Sqlx\Driver::OPT_PERSISTENT_NAME => 'test',
+    Sqlx\DriverOptions::OPT_URL => 'postgres://localhost/test',
+    Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'test',
 ]);
 
 var_dump($driver->queryRow(

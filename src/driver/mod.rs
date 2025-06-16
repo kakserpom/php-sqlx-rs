@@ -1,24 +1,18 @@
+mod conversion;
 mod inner;
 mod options;
-mod conversion;
 
 use crate::ast::Value;
 
-use crate::PreparedQuery;
 pub use crate::driver::inner::DriverInner;
-use crate::{
-    ColumnArgument, DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE,
-    PERSISTENT_DRIVER_REGISTRY,
-};
-use anyhow::anyhow;
+use crate::prepared_query::PreparedQuery;
+use crate::{ColumnArgument, PERSISTENT_DRIVER_REGISTRY};
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
-pub use options::{DriverConstructorOptions, DriverOptions};
-use sqlx::postgres::PgPoolOptions;
+pub use options::{DriverInnerOptions, DriverOptions, DriverOptionsArg};
 use std::collections::HashMap;
 use std::sync::Arc;
-use threadsafe_lru::LruCache;
 
 /// A database driver using SQLx with query helpers and AST cache.
 ///
@@ -30,14 +24,6 @@ pub struct Driver {
 
 #[php_impl]
 impl Driver {
-    const OPT_URL: &'static str = "url";
-    const OPT_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
-
-    const OPT_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
-
-    const OPT_PERSISTENT_NAME: &'static str = "persistent_name";
-    const OPT_ASSOC_ARRAYS: &'static str = "assoc_arrays";
-
     /// Constructs a new SQLx driver instance.
     ///
     /// # Arguments
@@ -47,72 +33,8 @@ impl Driver {
     ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
     ///   - `persistent_name`: (string) name of persistent connection
     ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
-    pub fn __construct(options: DriverConstructorOptions) -> anyhow::Result<Self> {
-        let options = match options {
-            DriverConstructorOptions::Url(url) => DriverOptions {
-                url: Some(url),
-                ..Default::default()
-            },
-            DriverConstructorOptions::Options(kv) => DriverOptions {
-                url: Some(
-                    kv.get(Self::OPT_URL)
-                        .ok_or_else(|| anyhow!("missing {}", Self::OPT_URL))
-                        .and_then(|value| {
-                            if let Value::Str(str) = value {
-                                Ok(str.clone())
-                            } else {
-                                Err(anyhow!("{} must be a string", Self::OPT_URL))
-                            }
-                        })?,
-                ),
-                associative_arrays: kv.get(Self::OPT_ASSOC_ARRAYS).map_or(Ok(false), |value| {
-                    if let Value::Bool(bool) = value {
-                        Ok(*bool)
-                    } else {
-                        Err(anyhow!("{} must be a string", Self::OPT_ASSOC_ARRAYS))
-                    }
-                })?,
-                ast_cache_shard_count: kv.get(Self::OPT_AST_CACHE_SHARD_COUNT).map_or(
-                    Ok(DEFAULT_AST_CACHE_SHARD_COUNT),
-                    |value| {
-                        if let Value::Int(n) = value {
-                            Ok(usize::try_from(*n)?)
-                        } else {
-                            Err(anyhow!(
-                                "{} must be an integer",
-                                Self::OPT_AST_CACHE_SHARD_COUNT
-                            ))
-                        }
-                    },
-                )?,
-                ast_cache_shard_size: kv.get(Self::OPT_AST_CACHE_SHARD_SIZE).map_or(
-                    Ok(DEFAULT_AST_CACHE_SHARD_SIZE),
-                    |value| {
-                        if let Value::Int(n) = value {
-                            Ok(usize::try_from(*n)?)
-                        } else {
-                            Err(anyhow!(
-                                "{} must be an integer",
-                                Self::OPT_AST_CACHE_SHARD_SIZE
-                            ))
-                        }
-                    },
-                )?,
-                persistent_name: match kv.get(Self::OPT_PERSISTENT_NAME) {
-                    None => None,
-                    Some(value) => {
-                        if let Value::Str(str) = value {
-                            Some(str.clone())
-                        } else {
-                            return Err(anyhow!(
-                                "{} must be an integer",
-                                Self::OPT_PERSISTENT_NAME
-                            ));
-                        }
-                    }
-                },
-            },
-        };
+    pub fn __construct(options: DriverOptionsArg) -> anyhow::Result<Self> {
+        let options = options.parse()?;
 
         if let Some(name) = options.persistent_name.as_ref() {
             if let Some(driver_inner) = PERSISTENT_DRIVER_REGISTRY.get(name) {
@@ -122,20 +44,7 @@ impl Driver {
             }
         }
         let persistent_name = options.persistent_name.clone();
-        let pool = crate::RUNTIME.block_on(
-            PgPoolOptions::new().max_connections(5).connect(
-                options
-                    .url
-                    .clone()
-                    .ok_or_else(|| anyhow!("URL must be set"))?
-                    .as_str(),
-            ),
-        )?;
-        let driver_inner = Arc::new(DriverInner {
-            pool,
-            ast_cache: LruCache::new(options.ast_cache_shard_count, options.ast_cache_shard_size),
-            options,
-        });
+        let driver_inner = Arc::new(DriverInner::new(options)?);
         if let Some(name) = persistent_name {
             PERSISTENT_DRIVER_REGISTRY.insert(name, driver_inner.clone());
         }
