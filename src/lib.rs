@@ -354,7 +354,7 @@ impl DriverInner {
     ///
     /// # Errors
     /// Returns an error if the query fails, column doesn't exist, or conversion fails
-    pub fn query_maybe_row_column(
+    pub fn query_maybe_value(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
@@ -1035,19 +1035,19 @@ impl Driver {
     /// - the query is invalid or fails to execute;
     /// - the specified column does not exist;
     /// - the value cannot be converted to a PHP-compatible type.
-    pub fn query_maybe_row_column(
+    pub fn query_maybe_value(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_maybe_row_column(query, parameters, column, None)
+            .query_maybe_value(query, parameters, column, None)
     }
 
     /// Executes a SQL query and returns a single column value as a PHP value (array mode), or null if no row matched.
     ///
-    /// Same as `query_maybe_row_column`, but forces associative array mode for complex values.
+    /// Same as `query_maybe_value`, but forces associative array mode for complex values.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -1058,20 +1058,20 @@ impl Driver {
     /// The column value from the first row, or `null` if no row found.
     ///
     /// # Errors
-    /// Same as `query_maybe_row_column`.
-    pub fn query_maybe_row_column_assoc(
+    /// Same as `query_maybe_value`.
+    pub fn query_maybe_value_assoc(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_maybe_row_column(query, parameters, column, Some(true))
+            .query_maybe_value(query, parameters, column, Some(true))
     }
 
     /// Executes a SQL query and returns a single column value as a PHP object, or null if no row matched.
     ///
-    /// Same as `query_maybe_row_column`, but forces object mode for complex values.
+    /// Same as `query_maybe_value`, but forces object mode for complex values.
     ///
     /// # Arguments
     /// - `query`: SQL query string to execute.
@@ -1082,15 +1082,15 @@ impl Driver {
     /// The column value from the first row, or `null` if no row found.
     ///
     /// # Errors
-    /// Same as `query_maybe_row_column`.
-    pub fn query_maybe_row_column_obj(
+    /// Same as `query_maybe_value`.
+    pub fn query_maybe_value_obj(
         &self,
         query: &str,
         parameters: Option<HashMap<String, Value>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
-            .query_maybe_row_column(query, parameters, column, Some(false))
+            .query_maybe_value(query, parameters, column, Some(false))
     }
 
     /// Executes a SQL query and returns one row as an associative array.

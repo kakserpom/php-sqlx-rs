@@ -123,9 +123,9 @@ $driver = new Sqlx\Driver([
 | `queryValue()`           | first row column value         | error if no rows returned               |
 | `queryValueAssoc()`      | ↑                              | ∟ enforces array mode for JSON objects  |
 | `queryValueObj()`        | ↑                              | ∟ enforces object mode for JSON objects |
-| `queryMaybeRowColumn()`      | first row column value or null | null if no rows returned                |
-| `queryMaybeRowColumnAssoc()` | ↑                              | ∟ enforces array mode for JSON objects  |
-| `queryMaybeRowColumnObj()`   | ↑                              | ∟ enforces object mode for JSON objects |
+| `queryMaybeValue()`      | first row column value or null | null if no rows returned                |
+| `queryMaybeValueAssoc()` | ↑                              | ∟ enforces array mode for JSON objects  |
+| `queryMaybeValueObj()`   | ↑                              | ∟ enforces object mode for JSON objects |
 
 #### Column helpers (multi-row)
 
@@ -168,7 +168,7 @@ All helpers listed above have their prepared-query counterparts:
 
 - `execute()`
 - `queryRow*()` / `queryMaybeRow*()`
-- `queryValue*()` / `queryMaybeRowColumn*()`
+- `queryValue*()` / `queryMaybeValue*()`
 - `queryAll*()` / `queryColumn*()`
 
 ---
