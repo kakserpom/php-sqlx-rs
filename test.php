@@ -5,6 +5,9 @@ $driver = new Sqlx\Driver([
     Sqlx\Driver::OPT_PERSISTENT_NAME => 'test',
 ]);
 
+var_dump($driver->queryRowColumn('SELECT ((1::BIGINT << 62) - 1) * 2 + 1'));
+return;
+
 
 $orderBy = new Sqlx\OrderBy([
     'name',

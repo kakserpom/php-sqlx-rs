@@ -269,9 +269,7 @@ var_dump($driver->queryRow(
     'SELECT $1::json AS col',
     ['{"foo": ["bar", "baz"]}']
 )->col->foo[0]);
-/* Output:
-string(3) "bar"
-}*/
+// Output: string(3) "bar"
 ```
 
 ---
@@ -281,7 +279,8 @@ string(3) "bar"
 PostgreSQL `BIGINT` values are safely mapped to PHP integers:
 
 ```php
-var_dump($driver->queryRow('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 AS largest')->largest);
+var_dump($driver->queryRowColumn('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
+// Output: int(9223372036854775807)
 ```
 
 ---
