@@ -2,14 +2,12 @@
 
 A PHP extension powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
 database access with additional SQL syntax. It's built using
-the [ext-php-rs]((https://github.com/davidcole1340/ext-php-rs))
-crate.
+the [ext-php-rs](\(https://github.com/davidcole1340/ext-php-rs\)) crate.
 
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBM systems
-without
-any compromise on performance. The author's not big on PHP, but as a security researcher he understood the necessity of
-modernizing the toolkit of the great many PHP developers. The idea came up, and bish bash bosh, a couple of weekends
-later the project was all but done. More to come.
+without any compromise on performance. The author's not big on PHP, but as a security researcher he understood the
+necessity of modernizing the toolkit of the great many PHP developers. The idea came up, and bish bash bosh, a couple of
+weekends later the project was all but done. More to come.
 
 The project is still kind of experimental, so any feedback/ideas will be greatly appreciated!
 
@@ -33,22 +31,23 @@ parameters.
 
 Wrap parts of your query with double braces `{{ ... }}` to make them conditional:
 
-```
+```sql
 SELECT *
 FROM users
-WHERE TRUE
-    {{ AND name = $name }}
-    {{ AND status = $status }}
+WHERE TRUE {{ AND name = $name }}
+    {{
+  AND status = $status }}
 ```
 
 If a named parameter used inside the block is not provided, the entire block is omitted from the final query.
 
 Nested conditional blocks are supported:
 
-```
+```sql
 SELECT *
 FROM logs
-WHERE TRUE {{ AND date > $since {{ AND level = $level }} }}
+WHERE TRUE {{ AND date > $since {{
+  AND level = $level }} }}
 ```
 
 In the above example the `level` condition will only be rendered when both `$level` and `$since` are set.
@@ -88,79 +87,82 @@ Or with options:
 ```php
 $driver = new Sqlx\Driver([
     Sqlx\Driver::OPT_URL => 'postgres://user:pass@localhost/db',
-    Sqlx\Driver::OPT_ASSOC_ARRAYS => true,
+    Sqlx\Driver::OPT_ASSOC_ARRAYS => true,   // return arrays instead of objects
     Sqlx\Driver::OPT_PERSISTENT_NAME => 'main_db'
 ]);
 ```
 
-#### queryRow / queryAll
+#### Basics
 
-```php
-$row = $driver->queryRow('SELECT * FROM users WHERE id = $id', [
-    'id' => 1,
-]);
+- `assocArrays(): bool` – returns **true** if the driver is currently set to produce associative arrays instead of
+  objects.
+- `prepare(string $sql): Sqlx\PreparedQuery` – returns a reusable prepared query object bound to the same driver.
 
-$rows = $driver->queryAll("SELECT * FROM users WHERE status = \$status", [
-    'status' => 'active',
-]);
-```
+#### Row helpers
 
-You can also use `:param` and `:1` placeholders:
+| Method                 | Returns                             | Notes                     |
+|------------------------|-------------------------------------|---------------------------|
+| `queryRow()`           | first row (array \| object)         | error if no rows returned |
+| `queryRowAssoc()`      | first row (array)                   | ∟ enforces array mode     |
+| `queryRowObj()`        | first row (object)                  | ∟ enforces object mode    |
+| `queryMaybeRow()`      | first row (array \| object \| null) | null if no rows returned  |
+| `queryMaybeRowAssoc()` | first row (array \| null)           | ∟ enforces array mode     |
+| `queryMaybeRowObj()`   | first row (object \| null)          | ∟ enforces object mode    |            
 
-```php
-$row = $driver->queryRow("SELECT * FROM users WHERE id = :id", [
-    'id' => 1,
-]);
+#### Column helpers (single-row)
 
-$row = $driver->queryRow("SELECT * FROM users WHERE id = :1", [1]);
-```
+| Method                       | Returns                        | Notes                                   |
+|------------------------------|--------------------------------|-----------------------------------------|
+| `queryRowColumn()`           | first row column value         | error if no rows returned               |
+| `queryRowColumnAssoc()`      | ↑                              | ∟ enforces array mode for JSON objects  |
+| `queryRowColumnObj()`        | ↑                              | ∟ enforces object mode for JSON objects |
+| `queryMaybeRowColumn()`      | first row column value or null | null if no rows returned                |
+| `queryMaybeRowColumnAssoc()` | ↑                              | ∟ enforces array mode for JSON objects  |
+| `queryMaybeRowColumnObj()`   | ↑                              | ∟ enforces object mode for JSON objects |
 
-#### queryMaybeRow
+#### Column helpers (multi-row)
 
-Same as `queryRow`, but returns `null` if not found.
+| Method               | Returns                                | Notes                                   |
+|----------------------|----------------------------------------|-----------------------------------------|
+| `queryColumn()`      | array of column's values from each row | error if no rows returned               |
+| `queryColumnAssoc()` | ↑                                      | ∟ enforces array mode for JSON objects  |
+| `queryColumnObj()`   | ↑                                      | ∟ enforces object mode for JSON objects |
 
-#### execute
+#### List helpers (all rows)
 
-```php
-$affected = $driver->execute("UPDATE users SET status = \$status WHERE id = \$id", [
-    'id' => 1,
-    'status' => 'inactive'
-]);
-```
+| Method            | Returns               |
+|-------------------|-----------------------|
+| `queryAll()`      | array of rows         |
+| `queryAllAssoc()` | array of assoc arrays |
+| `queryAllObj()`   | array of objects      |
 
-#### insert
+#### Mutation helpers
 
-```php
-$affected = $driver->insert("users", [
-    'name' => 'Alice',
-    'email' => 'alice@example.com'
-]);
-```
+- `execute(string $sql, array $param``s = null): int` – run **INSERT/UPDATE/DELETE** and return affected count.
+- `insert(string $table, array $row): int` – convenience wrapper around `INSERT`.
 
-#### dry
+#### Utilities
 
-```php
-[$sql, $params] = $driver->dry("SELECT * FROM logs WHERE level = \$level", [
-    'level' => 'warn',
-]);
-```
+- `dry(string $sql, array $params = null): array` – render final SQL + bound params without executing. Handy for
+  debugging.
 
 ---
 
 ### Sqlx\PreparedQuery
 
-Prepared query bound to a driver:
+Prepared queries expose exactly the same surface as the driver, but without the SQL argument:
 
 ```php
-$query = $driver->prepare("SELECT * FROM logs WHERE level = \$level");
-$rows = $query->queryAll(['level' => 'warn']);
+$query = $driver->prepare("SELECT * FROM logs WHERE level = $level");
+$rows  = $query->queryAll(['level' => 'warn']);
 ```
 
-All the same methods as `Driver` are supported:
+All helpers listed above have their prepared-query counterparts:
 
 - `execute()`
-- `queryRow()` / `queryRowAssoc()` / `queryRowObj()`
-- `queryAll()` / `queryAllAssoc()` / `queryAllObj()`
+- `queryRow*()` / `queryMaybeRow*()`
+- `queryRowColumn*()` / `queryMaybeRowColumn*()`
+- `queryAll*()` / `queryColumn*()`
 
 ---
 
@@ -170,22 +172,18 @@ A helper class for rendering safe `ORDER BY` clauses from user input.
 
 ```php
 $orderBy = new Sqlx\OrderBy([
-    "name",
-    "created_at",
-    "posts" => "COUNT(posts.*)"
+    'name',
+    'created_at',
+    'posts' => 'COUNT(posts.*)'
 ]);
 
 // Equivalent to: ORDER BY name ASC, COUNT(posts.*) DESC
 $rendered = $orderBy([
-    ["name", "ASC"],
-    ["posts", "DESC"]
+    ['name', Sqlx\OrderBy::ASC],
+    ['posts', Sqlx\OrderBy::DESC]
 ]);
-```
 
-The `$rendered` value can be passed as a parameter to an SQL query with a placeholder:
-
-```php
-$driver->queryAll("SELECT * FROM users ORDER BY ?", [$rendered]);
+$driver->queryAll('SELECT * FROM users ORDER BY ?', [$rendered]);
 ```
 
 ---
@@ -202,7 +200,7 @@ true
 [1, 2, 3]
 ```
 
-Nested arrays are automatically flattened and bound in-order.
+Nested arrays are automatically flattened and bound in order.
 
 ### Painless `IN (?)`
 
@@ -215,55 +213,17 @@ var_dump($driver->queryAll(
 ));
 ```
 
-Example output:
-
-```php
-array(1) {
-  [0] =>
-  object(stdClass)#2 (2) {
-    ["name"] => string(4) "John"
-    ["age"] => int(22)
-  }
-}
-```
-
 ---
 
 ## JSON Support
 
-PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects:
+PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects.
 
 ```php
 var_dump($driver->queryRow(
     'SELECT $1::json AS json',
-    ['{"foo": ["bar", "baz"]}'
-]));
-/* Output:
-object(stdClass)#3 (1) {
-  ["json"] =>
-  object(stdClass)#2 (1) {
-    ["foo"] =>
-    array(2) {
-      [0] => string(3) "bar"
-      [1] => string(3) "baz"
-    }
-  }
-} */
-var_dump($driver->queryRowAssoc(
-    'SELECT $1::json AS json',
-    ['{"foo": ["bar", "baz"]}'
-]));
-/* Output:
- array(1) {
-  ["json"] =>
-  array(1) {
-    ["foo"] =>
-    array(2) {
-      [0] => string(3) "bar"
-      [1] => string(3) "baz"
-    }
-  }
-} */
+    ['{"foo": ["bar", "baz"]}']
+));
 ```
 
 ---
@@ -274,12 +234,6 @@ PostgreSQL `BIGINT` values are safely mapped to PHP integers:
 
 ```php
 var_dump($driver->queryRow('SELECT ((1::BIGINT << 62) - 1) * 2 + 1 AS largest')->largest);
-```
-
-Output:
-
-```php
-int(9223372036854775807)
 ```
 
 ---

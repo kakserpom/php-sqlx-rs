@@ -7,7 +7,6 @@ $sql = new Sqlx\Driver([
 //var_dump($sql->queryRowColumn('select $1::json', ['{"foo": ["bar", "baz"]}']));
 var_dump($sql->queryColumn(
     'select $1::json as foo', ['{"foo": ["bar", "baz"]}'],
-    'foo'
 ));
 return;
 /*$order_by = new Sqlx\OrderBy(["name", "age", "total_posts" => "COUNT(posts.*)"])

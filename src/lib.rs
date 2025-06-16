@@ -429,7 +429,7 @@ impl DriverInner {
     ///   or as a PHP object (`false`). If `None`, the default configuration is used.
     ///
     /// # Returns
-    /// A PHP `Zval` representing the result row or `null` if no row matched the query.
+    /// A PHP value representing the result row or `null` if no row matched the query.
     ///
     /// # Errors
     /// Returns an error if:
@@ -504,7 +504,7 @@ impl DriverInner {
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     ///
     /// # Returns
-    /// A list where the first element is the rendered SQL query (string), and the second is an array of bound values
+    /// An array where the first element is the rendered SQL query (string), and the second is an array of bound values
     ///
     /// # Errors
     /// Returns an error if the query can't be parsed, rendered, or if parameters
@@ -524,11 +524,11 @@ impl DriverInner {
 
 /// Trait to convert a row into a PHP value.
 trait RowToZval: Row {
-    /// Convert the row into a PHP `Zval` associative array.
+    /// Convert the row into a PHP associative array.
     fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval>;
 }
 
-/// Converts a JSON value into a PHP `Zval`, respecting associative array settings.
+/// Converts a JSON value into a PHP value, respecting associative array settings.
 ///
 /// # Parameters
 /// - `value`: A `serde_json::Value` to convert
@@ -587,7 +587,7 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
 }
 /// Trait to convert a column value into a PHP value.
 trait ColumnToZval {
-    /// Converts a specific column from a row to a PHP `Zval`.
+    /// Converts a specific column from a row to a PHP value.
     ///
     /// # Parameters
     /// - `column`: Reference to the column in the row.
@@ -1003,7 +1003,7 @@ impl Driver {
     /// - `column`: Optional column name or index to extract from the result row.
     ///
     /// # Returns
-    /// The value from the specified column of the first row as a PHP `Zval`, or `null` if no row was found.
+    /// The value from the specified column of the first row as a PHP value`, or `null` if no row was found.
     ///
     /// # Errors
     /// Returns an error if:

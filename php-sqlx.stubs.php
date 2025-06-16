@@ -3,112 +3,6 @@
 // Stubs for php-sqlx
 
 namespace Sqlx {
-    /**
-     * A reusable prepared SQL query with parameter support.
-     *
-     * Created using `Driver::prepare()`, shares context with original driver.
-     */
-    class PreparedQuery {
-        /**
-         * Executes the prepared query with optional parameters.
-         *
-         * # Parameters
-         * - `parameters`: Optional map of named parameters
-         *
-         * # Returns
-         * Number of affected rows
-         *
-         * # Errors
-         * Returns an error if:
-         * - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
-         * - parameters contain unsupported types or fail to bind correctly;
-         * - the runtime fails to execute the query (e.g., task panic or timeout).
-         */
-        public function execute(?array $parameters): int {}
-
-        /**
-         * Executes the prepared query and returns a single result.
-         *
-         * # Parameters
-         * - `parameters`: Optional map of named parameters
-         *
-         * # Returns
-         * Single row as array or object depending on config
-         *
-         * # Errors
-         * Returns an error if:
-         * - SQL query is invalid or execution fails;
-         * - a parameter cannot be bound or has incorrect type;
-         * - the row contains unsupported database types;
-         * - conversion to PHP object fails.
-         */
-        public function queryRow(?array $parameters): mixed {}
-
-        /**
-         * Executes the prepared query and returns one row as an associative array.
-         *
-         * # Parameters
-         * - `parameters`: Optional map of named parameters
-         */
-        public function queryRowAssoc(?array $parameters): mixed {}
-
-        /**
-         * Executes the prepared query and returns one row as an object.
-         *
-         * # Parameters
-         * - `parameters`: Optional map of named parameters
-         */
-        public function queryRowObj(?array $parameters): mixed {}
-
-        /**
-         * Executes the prepared query and returns all rows.
-         *
-         * # Parameters
-         * - `parameters`: Optional map of named parameters
-         *
-         * # Returns
-         * Array of rows as array or object depending on config
-         *
-         * # Errors
-         * Returns an error if:
-         * - SQL query is invalid or fails to execute;
-         * - parameter binding fails;
-         * - row decoding fails due to an unsupported or mismatched database type;
-         * - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
-         */
-        public function queryAll(?array $parameters): array {}
-
-        /**
-         * Executes the prepared query and returns all rows as associative arrays.
-         *
-         * # Parameters
-         * - `parameters`: Optional map of named parameters
-         *
-         * # Errors
-         * Returns an error if:
-         * - SQL query is invalid or fails to execute;
-         * - parameter binding fails;
-         * - row decoding fails due to an unsupported or mismatched database type;
-         * - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
-         */
-        public function queryAllAssoc(?array $parameters): array {}
-
-        /**
-         * Executes the prepared query and returns all rows as objects.
-         *
-         * # Parameters
-         * - `parameters`: Optional map of named parameters
-         *
-         * # Errors
-         * Returns an error if:
-         * - SQL query is invalid or fails to execute;
-         * - parameter binding fails;
-         * - row decoding fails due to an unsupported or mismatched database type;
-         * - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
-         */
-        public function queryAllObj(?array $parameters): array {}
-    }
-
     class OrderBy {
         /**
          * ASCending order (A to Z)
@@ -203,7 +97,7 @@ namespace Sqlx {
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Returns
          * Single row as array or object depending on config
@@ -218,11 +112,89 @@ namespace Sqlx {
         public function queryRow(string $query, ?array $parameters): mixed {}
 
         /**
+         * Executes a SQL query and returns a single column value from the first row.
+         *
+         * # Parameters
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract from the result row. Defaults to the first column.
+         *
+         * # Returns
+         * The value from the specified column of the first row.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query is invalid or fails to execute;
+         * - the specified column does not exist;
+         * - the value cannot be converted to a PHP-compatible type.
+         */
+        public function queryRowColumn(string $query, ?array $parameters, ?mixed $column): mixed {}
+
+        public function queryRowColumnAssoc(string $query, ?array $parameters, ?mixed $column): mixed {}
+
+        public function queryRowColumnObj(string $query, ?array $parameters, ?mixed $column): mixed {}
+
+        /**
+         * Executes a SQL query and returns a single column value from the first row, or null if no rows matched.
+         *
+         * # Parameters
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract from the result row.
+         *
+         * # Returns
+         * The value from the specified column of the first row as a PHP value`, or `null` if no row was found.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query is invalid or fails to execute;
+         * - the specified column does not exist;
+         * - the value cannot be converted to a PHP-compatible type.
+         */
+        public function queryMaybeRowColumn(string $query, ?array $parameters, ?mixed $column): mixed {}
+
+        /**
+         * Executes a SQL query and returns a single column value as a PHP value (array mode), or null if no row matched.
+         *
+         * Same as `query_maybe_row_column`, but forces associative array mode for complex values.
+         *
+         * # Parameters
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract.
+         *
+         * # Returns
+         * The column value from the first row, or `null` if no row found.
+         *
+         * # Errors
+         * Same as `query_maybe_row_column`.
+         */
+        public function queryMaybeRowColumnAssoc(string $query, ?array $parameters, ?mixed $column): mixed {}
+
+        /**
+         * Executes a SQL query and returns a single column value as a PHP object, or null if no row matched.
+         *
+         * Same as `query_maybe_row_column`, but forces object mode for complex values.
+         *
+         * # Parameters
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract.
+         *
+         * # Returns
+         * The column value from the first row, or `null` if no row found.
+         *
+         * # Errors
+         * Same as `query_maybe_row_column`.
+         */
+        public function queryMaybeRowColumnObj(string $query, ?array $parameters, ?mixed $column): mixed {}
+
+        /**
          * Executes a SQL query and returns one row as an associative array.
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Errors
          * Returns an error if:
@@ -238,7 +210,7 @@ namespace Sqlx {
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Errors
          * Returns an error if:
@@ -254,7 +226,7 @@ namespace Sqlx {
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Returns
          * Single row as array or object depending on config
@@ -266,29 +238,98 @@ namespace Sqlx {
         public function queryMaybeRow(string $query, ?array $parameters): mixed {}
 
         /**
-         * Executes a SQL query and returns one row as an associative array.
+         * Executes a SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
          *
          * # Parameters
-         * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
          */
-        public function queryRowMaybeAssoc(string $query, ?array $parameters): mixed {}
+        public function queryMaybeRowAssoc(string $query, ?array $parameters): mixed {}
 
         /**
-         * Executes a SQL query and returns one row as an object.
+         * Executes a SQL query and returns a single row as a PHP object, or `null` if no row matched.
          *
          * # Parameters
-         * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as a `stdClass` PHP object, or `null` if no matching row is found.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
          */
         public function queryMaybeRowObj(string $query, ?array $parameters): mixed {}
+
+        /**
+         * Executes a SQL query and returns the specified column values from all result rows.
+         *
+         * # Parameters
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract.
+         *
+         * # Returns
+         * An array of column values, one for each row.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the specified column is not found;
+         * - a column value cannot be converted to PHP.
+         */
+        public function queryColumn(string $query, ?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes a SQL query and returns the specified column values from all rows in associative array mode.
+         *
+         * # Parameters
+         * - `query`: SQL query string.
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (associative arrays for structured data).
+         *
+         * # Errors
+         * Same as `query_column`.
+         */
+        public function queryColumnAssoc(string $query, ?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes a SQL query and returns the specified column values from all rows in object mode.
+         *
+         * # Parameters
+         * - `query`: SQL query string.
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (objects for structured data).
+         *
+         * # Errors
+         * Same as `query_column`.
+         */
+        public function queryColumnObj(string $query, ?array $parameters, ?mixed $column): array {}
 
         /**
          * Executes a SQL query and returns all results.
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Returns
          * Array of rows as array or object depending on config
@@ -307,7 +348,7 @@ namespace Sqlx {
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Errors
          * Returns an error if:
@@ -323,7 +364,7 @@ namespace Sqlx {
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Errors
          * Returns an error if:
@@ -350,7 +391,7 @@ namespace Sqlx {
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Returns
          * Number of affected rows
@@ -389,7 +430,7 @@ namespace Sqlx {
          *
          * # Parameters
          * - `query`: SQL query string
-         * - `parameters`: Optional map of named parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
          *
          * # Returns
          * A list where the first element is the rendered SQL query (string), and the second is an array of bound values
@@ -399,5 +440,111 @@ namespace Sqlx {
          * cannot be converted from PHP values.
          */
         public function dry(string $query, ?array $parameters): array {}
+    }
+
+    /**
+     * A reusable prepared SQL query with parameter support.
+     *
+     * Created using `Driver::prepare()`, shares context with original driver.
+     */
+    class PreparedQuery {
+        /**
+         * Executes the prepared query with optional parameters.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Number of affected rows
+         *
+         * # Errors
+         * Returns an error if:
+         * - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+         * - parameters contain unsupported types or fail to bind correctly;
+         * - the runtime fails to execute the query (e.g., task panic or timeout).
+         */
+        public function execute(?array $parameters): int {}
+
+        /**
+         * Executes the prepared query and returns a single result.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Single row as array or object depending on config
+         *
+         * # Errors
+         * Returns an error if:
+         * - SQL query is invalid or execution fails;
+         * - a parameter cannot be bound or has incorrect type;
+         * - the row contains unsupported database types;
+         * - conversion to PHP object fails.
+         */
+        public function queryRow(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an associative array.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an object.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns all rows.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Array of rows as array or object depending on config
+         *
+         * # Errors
+         * Returns an error if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAll(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as associative arrays.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Errors
+         * Returns an error if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllAssoc(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as objects.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Errors
+         * Returns an error if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP Zval fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllObj(?array $parameters): array {}
     }
 }
