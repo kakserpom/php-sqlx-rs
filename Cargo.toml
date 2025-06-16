@@ -11,7 +11,6 @@ itertools = "0.14.0"
 ordermap = "0.5.7"
 serde_json = "1.0.140"
 sqlx = { version = "0.8.6", features = ["postgres", "json", "runtime-tokio"] }
-sqlx-core = "0.8.6"
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 [lib]

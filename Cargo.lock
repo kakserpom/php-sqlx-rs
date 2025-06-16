@@ -1295,7 +1295,6 @@ dependencies = [
  "ordermap",
  "serde_json",
  "sqlx",
- "sqlx-core",
  "threadsafe-lru",
  "tokio",
 ]

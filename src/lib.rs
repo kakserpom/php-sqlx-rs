@@ -17,15 +17,15 @@ use ext_php_rs::ffi::{zend_array, zend_object};
 use ext_php_rs::{prelude::*, types::Zval};
 use itertools::Itertools;
 use ordermap::OrderMap;
+use sqlx::Error;
+use sqlx::database::Database;
+use sqlx::decode::Decode;
+use sqlx::encode::Encode;
 use sqlx::postgres::{PgColumn, PgPoolOptions, PgRow};
+use sqlx::query::Query;
+use sqlx::types::Type;
 use sqlx::{Column, Row};
-use sqlx_core::Error;
-use sqlx_core::database::Database;
-use sqlx_core::decode::Decode;
-use sqlx_core::encode::Encode;
-use sqlx_core::query::Query;
-use sqlx_core::type_info::TypeInfo;
-use sqlx_core::types::Type;
+use sqlx::TypeInfo;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use threadsafe_lru::LruCache;
@@ -443,7 +443,7 @@ impl DriverInner {
     /// Throws an exception if:
     /// - the query is invalid or cannot be executed;
     /// - parameter binding fails due to incorrect types or unsupported values;
-    /// - the row cannot be converted into a PHP value (e.g., unsupported Postgres types).
+    /// - the row cannot be converted into a PHP value (e.g., unsupported database types).
     pub fn query_maybe_row(
         &self,
         query: &str,
