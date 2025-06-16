@@ -1,5 +1,3 @@
-
-
 use anyhow::anyhow;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_object;
@@ -11,11 +9,6 @@ use std::collections::HashMap;
 mod mysql;
 #[feature(postgres)]
 mod postgres;
-
-pub trait RowIntoZval: Row {
-    /// Convert the row into a PHP associative array.
-    fn into_zval(self, associative_arrays: bool) -> anyhow::Result<Zval>;
-}
 
 /// Trait to convert a row into a PHP value.
 pub trait Conversion: Row {
