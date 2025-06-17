@@ -20,6 +20,7 @@ const DEFAULT_AST_CACHE_SHARD_SIZE: usize = 256;
 const DEFAULT_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(2).unwrap();
 use ext_php_rs::types::Zval;
 
+#[must_use]
 pub fn is_valid_ident(name: &str) -> bool {
     !name.is_empty()
         && name.starts_with(|c: char| c.is_alphabetic() || c == '_')

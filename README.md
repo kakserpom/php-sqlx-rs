@@ -80,9 +80,9 @@ var_dump($driver->queryAll(
 
 ---
 
-### Safe and robust `ORDER BY`
+### Safe and robust `ORDER BY` / `GROUP BY`
 
-A helper class for safe `ORDER BY` clauses from user input.
+A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 
 **⚠️ SAFETY:**
 
@@ -128,9 +128,11 @@ So this code works:
 
 ```php
 // Equivalent to: SELECT * FROM users ORDER BY `name` DESC
-$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
-['  name  ', ' DeSc  '],
-])]);
+$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
+  'order_by' => $orderBy([
+    ['  name  ', ' DeSc  '],
+   ])
+ ]);
 ```
 
 Note that field names are case-sensitive.
@@ -170,7 +172,7 @@ Install with [`cargo-php`](https://github.com/davidcole1340/ext-php-rs):
 
 ```bash
 cargo install cargo-php --locked
-cargo php install --release --yes
+cargo php install --features postgres mysql --release --yes
 ```
 
 For macOS:
@@ -388,7 +390,7 @@ var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
 ## Notes
 
 - The AST cache reduces repeated parsing overhead and speeds up query rendering.
-- Supports both positional `$1`, `:1` and named `$param`, `:param` placeholders automatically.
+- Supports both positional `?`, `$1`, `:1` and named `$param`, `:param` placeholders automatically.
 
 ---
 

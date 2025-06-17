@@ -254,7 +254,10 @@ impl MySqlPreparedQuery {
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
-    pub fn execute(&self, parameters: Option<HashMap<String, MySqlParameterValue>>) -> anyhow::Result<u64> {
+    pub fn execute(
+        &self,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
+    ) -> anyhow::Result<u64> {
         self.driver_inner.execute(self.query.as_str(), parameters)
     }
 
@@ -272,7 +275,10 @@ impl MySqlPreparedQuery {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_row(&self, parameters: Option<HashMap<String, MySqlParameterValue>>) -> anyhow::Result<Zval> {
+    pub fn query_row(
+        &self,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
+    ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(&self.query, parameters, None)
     }
 
