@@ -90,7 +90,7 @@ fn test_render_order_by_apply() {
         ("name", "users.name"),
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
-    ]);
+    ]).unwrap();
 
     let rendered = ob.internal_apply(vec![
         OrderFieldDefinition::Short("name".into()),
@@ -118,7 +118,7 @@ fn test_render_order_by_apply_empty() {
         ("name", "users.name"),
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
-    ]);
+    ]).unwrap();
 
     let rendered = ob.internal_apply(vec![]);
 
