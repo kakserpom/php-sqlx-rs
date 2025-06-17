@@ -1,8 +1,4 @@
 <?php
-$driver = new Sqlx\PgDriver([
-    Sqlx\DriverOptions::OPT_URL => 'postgres://localhost/test',
-    Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'test',
-]);
 /*var_dump($driver->queryColumnDictionary(
     'SELECT name, age FROM people WHERE name in (?)',
      [

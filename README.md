@@ -396,6 +396,59 @@ var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
 
 ---
 
+## Performance
+
+### Rust benchmarks
+
+Benchmarking pure Rust performance is more useful for optimizing the backend.
+
+Command:
+
+```shell
+cargo bench
+```
+
+Here are M1 Max results for parsing and rendering a hefty query. No caching involved.
+
+```
+PgAst::parse_big        time:   [3.0870 µs 3.1082 µs 3.1336 µs]
+                        change: [−1.4427% −0.6376% +0.0736%] (p = 0.10 > 0.05)
+                        No change in performance detected.
+Found 15 outliers among 100 measurements (15.00%)
+  6 (6.00%) high mild
+  9 (9.00%) high severe
+
+PgAst::render_big       time:   [1.7095 µs 1.7308 µs 1.7615 µs]
+                        change: [−1.0453% +0.1129% +1.1654%] (p = 0.86 > 0.05)
+                        No change in performance detected.
+```
+
+### PHP benchmarks
+
+Command:
+
+```shell
+cd benches
+curl -s https://raw.githubusercontent.com/composer/getcomposer.org/f3108f64b4e1c1ce6eb462b159956461592b3e3e/web/installer | php -- --quiet
+./composer.phar require phpbench/phpbench --dev
+./vendor/bin/phpbench run benchmark.php
+```
+
+Or use Docker:
+
+```shell
+docker build . -t php-sqlx-benches
+docker run php-sqlx-benches
+```
+
+M1 Max results:
+
+```
+\AnnotatedBench
+
+    benchDryBig.............................I0 - Mo3.725μs (±0.00%)
+```
+
 ## License
 
 MIT

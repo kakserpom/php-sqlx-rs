@@ -1,2 +1,4 @@
 /target
 /.idea
+/benches/composer.*
+/benches/vendor
