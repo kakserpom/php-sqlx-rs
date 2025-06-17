@@ -1,5 +1,5 @@
-use crate::ast::MySqlParameterValue;
 use crate::driver::DriverOptions;
+use crate::driver::mysql::MySqlParameterValue;
 use crate::{DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE};
 use anyhow::anyhow;
 use ext_php_rs::ZvalConvert;

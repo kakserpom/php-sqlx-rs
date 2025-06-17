@@ -4,16 +4,16 @@ use crate::OrderFieldDefinition;
 #[test]
 fn test_named_and_positional() {
     let sql = "SELECT :param, ?, ? FROM table WHERE {{ x = $x }}";
-    if let MySqlAst::Root {
+    if let PgAst::Root {
         branches,
         required_placeholders,
-    } = MySqlAst::parse(sql).unwrap()
+    } = PgAst::parse(sql).unwrap()
     {
         println!("{:#?}", required_placeholders);
         let names: Vec<&str> = branches
             .iter()
             .filter_map(|b| {
-                if let MySqlAst::Placeholder(n) = b {
+                if let PgAst::Placeholder(n) = b {
                     Some(n.as_str())
                 } else {
                     None
@@ -31,21 +31,21 @@ fn test_named_and_positional() {
 #[test]
 fn test_render_basic() {
     let sql = "SELECT * FROM users WHERE {{status = $status AND}} id = $id";
-    let ast = MySqlAst::parse(sql).unwrap();
+    let ast = PgAst::parse(sql).unwrap();
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), "active".into());
     vals.insert("id".into(), "42".into());
     let (query, params) = ast.render(vals).expect("Rendering failed");
-    assert_eq!(query, "SELECT * FROM users WHERE status = ? AND id = ?");
+    assert_eq!(query, "SELECT * FROM users WHERE status = $1 AND id = $2");
     assert_eq!(params, vec!["active".into(), "42".into()]);
 }
 
 #[test]
 fn test_render_optional_skip() {
     let sql = "SELECT * FROM users WHERE {{status = $status AND}} id = $id";
-    let ast = MySqlAst::parse(sql).unwrap();
+    let ast = PgAst::parse(sql).unwrap();
     let (query, params) = ast.render([("id", 100)]).expect("Rendering failed");
-    assert_eq!(query, "SELECT * FROM users WHERE id = ?");
+    assert_eq!(query, "SELECT * FROM users WHERE id = $1");
     assert_eq!(params, vec![100.into()]);
 }
 
@@ -53,25 +53,28 @@ fn test_render_optional_skip() {
 fn test_render_var_types() {
     let sql =
         "SELECT * FROM table WHERE id = $id AND active = :flag AND scores IN (?) AND data = $data";
-    let ast = MySqlAst::parse(sql).unwrap();
+    let ast = PgAst::parse(sql).unwrap();
     let mut vals = ParamsMap::new();
-    vals.insert("id".into(), MySqlParameterValue::Int(7));
-    vals.insert("flag".into(), MySqlParameterValue::Bool(true));
-    vals.insert("0".into(), MySqlParameterValue::Array(vec![MySqlParameterValue::Int(1), MySqlParameterValue::Int(2)]));
-    vals.insert("data".into(), MySqlParameterValue::Str("xyz".into()));
+    vals.insert("id".into(), PgParameterValue::Int(7));
+    vals.insert("flag".into(), PgParameterValue::Bool(true));
+    vals.insert(
+        "0".into(),
+        PgParameterValue::Array(vec![PgParameterValue::Int(1), PgParameterValue::Int(2)]),
+    );
+    vals.insert("data".into(), PgParameterValue::Str("xyz".into()));
     let (q, params) = ast.render(vals).expect("Rendering failed");
     assert_eq!(
         q,
-        "SELECT * FROM table WHERE id = ? AND active = ? AND scores IN (?, ?) AND data = ?"
+        "SELECT * FROM table WHERE id = $1 AND active = $2 AND scores IN ($3, $4) AND data = $5"
     );
     assert_eq!(
         params,
         vec![
-            MySqlParameterValue::Int(7),
-            MySqlParameterValue::Bool(true),
-            MySqlParameterValue::Int(1),
-            MySqlParameterValue::Int(2),
-            MySqlParameterValue::Str("xyz".into()),
+            PgParameterValue::Int(7),
+            PgParameterValue::Bool(true),
+            PgParameterValue::Int(1),
+            PgParameterValue::Int(2),
+            PgParameterValue::Str("xyz".into()),
         ]
     );
 }
@@ -92,9 +95,9 @@ fn test_render_order_by_apply() {
     ]);
 
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
-    let ast = MySqlAst::parse(sql).unwrap();
+    let ast = PgAst::parse(sql).unwrap();
     let (query, params) = ast
-        .render([("order_by", MySqlParameterValue::RenderedOrderBy(rendered))])
+        .render([("order_by", PgParameterValue::RenderedOrderBy(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
@@ -106,7 +109,7 @@ fn test_render_order_by_apply() {
 
 #[test]
 fn test_render_order_by_apply_empty() {
-    use crate::OrderBy;
+    use crate::orderby::OrderBy;
 
     let ob = OrderBy::new([
         ("name", "users.name"),
@@ -118,9 +121,9 @@ fn test_render_order_by_apply_empty() {
 
     let sql =
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
-    let ast = MySqlAst::parse(sql).unwrap();
+    let ast = PgAst::parse(sql).unwrap();
     let (query, params) = ast
-        .render([("order_by", MySqlParameterValue::RenderedOrderBy(rendered))])
+        .render([("order_by", PgParameterValue::RenderedOrderBy(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(

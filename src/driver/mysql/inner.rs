@@ -1,5 +1,5 @@
-use crate::ast::{Ast, MySqlParameterValue};
 use crate::driver::conversion::Conversion;
+use crate::driver::mysql::ast::{MySqlAst, MySqlParameterValue};
 use crate::driver::mysql::options::MySqlDriverInnerOptions;
 use crate::{ColumnArgument, RUNTIME, ZvalNull};
 use anyhow::{anyhow, bail};
@@ -20,7 +20,7 @@ use threadsafe_lru::LruCache;
 
 pub struct MySqlDriverInner {
     pub pool: Pool<MySql>,
-    pub ast_cache: LruCache<String, Ast>,
+    pub ast_cache: LruCache<String, MySqlAst>,
     pub options: MySqlDriverInnerOptions,
 }
 
@@ -76,7 +76,7 @@ impl MySqlDriverInner {
         if let Some(ast) = self.ast_cache.get(query) {
             ast.render(parameters)
         } else {
-            let ast = Ast::parse(query).unwrap();
+            let ast = MySqlAst::parse(query).unwrap();
             let rendered = ast.render(parameters)?;
             self.ast_cache.insert(query.to_owned(), ast);
             Ok(rendered)

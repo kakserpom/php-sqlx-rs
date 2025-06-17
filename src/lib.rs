@@ -3,8 +3,8 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::too_many_lines)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
-mod driver;
-mod orderby;
+pub mod driver;
+pub mod orderby;
 mod tests;
 
 use crate::orderby::{OrderBy, OrderFieldDefinition, RenderedOrderBy};

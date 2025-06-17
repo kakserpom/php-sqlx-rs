@@ -1,9 +1,9 @@
-use crate::ast::MySqlParameterValue;
 use crate::driver::DriverOptions;
 use crate::{DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE};
 use anyhow::anyhow;
 use ext_php_rs::ZvalConvert;
 use std::collections::HashMap;
+use crate::driver::mysql::ast::MySqlParameterValue;
 
 pub struct PgDriverInnerOptions {
     pub(crate) url: Option<String>,

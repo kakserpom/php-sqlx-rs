@@ -3,7 +3,13 @@ $driver = new Sqlx\PgDriver([
     Sqlx\DriverOptions::OPT_URL => 'postgres://localhost/test',
     Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'test',
 ]);
-var_dump($driver->queryRow('SELECT NULL::BIGINT as nul'));
+var_dump($driver->queryColumnDictionary(
+    'SELECT name, age FROM people WHERE name in (?)',
+     [
+        ["Peter", "John", "Jane"],
+    ]
+));
+//var_dump($driver->queryRow('SELECT NULL::BIGINT as nul'));
 /*
 var_dump($driver->queryRow(
     'SELECT name, * FROM people WHERE name in (?)',
@@ -17,16 +23,15 @@ $driver = new Sqlx\MySqlDriver([
     Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'test',
 ]);
 
-var_dump($driver->queryValue('SELECT "131231"'));
-return;
+var_dump($driver->queryValue('SELECT ?', ["123"]));
+//return;
 
-var_dump($driver->queryRow(
+/*var_dump($driver->queryRow(
     'SELECT name, * FROM people WHERE name in (?)',
      [
         ["Peter", "John", "Jane"],
     ]
-));
-return;
+));*/
 /* Output:
 array(1) {
   ["John"]=>
@@ -39,12 +44,6 @@ array(1) {
 }
 
 */
-var_dump($driver->queryColumnDictionary(
-    'SELECT name, age FROM people WHERE name in (?)',
-     [
-        ["Peter", "John", "Jane"],
-    ]
-));
 /* Output:
 array(1) {
   ["John"]=>

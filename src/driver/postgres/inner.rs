@@ -1,5 +1,6 @@
-use crate::ast::{Ast, MySqlParameterValue};
+use crate::driver::PgParameterValue;
 use crate::driver::conversion::Conversion;
+use crate::driver::postgres::ast::PgAst;
 use crate::driver::postgres::options::PgDriverInnerOptions;
 use crate::{ColumnArgument, RUNTIME, ZvalNull};
 use anyhow::{anyhow, bail};
@@ -20,7 +21,7 @@ use threadsafe_lru::LruCache;
 
 pub struct PgDriverInner {
     pub pool: Pool<Postgres>,
-    pub ast_cache: LruCache<String, Ast>,
+    pub ast_cache: LruCache<String, PgAst>,
     pub options: PgDriverInnerOptions,
 }
 
@@ -58,7 +59,7 @@ impl PgDriverInner {
     pub fn execute(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
     ) -> anyhow::Result<u64> {
         let (query, values) = self.render_query(query, parameters)?;
         Ok(RUNTIME
@@ -70,13 +71,13 @@ impl PgDriverInner {
     fn render_query(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
-    ) -> anyhow::Result<(String, Vec<MySqlParameterValue>)> {
+        parameters: Option<HashMap<String, PgParameterValue>>,
+    ) -> anyhow::Result<(String, Vec<PgParameterValue>)> {
         let parameters = parameters.unwrap_or_default();
         if let Some(ast) = self.ast_cache.get(query) {
             ast.render(parameters)
         } else {
-            let ast = Ast::parse(query).unwrap();
+            let ast = PgAst::parse(query).unwrap();
             let rendered = ast.render(parameters)?;
             self.ast_cache.insert(query.to_owned(), ast);
             Ok(rendered)
@@ -99,7 +100,7 @@ impl PgDriverInner {
     pub fn query_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
@@ -144,7 +145,7 @@ impl PgDriverInner {
     pub fn query_column(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
@@ -202,7 +203,7 @@ impl PgDriverInner {
     pub fn query_maybe_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
@@ -257,7 +258,7 @@ impl PgDriverInner {
     pub fn query_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -285,7 +286,7 @@ impl PgDriverInner {
     pub fn query_maybe_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -319,7 +320,7 @@ impl PgDriverInner {
     pub fn query_all(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -349,7 +350,7 @@ impl PgDriverInner {
     pub fn dry(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters)?;
         Ok(vec![
@@ -386,7 +387,7 @@ impl PgDriverInner {
     pub fn query_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -471,7 +472,7 @@ impl PgDriverInner {
     pub fn query_grouped_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -546,7 +547,7 @@ impl PgDriverInner {
     pub fn query_grouped_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -613,7 +614,7 @@ impl PgDriverInner {
     pub fn query_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, PgParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -661,7 +662,7 @@ impl PgDriverInner {
 /// Binds a list of `Value` arguments to an `SQLx` query.
 fn bind_values<'a, D: Database>(
     query: Query<'a, D, <D>::Arguments<'a>>,
-    values: &'a [MySqlParameterValue],
+    values: &'a [PgParameterValue],
 ) -> Query<'a, D, <D>::Arguments<'a>>
 where
     f64: Type<D>,
@@ -675,7 +676,7 @@ where
 {
     fn walker<'a, D: Database>(
         q: Query<'a, D, <D>::Arguments<'a>>,
-        value: &'a MySqlParameterValue,
+        value: &'a PgParameterValue,
     ) -> Query<'a, D, <D>::Arguments<'a>>
     where
         f64: Type<D>,
@@ -688,14 +689,14 @@ where
         String: Encode<'a, D>,
     {
         match value {
-            MySqlParameterValue::Str(s) => q.bind(s),
-            MySqlParameterValue::Int(s) => q.bind(s),
-            MySqlParameterValue::Bool(s) => q.bind(s),
-            MySqlParameterValue::Float(s) => q.bind(s),
-            MySqlParameterValue::Array(s) => s.iter().fold(q, walker),
+            PgParameterValue::Str(s) => q.bind(s),
+            PgParameterValue::Int(s) => q.bind(s),
+            PgParameterValue::Bool(s) => q.bind(s),
+            PgParameterValue::Float(s) => q.bind(s),
+            PgParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
-            MySqlParameterValue::Object(s) => s.values().fold(q, walker),
-            MySqlParameterValue::RenderedOrderBy(_) => unimplemented!(),
+            PgParameterValue::Object(s) => s.values().fold(q, walker),
+            PgParameterValue::RenderedOrderBy(_) => unimplemented!(),
         }
     }
 

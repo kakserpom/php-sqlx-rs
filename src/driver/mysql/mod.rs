@@ -1,8 +1,8 @@
 pub mod ast;
 use crate::ColumnArgument;
-pub use crate::ast::MySqlParameterValue;
-use crate::driver::mysql::inner::MySqlDriverInner;
-pub use crate::driver::mysql::options::MySqlDriverOptions;
+pub use crate::driver::mysql::{
+    ast::MySqlParameterValue, inner::MySqlDriverInner, options::MySqlDriverOptions,
+};
 use dashmap::DashMap;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
@@ -803,7 +803,11 @@ impl MySqlDriver {
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
-    pub fn insert(&self, table: &str, row: HashMap<String, MySqlParameterValue>) -> anyhow::Result<u64> {
+    pub fn insert(
+        &self,
+        table: &str,
+        row: HashMap<String, MySqlParameterValue>,
+    ) -> anyhow::Result<u64> {
         self.execute(
             &format!(
                 "INSERT INTO {table} ({}) VALUES ({})",
