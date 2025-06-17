@@ -1,3 +1,5 @@
+use crate::is_valid_ident;
+use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
 
@@ -19,25 +21,29 @@ impl OrderBy {
 }
 
 impl OrderBy {
-    pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> Self
+    pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
     {
-        Self {
-            defined_fields: defined_fields
-                .into_iter()
-                .map(|(key, value)| {
+        Ok(Self {
+            defined_fields: defined_fields.into_iter().try_fold(
+                HashMap::<String, Option<String>>::new(),
+                |mut map, (key, value)| -> anyhow::Result<_> {
                     let key: String = key.into();
                     let value: String = value.into();
                     if key.parse::<u32>().is_ok() {
-                        (value, None)
+                        if !is_valid_ident(&value) {
+                            bail!("Invalid identifier: {}", value);
+                        }
+                        map.insert(value, None);
                     } else {
-                        (key, Some(value))
+                        map.insert(key, Some(value));
                     }
-                })
-                .collect(),
-        }
+                    Ok(map)
+                },
+            )?,
+        })
     }
 }
 
@@ -62,7 +68,7 @@ impl OrderBy {
     /// ]);
     /// ```
 
-    pub fn __construct(defined_fields: HashMap<String, String>) -> Self {
+    pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
         OrderBy::new(defined_fields)
     }
 
