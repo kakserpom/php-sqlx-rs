@@ -72,8 +72,9 @@ Passing an array as a parameter to a single placeholder automatically expands it
 
 ```php
 var_dump($driver->queryAll(
-    'SELECT * FROM people WHERE name IN (:names)',
-    ['names' => ['Peter', 'John', 'Jane']]
+  'SELECT * FROM people WHERE name IN (:names)', [
+    'names' => ['Peter', 'John', 'Jane']
+  ]
 ));
 ```
 
@@ -83,10 +84,10 @@ var_dump($driver->queryAll(
 
 A helper class for safe `ORDER BY` clauses from user input.
 
-**SAFETY:**
+**⚠ SAFETY:**
 
-- You can safely pass any user input as sorting settings.
-- Do NOT pass user input into the `OrderBy` constructor to avoid SQL injection vulnerabilities.
+- ✅ You can safely pass any user input as sorting settings.
+- ❌ Do NOT pass user input into the `OrderBy` constructor to avoid SQL injection vulnerabilities.
 
 **Examples**:
 
@@ -98,20 +99,26 @@ $orderBy = new Sqlx\OrderBy([
 ]);
 
 // Equivalent to: SELECT * FROM users ORDER BY `name` ASC, COUNT(posts.*) DESC
-$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
+$driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
+  'order_by' => $orderBy([
     ['name', Sqlx\OrderBy::ASC],
     ['posts', Sqlx\OrderBy::DESC]
-])]);
+  ])
+]);
 
 // This will throw an exception: Missing required placeholder `order_by`
-$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
+$driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
+  'order_by' => $orderBy([
     ['zzzz', Sqlx\OrderBy::ASC],
-])]);
+  ])
+]);
 
 // Equivalent to: SELECT * FROM users
-$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
+$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
+  'order_by' => $orderBy([
     ['zzzz', Sqlx\OrderBy::ASC],
-])]);
+  ])
+]);
 ```
 
 Note that the direction constants (`OrderBy::ASC` and `OrderBy::DESC`) are just strings (`'ASC'` and `'DESC'`).
