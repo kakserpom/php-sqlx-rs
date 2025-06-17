@@ -122,7 +122,7 @@ $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
 ```
 
 Note that the direction constants (`OrderBy::ASC` and `OrderBy::DESC`) are just strings (`'ASC'` and `'DESC'`) and
-you can pass strings from user input (case-insensitively); incorrect strings silently defaults to `ASC`.
+you can pass strings from user input (case-insensitively); incorrect strings silently default to `ASC`.
 
 So this code works:
 
