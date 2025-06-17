@@ -15,12 +15,13 @@ The project is still kind of experimental, so any feedback/ideas will be greatly
 
 ## Features
 
-- Optional persistent connections (with connection pooling)
 - AST-based SQL augmentation (e.g., conditional blocks)
 - Named parameters with `$param`, `:param`, or positional `:1` syntax
 - Automatic result conversion to PHP arrays or objects
-- Native JSON and bigint support
 - Painless `IN (?)` clause expansion
+- Safe and robust `ORDER BY`
+- Native JSON and bigint support
+- Optional persistent connections (with connection pooling)
 
 ---
 
@@ -62,6 +63,95 @@ WHERE date > $since {{ AND level = $level }}
 The above example will throw an exception if `$since` is not set.
 
 ---
+
+### Painless `IN (?)`
+
+Passing an array as a parameter to a single placeholder automatically expands it:
+
+```php
+var_dump($driver->queryAll(
+    'SELECT * FROM people WHERE name IN (:names)',
+    ['names' => ['Peter', 'John', 'Jane']]
+));
+```
+
+### Safe and robust `ORDER BY`
+
+A helper class for safe `ORDER BY` clauses from user input.
+
+**SAFETY:**
+
+- You can safely pass any user input as sorting settings.
+- Do NOT pass user input into the `OrderBy` constructor to avoid SQL injection vulnerabilities.
+
+**Examples**:
+
+```php
+$orderBy = new Sqlx\OrderBy([
+    'name',
+    'created_at',
+    'posts' => 'COUNT(posts.*)'
+]);
+
+// Equivalent to: SELECT * FROM users ORDER BY `name` ASC, COUNT(posts.*) DESC
+$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
+    ['name', Sqlx\OrderBy::ASC],
+    ['posts', Sqlx\OrderBy::DESC]
+])]);
+
+// This will throw an exception: Missing required placeholder `order_by`
+$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
+    ['zzzz', Sqlx\OrderBy::ASC],
+])]);
+
+// Equivalent to: SELECT * FROM users
+$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
+    ['zzzz', Sqlx\OrderBy::ASC],
+])]);
+```
+
+Note that the direction constants (`OrderBy::ASC` and `OrderBy::DESC`) are just strings (`'ASC'` and `'DESC'`).
+You can pass strings (case-insensitive).
+
+So this code works:
+
+```php
+// Equivalent to: SELECT * FROM users ORDER BY `name` DESC
+$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
+['  name  ', ' DeSc  '],
+])]);
+```
+
+Note that field names are case-sensitive. Incorrect `direction` string silently defaults to `ASC`.
+
+---
+
+## JSON Support
+
+PostgreSQL/MySQL JSON types are automatically decoded into PHP arrays or objects.
+
+```php
+var_dump($driver->queryValue(
+    'SELECT $1::json',
+    ['{"foo": ["bar", "baz"]}']
+));
+/* Output:
+object(stdClass)#2 (1) {
+  ["foo"]=>
+  array(2) {
+    [0]=>
+    string(3) "bar"
+    [1]=>
+    string(3) "baz"
+  }
+}*/
+
+var_dump($driver->queryRow(
+    'SELECT $1::json AS col',
+    ['{"foo": ["bar", "baz"]}']
+)->col->foo[0]);
+// Output: string(3) "bar"
+```
 
 ## Installation
 
@@ -105,7 +195,7 @@ $driver = new Sqlx\Driver([
 
 - `assocArrays(): bool` – returns **true** if the driver is currently set to produce associative arrays instead of
   objects.
-- `prepare(string $sql): Sqlx\PreparedQuery` – returns a reusable prepared query object bound to the same driver.
+- `prepare(string $query): Sqlx\PreparedQuery` – returns a reusable prepared query object bound to the same driver.
 
 #### Row helpers
 
@@ -147,12 +237,13 @@ $driver = new Sqlx\Driver([
 
 #### Mutation helpers
 
-- `execute(string $sql, array $params = null): int` – run **INSERT/UPDATE/DELETE** and return affected count.
+- `execute(string $query, array $parameters = null): int` – run **INSERT/UPDATE/DELETE** and return affected count.
 - `insert(string $table, array $row): int` – convenience wrapper around `INSERT`.
 
 #### Utilities
 
-- `dry(string $sql, array $params = null): array` – render final SQL + bound params without executing. Handy for
+- `dry(string $query, array $parameters = null): array` – render final SQL + bound parameters without executing. Handy
+  for
   debugging.
 
 ---
@@ -174,58 +265,6 @@ All helpers listed above have their prepared-query counterparts:
 - `queryDictionary()` / `queryDictionaryAssoc()` / `queryDictionaryObj()`
 - `queryGroupedDictionary()` / `queryGroupedDictionaryAssoc()` / `queryGroupedDictionaryObj()`
 - `queryColumnDictionary()` / `queryColumnDictionaryAssoc()` / `queryColumnDictionaryObj()`
-
----
-
-### Sqlx\OrderBy
-
-A helper class for safe `ORDER BY` clauses from user input.
-
-**SAFETY:**
-
-- You can safely pass any user input as sorting settings.
-- Do NOT pass user input into the `OrderBy` constructor to avoid SQL injection vulnerabilities.
-
-**Examples**:
-
-```php
-$orderBy = new Sqlx\OrderBy([
-    'name',
-    'created_at',
-    'posts' => 'COUNT(posts.*)'
-]);
-
-// Equivalent to: SELECT * FROM users ORDER BY `name` ASC, COUNT(posts.*) DESC
-$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
-    ['name', Sqlx\OrderBy::ASC],
-    ['posts', Sqlx\OrderBy::DESC]
-])]);
-
-// This will throw an exception: Missing required placeholder `order_by`
-$driver->queryAll('SELECT * FROM users ORDER BY :order_by', ['order_by' => $orderBy([
-    ['zzzz', Sqlx\OrderBy::ASC],
-])]);
-
-
-// Equivalent to: SELECT * FROM users
-$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
-    ['zzzz', Sqlx\OrderBy::ASC],
-])]);
-```
-
-Note that the direction constants (`OrderBy::ASC` and `OrderBy::DESC`) are just strings (`'ASC'` and `'DESC'`).
-You can pass strings (case-insensitive).
-
-So this code works:
-
-```php
-// Equivalent to: SELECT * FROM users ORDER BY `name` DESC
-$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', ['order_by' => $orderBy([
-['  name  ', ' DeSc  '],
-])]);
-```
-
-Note that field names are case-sensitive. Incorrect `direction` string silently defaults to `ASC`.
 
 ---
 
@@ -321,46 +360,6 @@ true
 ```
 
 Nested arrays are automatically flattened and bound in order.
-
-### Painless `IN (?)`
-
-Passing an array as a parameter to a single placeholder automatically expands it:
-
-```php
-var_dump($driver->queryAll(
-    'SELECT * FROM people WHERE name IN (:names)',
-    ['names' => ['Peter', 'John', 'Jane']]
-));
-```
-
----
-
-## JSON Support
-
-PostgreSQL `json` and `jsonb` types are automatically decoded into PHP arrays or objects.
-
-```php
-var_dump($driver->queryValue(
-    'SELECT $1::json',
-    ['{"foo": ["bar", "baz"]}']
-));
-/* Output:
-object(stdClass)#2 (1) {
-  ["foo"]=>
-  array(2) {
-    [0]=>
-    string(3) "bar"
-    [1]=>
-    string(3) "baz"
-  }
-}*/
-
-var_dump($driver->queryRow(
-    'SELECT $1::json AS col',
-    ['{"foo": ["bar", "baz"]}']
-)->col->foo[0]);
-// Output: string(3) "bar"
-```
 
 ---
 
