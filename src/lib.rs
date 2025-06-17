@@ -3,11 +3,13 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::too_many_lines)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
-pub mod driver;
 pub mod byclause;
+pub mod driver;
+pub mod fieldsclause;
 mod tests;
 
 use crate::byclause::{ByClause, OrderFieldDefinition, RenderedByClause};
+use crate::fieldsclause::{FieldsClause, RenderedFieldsClause};
 use ext_php_rs::prelude::*;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;

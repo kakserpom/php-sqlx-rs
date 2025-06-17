@@ -65,7 +65,8 @@ impl PgDriverInner {
     ) -> anyhow::Result<u64> {
         let (query, values) = self.render_query(query, parameters)?;
         Ok(RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .rows_affected())
     }
 
@@ -107,8 +108,9 @@ impl PgDriverInner {
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
-        let row =
-            RUNTIME.block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?;
+        let row = RUNTIME
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?;
         let column_idx: usize = match column {
             Some(ColumnArgument::Index(i)) => i,
             Some(ColumnArgument::Name(column_name)) => {
@@ -153,7 +155,8 @@ impl PgDriverInner {
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters)?;
         let mut it = RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_iter()
             .peekable();
         let Some(row) = it.peek() else {
@@ -215,7 +218,7 @@ impl PgDriverInner {
             .map(Some)
             .or_else(|err: Error| match err {
                 Error::RowNotFound => Ok(None),
-                _ => Err(anyhow!("{:?}", err)),
+                _ => Err(anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n")),
             })?
             .map(|row| {
                 let column_idx: usize = match column {
@@ -265,7 +268,8 @@ impl PgDriverInner {
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
     }
 
@@ -328,7 +332,8 @@ impl PgDriverInner {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
         RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_iter()
             .map(|row| row.into_zval(assoc))
             .try_collect()
@@ -395,7 +400,8 @@ impl PgDriverInner {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
         let mut it = RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_iter()
             .map(|row| {
                 if let Some(key) = row
@@ -484,7 +490,8 @@ impl PgDriverInner {
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
 
         RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_iter()
             .map(|row| {
                 Ok((
@@ -562,7 +569,8 @@ impl PgDriverInner {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
         RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_iter()
             .map(|row| {
                 Ok((
@@ -632,7 +640,8 @@ impl PgDriverInner {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
         RUNTIME
-            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+            .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+            .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_iter()
             .map(|row| -> anyhow::Result<_> {
                 Ok((
@@ -698,7 +707,9 @@ where
             PgParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             PgParameterValue::Object(s) => s.values().fold(q, walker),
-            PgParameterValue::RenderedByClause(_) => unimplemented!(),
+            PgParameterValue::RenderedByClause(_) | PgParameterValue::RenderedFieldsClause(_) => {
+                unimplemented!()
+            }
         }
     }
 

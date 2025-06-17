@@ -3,24 +3,11 @@ use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
 
-#[php_class(name = "Sqlx\\ByClause")]
-pub struct ByClause {
+#[php_class(name = "Sqlx\\FieldsClause")]
+pub struct FieldsClause {
     pub(crate) defined_fields: HashMap<String, Option<String>>,
 }
-
-#[derive(ZvalConvert, Debug)]
-pub enum OrderFieldDefinition {
-    Full(Vec<String>),
-    Short(String),
-}
-impl ByClause {
-    /// Ascending order (A to Z)
-    pub const _ASC: &'static str = "ASC";
-    /// Descending order (Z to A)
-    pub const _DESC: &'static str = "DESC";
-}
-
-impl ByClause {
+impl FieldsClause {
     pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
@@ -48,79 +35,63 @@ impl ByClause {
 }
 
 #[php_impl]
-impl ByClause {
-    /// Ascending order (A to Z)
-    const ASC: &'static str = "ASC";
-    /// Descending order (Z to A)
-    const DESC: &'static str = "DESC";
-
-    /// Constructs an ByClause helper with allowed sortable fields.
+impl FieldsClause {
+    /// Constructs an FieldsClause helper with allowed sortable fields.
     ///
     /// # Arguments
-    /// - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
+    /// - `defined_fields`: Map of allowed SELECT fields
     ///
     /// # Example
     /// ```php
-    /// $order_by = new Sqlx\ByClause([
+    /// $order_by = new Sqlx\FieldsClause([
     ///     "name",
     ///     "age",
-    ///     "total_posts" => "COUNT(posts.*)"
+    ///     "department_name" => "dp.name"
     /// ]);
     /// ```
 
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        ByClause::new(defined_fields)
+        FieldsClause::new(defined_fields)
     }
 
     /// __invoke magic for apply()
 
     #[must_use]
-    pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
+    pub fn __invoke(&self, order_by: Vec<String>) -> RenderedFieldsClause {
         self.internal_apply(order_by)
     }
 
-    /// Applies ordering rules to a user-defined input.
+    /// Applies rules to a user-defined input.
     ///
     /// # Arguments
-    /// - `order_by`: List of fields (as strings or [field, direction] arrays)
+    /// - `fields`: List of fields
     ///
     /// # Returns
-    /// A `RenderedByClause` object containing validated SQL ORDER BY clauses
+    /// A `RenderedFieldsClause` object containing validated SQL SELECT clauses
     /// The returning value is to be used as a placeholder value
     ///
     /// # Exceptions
     /// This method does not return an error but silently ignores unknown fields.
     /// Use validation separately if strict input is required.
     #[must_use]
-    pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
-        self.internal_apply(order_by)
+    pub fn apply(&self, fields: Vec<String>) -> RenderedFieldsClause {
+        self.internal_apply(fields)
     }
 }
-impl ByClause {
+impl FieldsClause {
     #[must_use]
-    pub fn internal_apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
-        RenderedByClause {
-            __inner: order_by
+    pub fn internal_apply(&self, fields: Vec<String>) -> RenderedFieldsClause {
+        RenderedFieldsClause {
+            __inner: fields
                 .into_iter()
-                .filter_map(|definition| {
-                    let (field, dir) = match definition {
-                        OrderFieldDefinition::Short(name) => (name, ByClause::ASC),
-                        OrderFieldDefinition::Full(vec) => (
-                            vec.first()?.clone(),
-                            match vec.get(1) {
-                                Some(str) if str.trim().eq_ignore_ascii_case("DESC") => {
-                                    ByClause::DESC
-                                }
-                                _ => ByClause::ASC,
-                            },
-                        ),
-                    };
+                .filter_map(|field| {
                     let field = field.trim();
                     if let Some(definition) = self.defined_fields.get(field) {
                         if let Some(right_side) = definition {
-                            Some(format!("{right_side} {dir}"))
+                            Some(format!("{right_side} AS `{field}`"))
                         } else {
-                            Some(format!("`{field}` {dir}"))
+                            // @TODO: ` or "
+                            Some(format!("{field}"))
                         }
                     } else {
                         None
@@ -132,12 +103,11 @@ impl ByClause {
 }
 /// A rendered ORDER BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
-pub struct RenderedByClause {
-    // @TODO: make it impossible to alter RenderedByClause from PHP side
+pub struct RenderedFieldsClause {
+    // @TODO: make it impossible to alter RenderedFieldsClause from PHP side
     pub(crate) __inner: Vec<String>,
 }
-
-impl RenderedByClause {
+impl RenderedFieldsClause {
     #[must_use]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()

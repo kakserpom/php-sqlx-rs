@@ -2,6 +2,7 @@
 mod tests;
 
 use crate::RenderedByClause;
+use crate::fieldsclause::RenderedFieldsClause;
 use anyhow::bail;
 use ext_php_rs::ZvalConvert;
 use itertools::Itertools;
@@ -40,12 +41,16 @@ pub enum PgParameterValue {
     Array(Vec<PgParameterValue>),
     Object(HashMap<String, PgParameterValue>),
     RenderedByClause(RenderedByClause),
+    RenderedFieldsClause(RenderedFieldsClause),
 }
 impl PgParameterValue {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         match self {
             PgParameterValue::RenderedByClause(rendered_order_by) => rendered_order_by.is_empty(),
+            PgParameterValue::RenderedFieldsClause(rendered_order_by) => {
+                rendered_order_by.is_empty()
+            }
             PgParameterValue::Array(array) => array.is_empty(),
             PgParameterValue::Str(_)
             | PgParameterValue::Int(_)
