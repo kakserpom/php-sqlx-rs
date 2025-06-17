@@ -16,12 +16,12 @@ pub trait Conversion: Row {
     where
         Self: Sized,
     {
+        let columns = self.columns();
         if associative_arrays {
-            Ok(self
-                .columns()
+            Ok(columns
                 .iter()
                 .try_fold(
-                    zend_array::new(),
+                    zend_array::with_capacity(columns.len() as u32),
                     |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
                         array
                             .insert(
@@ -35,8 +35,7 @@ pub trait Conversion: Row {
                 .into_zval(false)
                 .map_err(|err| anyhow!("{err:?}"))?)
         } else {
-            Ok(self
-                .columns()
+            Ok(columns
                 .iter()
                 .try_fold(zend_object::new_stdclass(), |mut object, column| {
                     object

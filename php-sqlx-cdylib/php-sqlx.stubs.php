@@ -138,11 +138,11 @@ namespace Sqlx {
          *
          * Same as [`queryGroupedDictionary`](crate::Driver::query_grouped_dictionary), but works on a prepared query.
          *
-         * The first column is used as the key (must be convertible to string),
+         * The first column is used as the key (must be scalar),
          * and each resulting row is appended to the corresponding key's Vec.
          *
          * # Errors
-         * Fails if the query fails, or the first column is not string-convertible.
+         * Fails if the query fails, or the first column is not scalar.
          */
         public function queryGroupedDictionary(?array $parameters): mixed {}
 
@@ -158,7 +158,7 @@ namespace Sqlx {
 
         /**
          * Executes the prepared query and returns a grouped dictionary where:
-         * - the key is the **first column** (must be convertible to string),
+         * - the key is the **first column** (must be scalar),
          * - the value is a list of values from the **second column** for each group.
          *
          * This variant uses the driver's default associative array option for JSON values.
@@ -976,7 +976,7 @@ namespace Sqlx {
 
         /**
          * Executes an SQL query and returns a grouped dictionary where:
-         * - the key is the **first column** (must be convertible to string),
+         * - the key is the **first column** (must be scalar),
          * - the value is a list of values from the **second column** for each group.
          *
          * Useful for queries that logically group rows, such as:
@@ -1197,11 +1197,11 @@ namespace Sqlx {
          *
          * Same as [`queryGroupedDictionary`](crate::Driver::query_grouped_dictionary), but works on a prepared query.
          *
-         * The first column is used as the key (must be convertible to string),
+         * The first column is used as the key (must be scalar),
          * and each resulting row is appended to the corresponding key's Vec.
          *
          * # Errors
-         * Fails if the query fails, or the first column is not string-convertible.
+         * Fails if the query fails, or the first column is not scalar.
          */
         public function queryGroupedDictionary(?array $parameters): mixed {}
 
@@ -1217,7 +1217,7 @@ namespace Sqlx {
 
         /**
          * Executes the prepared query and returns a grouped dictionary where:
-         * - the key is the **first column** (must be convertible to string),
+         * - the key is the **first column** (must be scalar),
          * - the value is a list of values from the **second column** for each group.
          *
          * This variant uses the driver's default associative array option for JSON values.
@@ -2004,7 +2004,7 @@ namespace Sqlx {
 
         /**
          * Executes an SQL query and returns a grouped dictionary where:
-         * - the key is the **first column** (must be convertible to string),
+         * - the key is the **first column** (must be scalar),
          * - the value is a list of values from the **second column** for each group.
          *
          * Useful for queries that logically group rows, such as:

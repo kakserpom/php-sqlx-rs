@@ -726,7 +726,7 @@ impl PgDriver {
     }
 
     /// Executes an SQL query and returns a grouped dictionary where:
-    /// - the key is the **first column** (must be convertible to string),
+    /// - the key is the **first column** (must be scalar),
     /// - the value is a list of values from the **second column** for each group.
     ///
     /// Useful for queries that logically group rows, such as:

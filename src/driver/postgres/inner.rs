@@ -8,9 +8,8 @@ use anyhow::{anyhow, bail};
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::{zend_array, zend_object};
-use ext_php_rs::types::Zval;
+use ext_php_rs::types::{ZendHashTable, Zval};
 use itertools::Itertools;
-use ordermap::OrderMap;
 use sqlx::Row;
 use sqlx::pool::Pool;
 use sqlx::postgres::PgPoolOptions;
@@ -405,7 +404,7 @@ impl PgDriverInner {
                 {
                     Ok((key, row.into_zval(assoc)?))
                 } else {
-                    bail!("First column must be convertible to string")
+                    bail!("First column must be scalar")
                 }
             });
 
@@ -483,34 +482,35 @@ impl PgDriverInner {
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+
         RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .extract_string()
-                {
-                    Ok((key, row.into_zval(assoc)?))
-                } else {
-                    bail!("First column must be convertible to string")
-                }
+                Ok((
+                    row.column_value_into_zval(row.column(0), false)?,
+                    row.into_zval(assoc)?,
+                ))
             })
             .try_fold(
-                OrderMap::<String, Vec<Zval>>::new(),
-                |mut map, item| -> anyhow::Result<_> {
-                    let (key, value) = item?;
-                    map.entry(key).or_default().push(value);
-                    Ok(map)
-                },
-            )?
-            .into_iter()
-            .try_fold(
                 zend_array::new(),
-                |mut array, (key, value)| -> anyhow::Result<ZBox<zend_array>> {
-                    array
-                        .insert(&key, value)
-                        .map_err(|err| anyhow!("{err:?}"))?;
+                |mut array: ZBox<ZendHashTable>, item: anyhow::Result<_>| -> anyhow::Result<_> {
+                    let (key, value) = item?;
+                    let array_mut = &mut array;
+                    if let Some(key) = (&key).long() {
+                        if let Some(entry) = array_mut.get_index_mut(key as u64) {
+                            let entry_array = entry.array_mut().unwrap();
+                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
+                        } else {
+                            let mut entry_array = zend_array::new();
+                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
+                            array_mut
+                                .insert_at_index(key as u64, entry_array)
+                                .map_err(|err| anyhow!("{err:?}"))?;
+                        }
+                    } else {
+                        bail!("First column must be scalar")
+                    }
                     Ok(array)
                 },
             )?
@@ -519,7 +519,7 @@ impl PgDriverInner {
     }
 
     /// Executes the given SQL query and returns a grouped dictionary where:
-    /// - the **key** is the value of the **first column** (must be convertible to string),
+    /// - the **key** is the value of the **first column** (must be scalar),
     /// - the **value** is a `Vec<Zval>` containing values from the **second column** for each row with that key.
     ///
     /// This method is useful for aggregating results by a common key.
@@ -565,30 +565,30 @@ impl PgDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .extract_string()
-                {
-                    Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
-                } else {
-                    bail!("First column must be convertible to string")
-                }
+                Ok((
+                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_zval(row.column(1), assoc)?,
+                ))
             })
             .try_fold(
-                OrderMap::<String, Vec<Zval>>::new(),
-                |mut map, item| -> anyhow::Result<_> {
-                    let (key, value) = item?;
-                    map.entry(key).or_default().push(value);
-                    Ok(map)
-                },
-            )?
-            .into_iter()
-            .try_fold(
                 zend_array::new(),
-                |mut array, (key, value)| -> anyhow::Result<ZBox<zend_array>> {
-                    array
-                        .insert(&key, value)
-                        .map_err(|err| anyhow!("{err:?}"))?;
+                |mut array: ZBox<ZendHashTable>, item: anyhow::Result<_>| -> anyhow::Result<_> {
+                    let (key, value) = item?;
+                    let array_mut = &mut array;
+                    if let Some(key) = (&key).long() {
+                        if let Some(entry) = array_mut.get_index_mut(key as u64) {
+                            let entry_array = entry.array_mut().unwrap();
+                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
+                        } else {
+                            let mut entry_array = zend_array::new();
+                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
+                            array_mut
+                                .insert_at_index(key as u64, entry_array)
+                                .map_err(|err| anyhow!("{err:?}"))?;
+                        }
+                    } else {
+                        bail!("First column must be scalar")
+                    }
                     Ok(array)
                 },
             )?
@@ -631,46 +631,33 @@ impl PgDriverInner {
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-        let mut it = RUNTIME
+        RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
-            .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .extract_string()
-                {
-                    Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
-                } else {
-                    bail!("First column must be convertible to string")
-                }
-            });
-        Ok(if assoc {
-            it.try_fold(
+            .map(|row| -> anyhow::Result<_> {
+                Ok((
+                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_zval(row.column(1), assoc)?,
+                ))
+            })
+            .try_fold(
                 zend_array::new(),
                 |mut array, item| -> anyhow::Result<ZBox<zend_array>> {
                     let (key, value) = item?;
-                    array
-                        .insert(&key, value)
-                        .map_err(|err| anyhow!("{err:?}"))?;
+                    if let Some(key) = (&key).long() {
+                        array
+                            .insert_at_index(key as u64, value)
+                            .map_err(|err| anyhow!("{err:?}"))?;
+                    } else if let Some(key) = (&key).str() {
+                        array.insert(key, value).map_err(|err| anyhow!("{err:?}"))?;
+                    } else {
+                        bail!("First column must be scalar")
+                    }
                     Ok(array)
                 },
             )?
             .into_zval(false)
-            .map_err(|err| anyhow!("{err:?}"))?
-        } else {
-            it.try_fold(
-                zend_object::new_stdclass(),
-                |mut object, item| -> anyhow::Result<ZBox<zend_object>> {
-                    let (key, value) = item?;
-                    object
-                        .set_property(&key, value)
-                        .map_err(|err| anyhow!("{err:?}"))?;
-                    Ok(object)
-                },
-            )?
-            .into_zval(false)
-            .map_err(|err| anyhow!("{err:?}"))?
-        })
+            .map_err(|err| anyhow!("{err:?}"))
     }
 }
 
