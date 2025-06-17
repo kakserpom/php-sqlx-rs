@@ -1,0 +1,10 @@
+[package]
+name = "php-sqlx-cdylib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+php-sqlx = { path = ".." }
+
+[lib]
+crate-type = ["cdylib"]

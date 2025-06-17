@@ -172,6 +172,7 @@ Install with [`cargo-php`](https://github.com/davidcole1340/ext-php-rs):
 
 ```bash
 cargo install cargo-php --locked
+cd php-sql-cdylib
 cargo php install --features postgres mysql --release --yes
 ```
 
@@ -181,6 +182,7 @@ For macOS:
 export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | tr -d '\n')
 export RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup"
 cargo install cargo-php --locked
+cd php-sql-cdylib
 cargo php install --release --yes
 ```
 

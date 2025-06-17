@@ -10,5 +10,4 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN mv /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 RUN cargo install cargo-php --locked
 COPY ./ ./
-RUN cargo php install --release --yes
-CMD ["php", "test.php"]
+RUN cd php-sqlx-cdylib && cargo php install --release --yes
