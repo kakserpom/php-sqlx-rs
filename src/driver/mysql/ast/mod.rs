@@ -4,6 +4,7 @@ mod tests;
 use crate::RenderedOrderBy;
 use anyhow::bail;
 use ext_php_rs::ZvalConvert;
+use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Write};
 
@@ -31,47 +32,49 @@ pub struct Placeholder(pub String);
 
 /// Supported parameter types
 #[derive(ZvalConvert, Debug, Clone, PartialEq)]
-pub enum Value {
+pub enum MySqlParameterValue {
     Str(String),
     Int(i64),
     Float(f64),
     Bool(bool),
-    Array(Vec<Value>),
-    Object(HashMap<String, Value>),
+    Array(Vec<MySqlParameterValue>),
+    Object(HashMap<String, MySqlParameterValue>),
     RenderedOrderBy(RenderedOrderBy),
 }
-impl Value {
+impl MySqlParameterValue {
     pub fn is_empty(&self) -> bool {
         match self {
-            Value::RenderedOrderBy(rendered_order_by) => rendered_order_by.is_empty(),
-            Value::Array(array) => array.is_empty(),
-            Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::Bool(_) | Value::Object(_) => {
-                false
-            }
+            MySqlParameterValue::RenderedOrderBy(rendered_order_by) => rendered_order_by.is_empty(),
+            MySqlParameterValue::Array(array) => array.is_empty(),
+            MySqlParameterValue::Str(_)
+            | MySqlParameterValue::Int(_)
+            | MySqlParameterValue::Float(_)
+            | MySqlParameterValue::Bool(_)
+            | MySqlParameterValue::Object(_) => false,
         }
     }
 }
-pub type ParamsMap = BTreeMap<String, Value>;
-impl From<&str> for Value {
+pub type ParamsMap = BTreeMap<String, MySqlParameterValue>;
+impl From<&str> for MySqlParameterValue {
     fn from(s: &str) -> Self {
-        Value::Str(s.to_string())
+        MySqlParameterValue::Str(s.to_string())
     }
 }
-impl From<String> for Value {
+impl From<String> for MySqlParameterValue {
     fn from(s: String) -> Self {
-        Value::Str(s)
+        MySqlParameterValue::Str(s)
     }
 }
 
-impl From<i64> for Value {
+impl From<i64> for MySqlParameterValue {
     fn from(s: i64) -> Self {
-        Value::Int(s)
+        MySqlParameterValue::Int(s)
     }
 }
 
-impl From<bool> for Value {
+impl From<bool> for MySqlParameterValue {
     fn from(s: bool) -> Self {
-        Value::Bool(s)
+        MySqlParameterValue::Bool(s)
     }
 }
 
@@ -275,11 +278,11 @@ impl Ast {
 
     /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
-    pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<Value>)>
+    pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<MySqlParameterValue>)>
     where
         I: IntoIterator<Item = (K, V)> + Debug,
         K: Into<String>,
-        V: Into<Value>,
+        V: Into<MySqlParameterValue>,
     {
         #[cfg(test)]
         {
@@ -290,7 +293,7 @@ impl Ast {
             node: &Ast,
             values: &ParamsMap,
             sql: &mut String,
-            out_vals: &mut Vec<Value>,
+            out_vals: &mut Vec<MySqlParameterValue>,
             counter: &mut usize,
         ) {
             match node {
@@ -308,7 +311,7 @@ impl Ast {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            Value::RenderedOrderBy(order_by) => {
+                            MySqlParameterValue::RenderedOrderBy(order_by) => {
                                 for (i, item) in order_by.__inner.iter().enumerate() {
                                     if i > 0 {
                                         sql.push_str(", ");
@@ -316,13 +319,13 @@ impl Ast {
                                     sql.push_str(item);
                                 }
                             }
-                            Value::Array(arr) => {
+                            MySqlParameterValue::Array(arr) => {
                                 for (i, item) in arr.iter().enumerate() {
                                     *counter += 1;
                                     if i > 0 {
                                         sql.push_str(", ");
                                     }
-                                    write!(sql, "${}", *counter).unwrap();
+                                    write!(sql, "?").unwrap();
                                     out_vals.push(item.clone());
                                 }
                             }
@@ -384,7 +387,7 @@ impl Ast {
             }
         }
         walk(self, &values, &mut sql, &mut out_vals, &mut counter);
-        let sql = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+        let sql = sql.split_whitespace().join(" ");
         Ok((sql, out_vals))
     }
 }

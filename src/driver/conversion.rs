@@ -1,3 +1,4 @@
+use crate::ZvalNull;
 use anyhow::anyhow;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
@@ -7,11 +8,6 @@ use ext_php_rs::types::Zval;
 use sqlx::Column;
 use sqlx::Row;
 use std::collections::HashMap;
-
-#[feature(mysql)]
-mod mysql;
-#[feature(postgres)]
-mod postgres;
 
 /// Trait to convert a row into a PHP value.
 pub trait Conversion: Row {
@@ -81,7 +77,10 @@ pub trait Conversion: Row {
 ///
 /// # Returns
 /// Converted `Zval` or an error if conversion fails
-fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow::Result<Zval> {
+pub(crate) fn json_into_zval(
+    value: serde_json::Value,
+    associative_arrays: bool,
+) -> anyhow::Result<Zval> {
     match value {
         serde_json::Value::String(str) => str
             .into_zval(false)
@@ -93,11 +92,7 @@ fn json_into_zval(value: serde_json::Value, associative_arrays: bool) -> anyhow:
         serde_json::Value::Bool(bool) => bool
             .into_zval(false)
             .map_err(|err| anyhow!("Bool conversion: {err:?}")),
-        serde_json::Value::Null => {
-            let mut null = Zval::new();
-            null.set_null();
-            Ok(null)
-        }
+        serde_json::Value::Null => Ok(Zval::null()),
         serde_json::Value::Array(array) => Ok(array
             .into_iter()
             .map(|x| json_into_zval(x, associative_arrays))

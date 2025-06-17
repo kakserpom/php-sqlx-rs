@@ -1,20 +1,21 @@
 use crate::ColumnArgument;
-use crate::DriverInner;
-use crate::Value;
+use crate::driver::mysql::ast::MySqlParameterValue;
+use crate::driver::mysql::inner::MySqlDriverInner;
 use ext_php_rs::{prelude::*, types::Zval};
 use std::collections::HashMap;
 use std::sync::Arc;
+
 /// A reusable prepared SQL query with parameter support.
 ///
-/// Created using `Driver::prepare()`, shares context with original driver.
-#[php_class(name = "Sqlx\\PreparedQuery")]
-pub struct PreparedQuery {
+/// Created using `PgDriver::prepare()`, shares context with original driver.
+#[php_class(name = "Sqlx\\MySqlPreparedQuery")]
+pub struct MySqlPreparedQuery {
     pub(crate) query: String,
-    pub(crate) driver_inner: Arc<DriverInner>,
+    pub(crate) driver_inner: Arc<MySqlDriverInner>,
 }
 
 #[php_impl]
-impl PreparedQuery {
+impl MySqlPreparedQuery {
     /// Executes the prepared query and returns a dictionary mapping the first column to the second column.
     ///
     /// This method expects each result row to contain at least two columns. It converts the first column
@@ -38,7 +39,7 @@ impl PreparedQuery {
     /// - The query must return at least two columns per row.
     pub fn query_column_dictionary(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(&self.query, parameters, None)
@@ -59,7 +60,7 @@ impl PreparedQuery {
     /// Same as `query_column_dictionary`.
     pub fn query_column_dictionary_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(&self.query, parameters, Some(true))
@@ -80,7 +81,7 @@ impl PreparedQuery {
     /// Same as `query_column_dictionary`.
     pub fn query_column_dictionary_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(&self.query, parameters, Some(false))
@@ -107,7 +108,7 @@ impl PreparedQuery {
     /// - The iteration order of the returned map is **not** guaranteed.
     pub fn query_dictionary(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(&self.query, parameters, None)
@@ -132,7 +133,7 @@ impl PreparedQuery {
     /// - The iteration order of the returned map is **not** guaranteed.
     pub fn query_dictionary_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(&self.query, parameters, Some(true))
@@ -157,7 +158,7 @@ impl PreparedQuery {
     /// - The iteration order of the returned map is **not** guaranteed.
     pub fn query_dictionary_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(&self.query, parameters, Some(false))
@@ -174,7 +175,7 @@ impl PreparedQuery {
     /// Fails if the query fails, or the first column is not string-convertible.
     pub fn query_grouped_dictionary(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(&self.query, parameters, None)
@@ -183,7 +184,7 @@ impl PreparedQuery {
     /// Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
     pub fn query_grouped_dictionary_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(&self.query, parameters, Some(true))
@@ -192,7 +193,7 @@ impl PreparedQuery {
     /// Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
     pub fn query_grouped_dictionary_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(&self.query, parameters, Some(false))
@@ -208,7 +209,7 @@ impl PreparedQuery {
     /// Returns an error if the first column is not convertible to a string.
     pub fn query_grouped_column_dictionary(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(&self.query, parameters, None)
@@ -221,7 +222,7 @@ impl PreparedQuery {
     /// Returns an error if the first column is not convertible to a string.
     pub fn query_grouped_column_dictionary_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(&self.query, parameters, Some(true))
@@ -234,7 +235,7 @@ impl PreparedQuery {
     /// Returns an error if the first column is not convertible to a string.
     pub fn query_grouped_column_dictionary_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(&self.query, parameters, Some(false))
@@ -253,7 +254,7 @@ impl PreparedQuery {
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
-    pub fn execute(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<u64> {
+    pub fn execute(&self, parameters: Option<HashMap<String, MySqlParameterValue>>) -> anyhow::Result<u64> {
         self.driver_inner.execute(self.query.as_str(), parameters)
     }
 
@@ -271,7 +272,7 @@ impl PreparedQuery {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_row(&self, parameters: Option<HashMap<String, Value>>) -> anyhow::Result<Zval> {
+    pub fn query_row(&self, parameters: Option<HashMap<String, MySqlParameterValue>>) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(&self.query, parameters, None)
     }
 
@@ -281,7 +282,7 @@ impl PreparedQuery {
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     pub fn query_row_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_row(&self.query, parameters, Some(true))
@@ -293,7 +294,7 @@ impl PreparedQuery {
     /// - `parameters`: Optional array of indexed/named parameters to bind.
     pub fn query_row_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_row(&self.query, parameters, Some(false))
@@ -312,7 +313,7 @@ impl PreparedQuery {
     /// For example, syntax errors, type mismatches, or database connection issues.
     pub fn query_maybe_row(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_maybe_row(&self.query, parameters, None)
@@ -335,7 +336,7 @@ impl PreparedQuery {
 
     pub fn query_maybe_row_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_maybe_row(&self.query, parameters, Some(true))
@@ -356,7 +357,7 @@ impl PreparedQuery {
     /// - the row contains unsupported or unconvertible data types.
     pub fn query_maybe_row_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_maybe_row(&self.query, parameters, Some(false))
@@ -379,7 +380,7 @@ impl PreparedQuery {
     /// - a column value cannot be converted to PHP.
     pub fn query_column(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -400,7 +401,7 @@ impl PreparedQuery {
     /// Same as `query_column`.
     pub fn query_column_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -420,7 +421,7 @@ impl PreparedQuery {
     /// Same as `query_column`.
     pub fn query_column_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -443,7 +444,7 @@ impl PreparedQuery {
     /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.query_all(&self.query, parameters, None)
     }
@@ -461,7 +462,7 @@ impl PreparedQuery {
     /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all_assoc(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
             .query_all(&self.query, parameters, Some(true))
@@ -480,7 +481,7 @@ impl PreparedQuery {
     /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
     pub fn query_all_obj(
         &self,
-        parameters: Option<HashMap<String, Value>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
             .query_all(&self.query, parameters, Some(false))

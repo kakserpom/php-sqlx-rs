@@ -1,10 +1,13 @@
+use crate::ZvalNull;
 use crate::driver::conversion::{Conversion, json_into_zval};
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::Zval;
 use sqlx::Column;
+use sqlx::Error::ColumnDecode;
 use sqlx::TypeInfo;
+use sqlx::error::UnexpectedNullError;
 use sqlx::postgres::PgRow;
 use sqlx::{Decode, Row, Type};
 
@@ -19,17 +22,19 @@ impl Conversion for PgRow {
             T: Decode<'r, <PgRow as Row>::Database> + Type<<PgRow as Row>::Database>,
             T: IntoZval,
         {
-            row.try_get::<'r, T, _>(name)
-                .map_err(|err| anyhow!("{err:?}"))?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))
+            match row.try_get::<'r, T, _>(name) {
+                Ok(value) => Ok(value.into_zval(false).map_err(|err| anyhow!("{err:?}"))?),
+                Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => {
+                    Ok(Zval::null())
+                }
+                Err(err) => Err(anyhow!("{err:?}")),
+            }
         }
 
         let column_name = column.name();
-        let column_type = column.type_info().name();
-        Ok(match column_type {
+        Ok(match column.type_info().name() {
             "BOOL" => try_cast_into_zval::<bool>(self, column_name)?,
-            "BYTEA" | "BINARY" => (self)
+            "BYTEA" | "BINARY" => self
                 .try_get::<&[u8], _>(column_name)
                 .map_err(|err| anyhow!("{err:?}"))
                 .map(|x| x.iter().copied().collect::<Binary<_>>())?
@@ -107,7 +112,7 @@ impl Conversion for PgRow {
             "_RECORD" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
             "_JSONPATH" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
 
-            _ => bail!("unsupported type: {column_type}"),
+            other => bail!("unsupported type: {other}"),
         })
     }
 }

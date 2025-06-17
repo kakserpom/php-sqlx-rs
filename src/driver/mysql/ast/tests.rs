@@ -55,10 +55,10 @@ fn test_render_var_types() {
         "SELECT * FROM table WHERE id = $id AND active = :flag AND scores IN (?) AND data = $data";
     let ast = Ast::parse(sql).unwrap();
     let mut vals = ParamsMap::new();
-    vals.insert("id".into(), Value::Int(7));
-    vals.insert("flag".into(), Value::Bool(true));
-    vals.insert("0".into(), Value::Array(vec![Value::Int(1), Value::Int(2)]));
-    vals.insert("data".into(), Value::Str("xyz".into()));
+    vals.insert("id".into(), MySqlParameterValue::Int(7));
+    vals.insert("flag".into(), MySqlParameterValue::Bool(true));
+    vals.insert("0".into(), MySqlParameterValue::Array(vec![MySqlParameterValue::Int(1), MySqlParameterValue::Int(2)]));
+    vals.insert("data".into(), MySqlParameterValue::Str("xyz".into()));
     let (q, params) = ast.render(vals).expect("Rendering failed");
     assert_eq!(
         q,
@@ -67,11 +67,11 @@ fn test_render_var_types() {
     assert_eq!(
         params,
         vec![
-            Value::Int(7),
-            Value::Bool(true),
-            Value::Int(1),
-            Value::Int(2),
-            Value::Str("xyz".into()),
+            MySqlParameterValue::Int(7),
+            MySqlParameterValue::Bool(true),
+            MySqlParameterValue::Int(1),
+            MySqlParameterValue::Int(2),
+            MySqlParameterValue::Str("xyz".into()),
         ]
     );
 }
@@ -94,7 +94,7 @@ fn test_render_order_by_apply() {
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
     let ast = Ast::parse(sql).unwrap();
     let (query, params) = ast
-        .render([("order_by", Value::RenderedOrderBy(rendered))])
+        .render([("order_by", MySqlParameterValue::RenderedOrderBy(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
@@ -120,7 +120,7 @@ fn test_render_order_by_apply_empty() {
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
     let ast = Ast::parse(sql).unwrap();
     let (query, params) = ast
-        .render([("order_by", Value::RenderedOrderBy(rendered))])
+        .render([("order_by", MySqlParameterValue::RenderedOrderBy(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
