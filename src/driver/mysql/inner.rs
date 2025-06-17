@@ -1,3 +1,4 @@
+use crate::ZvalExtractString;
 use crate::driver::conversion::Conversion;
 use crate::driver::mysql::ast::{MySqlAst, MySqlParameterValue};
 use crate::driver::mysql::options::MySqlDriverInnerOptions;
@@ -397,7 +398,10 @@ impl MySqlDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.into_zval(assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -482,7 +486,10 @@ impl MySqlDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.into_zval(assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -557,7 +564,10 @@ impl MySqlDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -624,7 +634,10 @@ impl MySqlDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")

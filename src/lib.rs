@@ -36,6 +36,15 @@ impl ZvalNull for Zval {
         zval
     }
 }
+pub trait ZvalExtractString {
+    fn extract_string(self) -> Option<String>;
+}
+impl ZvalExtractString for Zval {
+    fn extract_string(self) -> Option<String> {
+        self.string()
+            .or_else(|| self.long().map(|long| format!("{long}")))
+    }
+}
 
 #[derive(Debug, ZvalConvert)]
 pub enum ColumnArgument<'a> {

@@ -42,6 +42,7 @@ pub enum MySqlParameterValue {
     RenderedOrderBy(RenderedOrderBy),
 }
 impl MySqlParameterValue {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         match self {
             MySqlParameterValue::RenderedOrderBy(rendered_order_by) => rendered_order_by.is_empty(),

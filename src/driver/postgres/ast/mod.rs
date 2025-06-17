@@ -42,6 +42,7 @@ pub enum PgParameterValue {
     RenderedOrderBy(RenderedOrderBy),
 }
 impl PgParameterValue {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         match self {
             PgParameterValue::RenderedOrderBy(rendered_order_by) => rendered_order_by.is_empty(),

@@ -1,3 +1,4 @@
+use crate::ZvalExtractString;
 use crate::driver::PgParameterValue;
 use crate::driver::conversion::Conversion;
 use crate::driver::postgres::ast::PgAst;
@@ -398,7 +399,10 @@ impl PgDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.into_zval(assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -483,7 +487,10 @@ impl PgDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.into_zval(assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -558,7 +565,10 @@ impl PgDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
@@ -625,7 +635,10 @@ impl PgDriverInner {
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row.column_value_into_zval(row.column(0), false)?.string() {
+                if let Some(key) = row
+                    .column_value_into_zval(row.column(0), false)?
+                    .extract_string()
+                {
                     Ok((key, row.column_value_into_zval(row.column(1), assoc)?))
                 } else {
                     bail!("First column must be convertible to string")
