@@ -4,10 +4,10 @@
 #![allow(clippy::too_many_lines)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
 pub mod driver;
-pub mod orderby;
+pub mod byclause;
 mod tests;
 
-use crate::orderby::{OrderBy, OrderFieldDefinition, RenderedOrderBy};
+use crate::byclause::{ByClause, OrderFieldDefinition, RenderedByClause};
 use ext_php_rs::prelude::*;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;

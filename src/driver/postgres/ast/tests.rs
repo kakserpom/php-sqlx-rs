@@ -81,9 +81,9 @@ fn test_render_var_types() {
 
 #[test]
 fn test_render_order_by_apply() {
-    use crate::OrderBy;
+    use crate::ByClause;
 
-    let ob = OrderBy::new([
+    let ob = ByClause::new([
         ("name", "users.name"),
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
@@ -92,13 +92,13 @@ fn test_render_order_by_apply() {
 
     let rendered = ob.internal_apply(vec![
         OrderFieldDefinition::Short("name".into()),
-        OrderFieldDefinition::Full(vec!["posts".into(), OrderBy::_DESC.into()]),
+        OrderFieldDefinition::Full(vec!["posts".into(), ByClause::_DESC.into()]),
     ]);
 
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
     let ast = PgAst::parse(sql).unwrap();
     let (query, params) = ast
-        .render([("order_by", PgParameterValue::RenderedOrderBy(rendered))])
+        .render([("order_by", PgParameterValue::RenderedByClause(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
@@ -110,9 +110,9 @@ fn test_render_order_by_apply() {
 
 #[test]
 fn test_render_order_by_apply_empty() {
-    use crate::orderby::OrderBy;
+    use crate::byclause::ByClause;
 
-    let ob = OrderBy::new([
+    let ob = ByClause::new([
         ("name", "users.name"),
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
@@ -125,7 +125,7 @@ fn test_render_order_by_apply_empty() {
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
     let ast = PgAst::parse(sql).unwrap();
     let (query, params) = ast
-        .render([("order_by", PgParameterValue::RenderedOrderBy(rendered))])
+        .render([("order_by", PgParameterValue::RenderedByClause(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(

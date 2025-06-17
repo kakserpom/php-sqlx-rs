@@ -14,7 +14,7 @@ class AnnotatedBench
      */
     public function benchDryBig(): void
     {
-        $order_by = new Sqlx\OrderBy([
+        $order_by = new Sqlx\ByClause([
             "name" => "u.name",
             "email" => "u.email",
         ]);

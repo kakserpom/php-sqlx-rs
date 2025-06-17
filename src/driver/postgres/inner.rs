@@ -698,7 +698,7 @@ where
             PgParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             PgParameterValue::Object(s) => s.values().fold(q, walker),
-            PgParameterValue::RenderedOrderBy(_) => unimplemented!(),
+            PgParameterValue::RenderedByClause(_) => unimplemented!(),
         }
     }
 

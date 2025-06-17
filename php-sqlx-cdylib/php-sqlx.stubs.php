@@ -386,7 +386,7 @@ namespace Sqlx {
         public function queryAllObj(?array $parameters): array {}
     }
 
-    class OrderBy {
+    class ByClause {
         /**
          * Ascending order (A to Z)
          */
@@ -398,14 +398,14 @@ namespace Sqlx {
         const DESC = null;
 
         /**
-         * Constructs an OrderBy helper with allowed sortable fields.
+         * Constructs an ByClause helper with allowed sortable fields.
          *
          * # Arguments
          * - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
          *
          * # Example
          * ```php
-         * $order_by = new Sqlx\OrderBy([
+         * $order_by = new Sqlx\ByClause([
          *     "name",
          *     "age",
          *     "total_posts" => "COUNT(posts.*)"
@@ -426,7 +426,7 @@ namespace Sqlx {
          * - `order_by`: List of fields (as strings or [field, direction] arrays)
          *
          * # Returns
-         * A `RenderedOrderBy` object containing validated SQL ORDER BY clauses
+         * A `RenderedByClause` object containing validated SQL ORDER BY clauses
          * The returning value is to be used as a placeholder value
          *
          * # Exceptions

@@ -3,8 +3,8 @@ use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
 
-#[php_class(name = "Sqlx\\OrderBy")]
-pub struct OrderBy {
+#[php_class(name = "Sqlx\\ByClause")]
+pub struct ByClause {
     pub(crate) defined_fields: HashMap<String, Option<String>>,
 }
 
@@ -13,14 +13,14 @@ pub enum OrderFieldDefinition {
     Full(Vec<String>),
     Short(String),
 }
-impl OrderBy {
+impl ByClause {
     /// Ascending order (A to Z)
     pub const _ASC: &'static str = "ASC";
     /// Descending order (Z to A)
     pub const _DESC: &'static str = "DESC";
 }
 
-impl OrderBy {
+impl ByClause {
     pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
@@ -48,20 +48,20 @@ impl OrderBy {
 }
 
 #[php_impl]
-impl OrderBy {
+impl ByClause {
     /// Ascending order (A to Z)
     const ASC: &'static str = "ASC";
     /// Descending order (Z to A)
     const DESC: &'static str = "DESC";
 
-    /// Constructs an OrderBy helper with allowed sortable fields.
+    /// Constructs an ByClause helper with allowed sortable fields.
     ///
     /// # Arguments
     /// - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
     ///
     /// # Example
     /// ```php
-    /// $order_by = new Sqlx\OrderBy([
+    /// $order_by = new Sqlx\ByClause([
     ///     "name",
     ///     "age",
     ///     "total_posts" => "COUNT(posts.*)"
@@ -69,13 +69,13 @@ impl OrderBy {
     /// ```
 
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        OrderBy::new(defined_fields)
+        ByClause::new(defined_fields)
     }
 
     /// __invoke magic for apply()
 
     #[must_use]
-    pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
+    pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
         self.internal_apply(order_by)
     }
 
@@ -85,33 +85,33 @@ impl OrderBy {
     /// - `order_by`: List of fields (as strings or [field, direction] arrays)
     ///
     /// # Returns
-    /// A `RenderedOrderBy` object containing validated SQL ORDER BY clauses
+    /// A `RenderedByClause` object containing validated SQL ORDER BY clauses
     /// The returning value is to be used as a placeholder value
     ///
     /// # Exceptions
     /// This method does not return an error but silently ignores unknown fields.
     /// Use validation separately if strict input is required.
     #[must_use]
-    pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
+    pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
         self.internal_apply(order_by)
     }
 }
-impl OrderBy {
+impl ByClause {
     #[must_use]
-    pub fn internal_apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedOrderBy {
-        RenderedOrderBy {
+    pub fn internal_apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
+        RenderedByClause {
             __inner: order_by
                 .into_iter()
                 .filter_map(|definition| {
                     let (field, dir) = match definition {
-                        OrderFieldDefinition::Short(name) => (name, OrderBy::ASC),
+                        OrderFieldDefinition::Short(name) => (name, ByClause::ASC),
                         OrderFieldDefinition::Full(vec) => (
                             vec.first()?.clone(),
                             match vec.get(1) {
                                 Some(str) if str.trim().eq_ignore_ascii_case("DESC") => {
-                                    OrderBy::DESC
+                                    ByClause::DESC
                                 }
-                                _ => OrderBy::ASC,
+                                _ => ByClause::ASC,
                             },
                         ),
                     };
@@ -131,17 +131,17 @@ impl OrderBy {
     }
 }
 #[derive(ZvalConvert)]
-pub struct ApplyOrderBy {
+pub struct ApplyByClause {
     inner: Vec<Vec<String>>,
 }
 /// A rendered ORDER BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
-pub struct RenderedOrderBy {
-    // @TODO: make it impossible to alter RenderedOrderBy from PHP side
+pub struct RenderedByClause {
+    // @TODO: make it impossible to alter RenderedByClause from PHP side
     pub(crate) __inner: Vec<String>,
 }
 
-impl RenderedOrderBy {
+impl RenderedByClause {
     #[must_use]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()

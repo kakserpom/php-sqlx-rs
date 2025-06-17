@@ -87,12 +87,12 @@ A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 **⚠️ SAFETY:**
 
 - ✅ You can safely pass any user input as sorting settings.
-- ❌ Do NOT pass user input into the `OrderBy` constructor to avoid SQL injection vulnerabilities.
+- ❌ Do NOT pass user input into the `ByClause` constructor to avoid SQL injection vulnerabilities.
 
 **Examples**:
 
 ```php
-$orderBy = new Sqlx\OrderBy([
+$orderBy = new Sqlx\ByClause([
     'name',
     'created_at',
     'posts' => 'COUNT(posts.*)'
@@ -101,27 +101,27 @@ $orderBy = new Sqlx\OrderBy([
 // Equivalent to: SELECT * FROM users ORDER BY `name` ASC, COUNT(posts.*) DESC
 $driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
   'order_by' => $orderBy([
-    ['name', Sqlx\OrderBy::ASC],
-    ['posts', Sqlx\OrderBy::DESC]
+    ['name', Sqlx\ByClause::ASC],
+    ['posts', Sqlx\ByClause::DESC]
   ])
 ]);
 
 // This will throw an exception: Missing required placeholder `order_by`
 $driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
   'order_by' => $orderBy([
-    ['zzzz', Sqlx\OrderBy::ASC],
+    ['zzzz', Sqlx\ByClause::ASC],
   ])
 ]);
 
 // Equivalent to: SELECT * FROM users
 $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
   'order_by' => $orderBy([
-    ['zzzz', Sqlx\OrderBy::ASC],
+    ['zzzz', Sqlx\ByClause::ASC],
   ])
 ]);
 ```
 
-Note that the direction constants (`OrderBy::ASC` and `OrderBy::DESC`) are just strings (`'ASC'` and `'DESC'`) and
+Note that the direction constants (`ByClause::ASC` and `ByClause::DESC`) are just strings (`'ASC'` and `'DESC'`) and
 you can pass strings from user input (case-insensitively); incorrect strings silently default to `ASC`.
 
 So this code works:

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::RenderedOrderBy;
+use crate::RenderedByClause;
 use anyhow::bail;
 use ext_php_rs::ZvalConvert;
 use itertools::Itertools;
@@ -39,13 +39,13 @@ pub enum PgParameterValue {
     Bool(bool),
     Array(Vec<PgParameterValue>),
     Object(HashMap<String, PgParameterValue>),
-    RenderedOrderBy(RenderedOrderBy),
+    RenderedByClause(RenderedByClause),
 }
 impl PgParameterValue {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         match self {
-            PgParameterValue::RenderedOrderBy(rendered_order_by) => rendered_order_by.is_empty(),
+            PgParameterValue::RenderedByClause(rendered_order_by) => rendered_order_by.is_empty(),
             PgParameterValue::Array(array) => array.is_empty(),
             PgParameterValue::Str(_)
             | PgParameterValue::Int(_)
@@ -311,7 +311,7 @@ impl PgAst {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            PgParameterValue::RenderedOrderBy(order_by) => {
+                            PgParameterValue::RenderedByClause(order_by) => {
                                 for (i, item) in order_by.__inner.iter().enumerate() {
                                     if i > 0 {
                                         sql.push_str(", ");

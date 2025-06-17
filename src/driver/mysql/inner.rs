@@ -710,7 +710,7 @@ where
             MySqlParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             MySqlParameterValue::Object(s) => s.values().fold(q, walker),
-            MySqlParameterValue::RenderedOrderBy(_) => unimplemented!(),
+            MySqlParameterValue::RenderedByClause(_) => unimplemented!(),
         }
     }
 
