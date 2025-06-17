@@ -84,7 +84,7 @@ var_dump($driver->queryAll(
 
 A helper class for safe `ORDER BY` clauses from user input.
 
-**⚠ SAFETY:**
+**⚠️ SAFETY:**
 
 - ✅ You can safely pass any user input as sorting settings.
 - ❌ Do NOT pass user input into the `OrderBy` constructor to avoid SQL injection vulnerabilities.
