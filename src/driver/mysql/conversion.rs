@@ -3,7 +3,6 @@ use crate::driver::conversion::{Conversion, json_into_zval};
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
-use ext_php_rs::ffi::zval;
 use ext_php_rs::types::Zval;
 use sqlx::Column;
 use sqlx::TypeInfo;

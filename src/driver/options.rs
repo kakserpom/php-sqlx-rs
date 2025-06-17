@@ -11,4 +11,6 @@ impl DriverOptions {
 
     pub const OPT_PERSISTENT_NAME: &'static str = "persistent_name";
     pub const OPT_ASSOC_ARRAYS: &'static str = "assoc_arrays";
+
+    pub const OPT_MAX_CONNECTIONS: &'static str = "max_connections";
 }

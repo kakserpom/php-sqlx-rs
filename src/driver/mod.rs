@@ -8,6 +8,5 @@ pub mod mysql;
 pub use mysql::*;
 #[feature(postgres)]
 pub mod postgres;
-use postgres::ast;
 #[feature(postgres)]
 pub use postgres::*;

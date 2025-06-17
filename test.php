@@ -3,12 +3,12 @@ $driver = new Sqlx\PgDriver([
     Sqlx\DriverOptions::OPT_URL => 'postgres://localhost/test',
     Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'test',
 ]);
-var_dump($driver->queryColumnDictionary(
+/*var_dump($driver->queryColumnDictionary(
     'SELECT name, age FROM people WHERE name in (?)',
      [
         ["Peter", "John", "Jane"],
     ]
-));
+));*/
 //var_dump($driver->queryRow('SELECT NULL::BIGINT as nul'));
 /*
 var_dump($driver->queryRow(
@@ -22,8 +22,7 @@ $driver = new Sqlx\MySqlDriver([
     Sqlx\DriverOptions::OPT_URL => 'mysql://root@localhost/mysql',
     Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'test',
 ]);
-
-var_dump($driver->queryValue('SELECT ?', ["123"]));
+var_dump($driver->queryValue("SELECT JSON_OBJECT('name', 'John', 'age', 30)"));
 //return;
 
 /*var_dump($driver->queryRow(

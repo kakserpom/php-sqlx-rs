@@ -1,9 +1,10 @@
 use crate::driver::DriverOptions;
 use crate::driver::mysql::MySqlParameterValue;
-use crate::{DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE};
+use crate::{DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE, DEFAULT_MAX_CONNECTIONS};
 use anyhow::anyhow;
 use ext_php_rs::ZvalConvert;
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 
 pub struct MySqlDriverInnerOptions {
     pub(crate) url: Option<String>,
@@ -11,6 +12,7 @@ pub struct MySqlDriverInnerOptions {
     pub(crate) ast_cache_shard_size: usize,
     pub(crate) persistent_name: Option<String>,
     pub(crate) associative_arrays: bool,
+    pub(crate) max_connections: NonZeroU32,
 }
 impl Default for MySqlDriverInnerOptions {
     fn default() -> Self {
@@ -20,6 +22,7 @@ impl Default for MySqlDriverInnerOptions {
             ast_cache_shard_size: DEFAULT_AST_CACHE_SHARD_SIZE,
             persistent_name: None,
             associative_arrays: false,
+            max_connections: DEFAULT_MAX_CONNECTIONS,
         }
     }
 }
@@ -100,6 +103,19 @@ impl MySqlDriverOptions {
                         }
                     }
                 },
+                max_connections: kv.get(DriverOptions::OPT_MAX_CONNECTIONS).map_or(
+                    Ok(DEFAULT_MAX_CONNECTIONS),
+                    |value| {
+                        if let MySqlParameterValue::Int(n) = value {
+                            Ok(NonZeroU32::try_from(u32::try_from(*n)?)?)
+                        } else {
+                            Err(anyhow!(
+                                "{} must be a positive integer",
+                                DriverOptions::OPT_MAX_CONNECTIONS
+                            ))
+                        }
+                    },
+                )?,
             },
         })
     }

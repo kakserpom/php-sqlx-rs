@@ -17,6 +17,7 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 
 const DEFAULT_AST_CACHE_SHARD_COUNT: usize = 8;
 const DEFAULT_AST_CACHE_SHARD_SIZE: usize = 256;
+const DEFAULT_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(2).unwrap();
 use ext_php_rs::types::Zval;
 
 pub trait ZvalNull {
@@ -38,6 +39,7 @@ pub enum ColumnArgument<'a> {
 #[allow(clippy::wildcard_imports)]
 use crate::driver::*;
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 
 /// Registers the PHP module.
 #[php_module]

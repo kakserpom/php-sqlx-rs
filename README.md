@@ -4,6 +4,8 @@ A PHP extension powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/s
 database access with additional SQL syntax. It's built using
 the [ext-php-rs](https://github.com/davidcole1340/ext-php-rs) crate.
 
+As of this moment only Postgres and MySQL are supported.
+
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBM systems
 without any compromise on performance. The author's not big on PHP, but as a security researcher he understood the
 necessity of modernizing the toolkit of the great many PHP developers. The idea came up, and bish bash bosh, a couple of

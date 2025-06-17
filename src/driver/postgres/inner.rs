@@ -28,13 +28,15 @@ pub struct PgDriverInner {
 impl PgDriverInner {
     pub fn new(options: PgDriverInnerOptions) -> anyhow::Result<Self> {
         let pool = RUNTIME.block_on(
-            PgPoolOptions::new().max_connections(5).connect(
-                options
-                    .url
-                    .clone()
-                    .ok_or_else(|| anyhow!("URL must be set"))?
-                    .as_str(),
-            ),
+            PgPoolOptions::new()
+                .max_connections(options.max_connections.into())
+                .connect(
+                    options
+                        .url
+                        .clone()
+                        .ok_or_else(|| anyhow!("URL must be set"))?
+                        .as_str(),
+                ),
         )?;
         Ok(PgDriverInner {
             pool,
