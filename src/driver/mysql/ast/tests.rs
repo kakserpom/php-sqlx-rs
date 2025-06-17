@@ -57,7 +57,13 @@ fn test_render_var_types() {
     let mut vals = ParamsMap::new();
     vals.insert("id".into(), MySqlParameterValue::Int(7));
     vals.insert("flag".into(), MySqlParameterValue::Bool(true));
-    vals.insert("0".into(), MySqlParameterValue::Array(vec![MySqlParameterValue::Int(1), MySqlParameterValue::Int(2)]));
+    vals.insert(
+        "0".into(),
+        MySqlParameterValue::Array(vec![
+            MySqlParameterValue::Int(1),
+            MySqlParameterValue::Int(2),
+        ]),
+    );
     vals.insert("data".into(), MySqlParameterValue::Str("xyz".into()));
     let (q, params) = ast.render(vals).expect("Rendering failed");
     assert_eq!(
