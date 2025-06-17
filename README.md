@@ -30,6 +30,8 @@ The project is still kind of experimental, so any feedback/ideas will be greatly
 This extension introduces a powerful SQL preprocessor that supports conditional blocks, optional fragments, and named
 parameters.
 
+---
+
 ### Conditional Blocks
 
 Wrap parts of your query with double braces `{{ ... }}` to make them conditional:
@@ -74,6 +76,8 @@ var_dump($driver->queryAll(
     ['names' => ['Peter', 'John', 'Jane']]
 ));
 ```
+
+---
 
 ### Safe and robust `ORDER BY`
 
