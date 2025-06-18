@@ -88,7 +88,7 @@ fn test_render_order_by_apply() {
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
     ])
-    .unwrap();
+        .unwrap();
 
     let rendered = ob.internal_apply(vec![
         OrderFieldDefinition::Short("name".into()),
@@ -117,7 +117,7 @@ fn test_render_order_by_apply_empty() {
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
     ])
-    .unwrap();
+        .unwrap();
 
     let rendered = ob.internal_apply(vec![]);
 
@@ -133,4 +133,30 @@ fn test_render_order_by_apply_empty() {
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id"
     );
     assert_eq!(params, vec![]);
+}
+
+#[test]
+fn test_in_clause_parsing() {
+    let sql = "SELECT * FROM users WHERE status IN :statuses AND age NOT IN (:ages)";
+    let ast = PgAst::parse(sql).unwrap();
+    let (q, p) = ast.render([
+        ("statuses", PgParameterValue::Array(vec![PgParameterValue::Int(1), PgParameterValue::Int(2), PgParameterValue::Int(3)])),
+         ("ages", PgParameterValue::Array(vec![PgParameterValue::Int(20), PgParameterValue::Int(30)])),
+    ])
+        .unwrap();
+
+    assert_eq!(
+        q,
+        "SELECT * FROM users WHERE status IN ($1, $2, $3) AND age NOT IN ($4, $5)"
+    );
+    assert_eq!(
+        p,
+        vec![
+            PgParameterValue::from(1),
+            PgParameterValue::from(2),
+            PgParameterValue::from(3),
+            PgParameterValue::from(20),
+            PgParameterValue::from(30),
+        ]
+    );
 }

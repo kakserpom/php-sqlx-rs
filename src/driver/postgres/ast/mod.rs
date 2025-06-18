@@ -26,6 +26,14 @@ pub enum PgAst {
         branches: Vec<PgAst>,
         required_placeholders: Vec<Placeholder>,
     },
+    InClause {
+        expr: String,
+        placeholder: String,
+    },
+    NotInClause {
+        expr: String,
+        placeholder: String,
+    },
 }
 
 /// Represents a placeholder identifier
@@ -105,6 +113,102 @@ impl PgAst {
             branches: &mut Vec<PgAst>,
             positional_counter: &mut usize,
         ) -> Result<(), String> {
+            fn try_parse_in_clause(
+                chars: &[char],
+                pos: &mut usize,
+                placeholders_out: &mut Vec<String>,
+                branches: &mut Vec<PgAst>,
+                buf: &mut String,
+            ) -> bool {
+                let i = *pos;
+
+                // Try IN :placeholder
+                if chars.get(i) == Some(&'I')
+                    && chars.get(i + 1) == Some(&'N')
+                    && chars.get(i + 2).is_some_and(|x| x.is_whitespace())
+                    && chars.get(i + 3) == Some(&':')
+                {
+                    let name_start = i + 4;
+                    let mut name_end = name_start;
+                    while name_end < chars.len()
+                        && (chars[name_end].is_alphanumeric() || chars[name_end] == '_')
+                    {
+                        name_end += 1;
+                    }
+                    let name: String = chars[name_start..name_end].iter().collect();
+
+                    let buf_trimmed = buf.trim_end().to_owned();
+                    if let Some(split_pos) = buf_trimmed
+                        .rmatch_indices(|c: char| !c.is_whitespace())
+                        .last()
+                        .map(|(i, _)| i + 1)
+                    {
+                        let (prefix, expr) = buf_trimmed.split_at(split_pos);
+                        if !prefix.trim().is_empty() {
+                            branches.push(PgAst::Sql(prefix.to_string()));
+                        }
+                        buf.clear();
+
+                        branches.push(PgAst::InClause {
+                            expr: expr.trim().to_string(),
+                            placeholder: name.clone(),
+                        });
+                        placeholders_out.push(name);
+                        *pos = name_end;
+                        return true;
+                    }
+                }
+
+                // Try NOT IN (:placeholder)
+                if chars.get(i) == Some(&'N')
+                    && chars.get(i + 1) == Some(&'O')
+                    && chars.get(i + 2) == Some(&'T')
+                    && chars.get(i + 3) == Some(&' ')
+                    && chars.get(i + 4) == Some(&'I')
+                    && chars.get(i + 5) == Some(&'N')
+                    && chars.get(i + 6) == Some(&' ')
+                    && chars.get(i + 7) == Some(&'(')
+                    && chars.get(i + 8) == Some(&':')
+                {
+                    let name_start = i + 9;
+                    let mut name_end = name_start;
+                    while name_end < chars.len()
+                        && (chars[name_end].is_alphanumeric() || chars[name_end] == '_')
+                    {
+                        name_end += 1;
+                    }
+
+                    if chars.get(name_end) != Some(&')') {
+                        return false;
+                    }
+
+                    let name: String = chars[name_start..name_end].iter().collect();
+
+                    let buf_trimmed = buf.trim_end().to_owned();
+                    if let Some(split_pos) = buf_trimmed
+                        .rmatch_indices(|c: char| !c.is_whitespace())
+                        .last()
+                        .map(|(i, _)| i + 1)
+                    {
+                        let (prefix, expr) = buf_trimmed.split_at(split_pos);
+                        if !prefix.trim().is_empty() {
+                            branches.push(PgAst::Sql(prefix.to_string()));
+                        }
+                        buf.clear();
+
+                        branches.push(PgAst::NotInClause {
+                            expr: expr.trim().to_string(),
+                            placeholder: name.clone(),
+                        });
+                        placeholders_out.push(name);
+                        *pos = name_end + 1;
+                        return true;
+                    }
+                }
+
+                false
+            }
+
             let mut buf = String::new();
             let mut mode = Mode::Normal;
             while *pos < chars.len() {
@@ -112,6 +216,10 @@ impl PgAst {
                 let next = chars.get(*pos + 1).copied();
                 match mode {
                     Mode::Normal => {
+                        if try_parse_in_clause(chars, pos, placeholders_out, branches, &mut buf) {
+                            continue;
+                        }
+
                         // Optional block start
                         if c == '{' && next == Some('{') {
                             if !buf.is_empty() {
@@ -389,6 +497,34 @@ impl PgAst {
                         for b in branches {
                             walk(b, values, sql, out_vals);
                         }
+                    }
+                }
+                PgAst::InClause { expr, placeholder } => {
+                    if let Some(PgParameterValue::Array(arr)) = values.get(placeholder) {
+                        sql.push_str(expr);
+                        sql.push_str(" IN (");
+                        for (i, item) in arr.iter().enumerate() {
+                            if i > 0 {
+                                sql.push_str(", ");
+                            }
+                            out_vals.push(item.clone());
+                            write!(sql, "${}", out_vals.len()).unwrap();
+                        }
+                        sql.push(')');
+                    }
+                }
+                PgAst::NotInClause { expr, placeholder } => {
+                    if let Some(PgParameterValue::Array(arr)) = values.get(placeholder) {
+                        sql.push_str(expr);
+                        sql.push_str(" NOT IN (");
+                        for (i, item) in arr.iter().enumerate() {
+                            if i > 0 {
+                                sql.push_str(", ");
+                            }
+                            out_vals.push(item.clone());
+                            write!(sql, "${}", out_vals.len()).unwrap();
+                        }
+                        sql.push(')');
                     }
                 }
             }
