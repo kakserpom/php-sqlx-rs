@@ -29,8 +29,9 @@ pub enum PgAst {
 }
 
 /// Represents a placeholder identifier
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Placeholder(pub String);
+//#[derive(Debug, Clone, PartialEq, Eq)]
+//pub struct Placeholder(pub String);
+pub type Placeholder = String;
 
 /// Supported parameter types
 #[derive(ZvalConvert, Debug, Clone, PartialEq)]
@@ -152,7 +153,7 @@ impl PgAst {
                                 *pos += 1;
                             }
                             let name: String = chars[start..*pos].iter().collect();
-                            placeholders_out.push(Placeholder(name.clone()));
+                            placeholders_out.push(name.clone());
                             branches.push(PgAst::Placeholder(name));
                             continue;
                         }
@@ -177,7 +178,7 @@ impl PgAst {
                                         *pos += 1;
                                     }
                                     let name: String = chars[start..*pos].iter().collect();
-                                    placeholders_out.push(Placeholder(name.clone()));
+                                    placeholders_out.push(name.clone());
                                     branches.push(PgAst::Placeholder(name));
                                     continue;
                                 }
@@ -192,7 +193,7 @@ impl PgAst {
                             *pos += 1;
                             *positional_counter += 1;
                             let idx = positional_counter.to_string();
-                            placeholders_out.push(Placeholder(idx.clone()));
+                            placeholders_out.push(idx.clone());
                             branches.push(PgAst::Placeholder(idx));
                             continue;
                         }
@@ -379,7 +380,7 @@ impl PgAst {
                     required_placeholders,
                 } => {
                     if required_placeholders.iter().all(|ph| {
-                        if let Some(value) = values.get(&ph.0) {
+                        if let Some(value) = values.get(ph) {
                             !value.is_empty()
                         } else {
                             false
@@ -412,14 +413,14 @@ impl PgAst {
             ..
         } = self
         {
-            if let Some(missing_placeholder) = required_placeholders.iter().find(|ph| {
-                if let Some(value) = values.get(&ph.0) {
+            if let Some(missing_placeholder) = required_placeholders.into_iter().find(|&ph| {
+                if let Some(value) = values.get(ph) {
                     value.is_empty()
                 } else {
                     true
                 }
             }) {
-                bail!("Missing required placeholder `{}`", missing_placeholder.0);
+                bail!("Missing required placeholder `{missing_placeholder}`");
             }
         }
         walk(self, &values, &mut sql, &mut out_vals);
