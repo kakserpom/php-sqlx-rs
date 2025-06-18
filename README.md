@@ -127,7 +127,7 @@ array(2) {
 > Makes sense, right? Given that `x IN (1, 2, 3)` is sugar for `(x = 1 OR x = 2 OR x = 3)`
 > and `x NOT IN (1, 2, 3)` is sugar for `(x != 1 AND x != 2 AND x != 3)`.
 
-Keep in mind that you can use it not only in `WHERE`, in `ON` clauses when joining.
+Keep in mind that you can not only use it in `WHERE`, but also in `ON` clauses when joining.
 
 > It is true that in simpler cases of `IN :empty` like the above example you could just
 > immediately return an empty result set without sending it to DBMS, but there could be a `JOIN`
