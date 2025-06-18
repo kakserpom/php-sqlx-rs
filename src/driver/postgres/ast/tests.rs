@@ -134,3 +134,85 @@ fn test_render_order_by_apply_empty() {
     );
     assert_eq!(params, vec![]);
 }
+
+#[test]
+fn test_in_clause_parsing() {
+    let sql = "SELECT * FROM users WHERE status IN :statuses AND age NOT IN (:ages)";
+    let ast = PgAst::parse(sql).unwrap();
+    println!("AST = {:#?}", ast);
+    let (q, p) = ast
+        .render([
+            (
+                "statuses",
+                PgParameterValue::Array(vec![
+                    PgParameterValue::Int(1),
+                    PgParameterValue::Int(2),
+                    PgParameterValue::Int(3),
+                ]),
+            ),
+            (
+                "ages",
+                PgParameterValue::Array(vec![PgParameterValue::Int(20), PgParameterValue::Int(30)]),
+            ),
+        ])
+        .unwrap();
+
+    assert_eq!(
+        q,
+        "SELECT * FROM users WHERE status IN ($1, $2, $3) AND age NOT IN ($4, $5)"
+    );
+    assert_eq!(
+        p,
+        vec![
+            PgParameterValue::from(1),
+            PgParameterValue::from(2),
+            PgParameterValue::from(3),
+            PgParameterValue::from(20),
+            PgParameterValue::from(30),
+        ]
+    );
+}
+
+#[test]
+fn test_parse_in_not_in_and_string() {
+    let sql =
+        "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN (:statuses) AND age NOT IN (:ages)";
+    let ast = PgAst::parse(sql).expect("Failed to parse");
+    println!("AST = {:#?}", ast);
+    if let PgAst::Root {
+        branches,
+        required_placeholders,
+    } = ast
+    {
+        // Expect placeholders
+        assert!(required_placeholders.is_empty());
+        // Expect branch count
+        //assert_eq!(branches.len(), 5);
+        // Check sequence of branches
+        match &branches[0] {
+            PgAst::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
+            _ => panic!("Expected Sql at branch 0"),
+        }
+        match &branches[1] {
+            PgAst::InClause { expr, placeholder } => {
+                assert_eq!(expr, "status");
+                assert_eq!(placeholder, "statuses");
+            }
+            _ => panic!("Expected InClause at branch 1"),
+        }
+        match &branches[2] {
+            PgAst::Sql(s) => assert_eq!(s, " AND "),
+            _ => panic!("Expected Sql at branch 2"),
+        }
+        match &branches[3] {
+            PgAst::NotInClause { expr, placeholder } => {
+                assert_eq!(expr, "age");
+                assert_eq!(placeholder, "ages");
+            }
+            _ => panic!("Expected NotInClause at branch 3"),
+        }
+        assert_eq!(branches.len(), 4);
+    } else {
+        panic!("AST root is not Root variant");
+    }
+}
