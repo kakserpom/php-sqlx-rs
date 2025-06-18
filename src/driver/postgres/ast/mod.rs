@@ -198,7 +198,7 @@ impl PgAst {
                             }
                             branches.push(PgAst::NotInClause {
                                 expr: expr.to_string(),
-                                placeholder: name.clone(),
+                                placeholder: name,
                             });
                             buf.clear();
                             rest = &suffix[open + 1 + close_idx + 1..];

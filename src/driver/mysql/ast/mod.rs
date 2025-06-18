@@ -93,7 +93,7 @@ impl From<bool> for MySqlParameterValue {
 
 impl MySqlAst {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
-    /// but ignores them inside string literals and comments, with support for escaping via `\\` and `''`.
+    /// but ignores them inside string literals and comments, with support for escaping via `\` and `''`.
     pub fn parse(input: &str) -> Result<MySqlAst, String> {
         fn inner<'s>(
             mut rest: &'s str,
@@ -110,19 +110,15 @@ impl MySqlAst {
                     let mut iter = rest.char_indices().skip(1).peekable();
                     while let Some((i, c)) = iter.next() {
                         if c == '\\' {
-                            // backslash escape, skip next character
                             if let Some((j, _)) = iter.next() {
                                 idx = j + 1;
-                                continue;
                             }
                         } else if c == '\'' {
-                            // '' escape: two single-quotes
                             if let Some((_, '\'')) = iter.peek().copied() {
                                 iter.next();
                                 idx = i + 2;
                                 continue;
                             }
-                            // closing quote
                             idx = i + 1;
                             break;
                         }
@@ -132,21 +128,21 @@ impl MySqlAst {
                     rest = &rest[idx..];
                     continue;
                 }
-                // Handle line comment -- until newline
+                // Line comment --
                 if let Some(r) = rest.strip_prefix("--") {
                     let end = r.find('\n').map(|i| i + 1).unwrap_or(r.len());
                     buf.push_str(&rest[..2 + end]);
                     rest = &rest[2 + end..];
                     continue;
                 }
-                // Handle line comment # until newline
+                // Line comment #
                 if let Some(r) = rest.strip_prefix("#") {
                     let end = r.find('\n').map(|i| i + 1).unwrap_or(r.len());
                     buf.push_str(&rest[..1 + end]);
                     rest = &rest[1 + end..];
                     continue;
                 }
-                // Handle block comment /* ... */
+                // Block comment /* */
                 if let Some(r) = rest.strip_prefix("/*") {
                     if let Some(close) = r.find("*/") {
                         buf.push_str(&rest[..2 + close + 2]);
@@ -170,18 +166,23 @@ impl MySqlAst {
                     });
                     continue;
                 }
-                // Conditional block end
+                // }} conditional end
                 if let Some(r) = rest.strip_prefix("}}") {
                     if !buf.is_empty() {
                         branches.push(MySqlAst::Sql(std::mem::take(&mut buf)));
                     }
                     return Ok(r);
                 }
-                // NOT IN (...) support
+                // NOT IN support (with or without parentheses)
                 if let Some(suffix) = rest.strip_prefix("NOT IN") {
-                    if let Some(open) = suffix.find('(') {
-                        if let Some(close_idx) = suffix[open + 1..].find(')') {
-                            let inside = &suffix[open + 1..open + 1 + close_idx].trim();
+                    let after = suffix.trim_start();
+                    let offset = rest.len() - suffix.len();
+                    let mut name_opt = None;
+                    let mut consumed = 0;
+                    // parentheses form
+                    if after.starts_with('(') {
+                        if let Some(cl) = after[1..].find(')') {
+                            let inside = &after[1..1 + cl].trim();
                             let name = if let Some(id) = inside.strip_prefix(':') {
                                 id.to_string()
                             } else if let Some(id) = inside.strip_prefix('$') {
@@ -192,48 +193,73 @@ impl MySqlAst {
                             } else {
                                 return Err("Invalid placeholder inside NOT IN".into());
                             };
-                            // split buf at last whitespace, include space
-                            let trimmed = buf.trim_end();
-                            let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                                Some((a, b)) => (format!("{} ", a), b),
-                                None => (String::new(), trimmed),
-                            };
-                            if !pre.is_empty() {
-                                branches.push(MySqlAst::Sql(pre));
-                            }
-                            branches.push(MySqlAst::NotInClause {
-                                expr: expr.to_string(),
-                                placeholder: name,
-                            });
-                            buf.clear();
-                            rest = &suffix[open + 1 + close_idx + 1..];
-                            continue;
+                            consumed = offset + 1 + cl + 2;
+                            name_opt = Some(name);
+                        }
+                    } else {
+                        // non-parentheses form
+                        if let Some(sfx) = after.strip_prefix(':') {
+                            let ident: String = sfx
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            consumed = offset + 1 + ident.len();
+                            name_opt = Some(ident);
+                        } else if let Some(sfx) = after.strip_prefix('$') {
+                            let ident: String = sfx
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            consumed = offset + 1 + ident.len();
+                            name_opt = Some(ident);
+                        } else if after.starts_with('?') {
+                            *positional_counter += 1;
+                            let num = positional_counter.to_string();
+                            consumed = offset + 1;
+                            name_opt = Some(num);
                         }
                     }
+                    if let Some(name) = name_opt {
+                        let trimmed = buf.trim_end();
+                        let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
+                            Some((a, b)) => (format!("{} ", a), b),
+                            None => (String::new(), trimmed),
+                        };
+                        if !pre.is_empty() {
+                            branches.push(MySqlAst::Sql(pre));
+                        }
+                        branches.push(MySqlAst::NotInClause {
+                            expr: expr.to_string(),
+                            placeholder: name,
+                        });
+                        buf.clear();
+                        rest = &rest[consumed..];
+                        continue;
+                    }
                 }
-                // IN ... support
-                if let Some(r_after) = rest.strip_prefix("IN") {
-                    let r2 = r_after.trim_start();
-                    let orig_len = rest.len();
-                    let (opt_name, consumed) = if let Some(sfx) = r2.strip_prefix(':') {
+                // IN support
+                if let Some(r2) = rest.strip_prefix("IN") {
+                    let after = r2.trim_start();
+                    let orig = rest.len();
+                    let (opt_name, consumed) = if let Some(sfx) = after.strip_prefix(':') {
                         let ident: String = sfx
                             .chars()
                             .take_while(|c| c.is_alphanumeric() || *c == '_')
                             .collect();
-                        (Some(ident.clone()), orig_len - r2.len() + 1 + ident.len())
-                    } else if let Some(sfx) = r2.strip_prefix('$') {
+                        (Some(ident.clone()), orig - after.len() + 1 + ident.len())
+                    } else if let Some(sfx) = after.strip_prefix('$') {
                         let ident: String = sfx
                             .chars()
                             .take_while(|c| c.is_alphanumeric() || *c == '_')
                             .collect();
-                        (Some(ident.clone()), orig_len - r2.len() + 1 + ident.len())
-                    } else if r2.starts_with('?') {
+                        (Some(ident.clone()), orig - after.len() + 1 + ident.len())
+                    } else if after.starts_with('?') {
                         *positional_counter += 1;
                         let num = positional_counter.to_string();
-                        (Some(num.clone()), orig_len - r2.len() + 1)
-                    } else if r2.starts_with('(') {
-                        if let Some(cl) = r2[1..].find(')') {
-                            let inside = &r2[1..1 + cl].trim();
+                        (Some(num.clone()), orig - after.len() + 1)
+                    } else if after.starts_with('(') {
+                        if let Some(cl) = after[1..].find(')') {
+                            let inside = &after[1..1 + cl].trim();
                             let name = if let Some(id) = inside.strip_prefix(':') {
                                 id.to_string()
                             } else if let Some(id) = inside.strip_prefix('$') {
@@ -244,7 +270,7 @@ impl MySqlAst {
                             } else {
                                 return Err("Invalid placeholder inside IN (...)".into());
                             };
-                            (Some(name.clone()), orig_len - r2.len() + 1 + cl + 1)
+                            (Some(name.clone()), orig - after.len() + 1 + cl + 1)
                         } else {
                             (None, 0)
                         }
@@ -269,7 +295,7 @@ impl MySqlAst {
                         continue;
                     }
                 }
-                // Named placeholder :param
+                // :param
                 if let Some(a) = rest.strip_prefix(":") {
                     if let Some((nm, rm)) = a
                         .char_indices()
@@ -287,7 +313,7 @@ impl MySqlAst {
                         continue;
                     }
                 }
-                // Named placeholder $param
+                // $param
                 if let Some(a) = rest.strip_prefix("$") {
                     if let Some((nm, rm)) = a
                         .char_indices()
@@ -305,7 +331,7 @@ impl MySqlAst {
                         continue;
                     }
                 }
-                // Positional ?
+                // ? positional
                 if let Some(rp) = rest.strip_prefix("?") {
                     if !buf.is_empty() {
                         branches.push(MySqlAst::Sql(std::mem::take(&mut buf)));
@@ -317,17 +343,17 @@ impl MySqlAst {
                     rest = rp;
                     continue;
                 }
-                // Type cast ::
+                // :: cast
                 if let Some(rp) = rest.strip_prefix("::") {
                     buf.push_str("::");
                     rest = rp;
                     continue;
                 }
-                // Default: one char
+                // default char
                 let ch = rest.chars().next().unwrap();
-                let len = ch.len_utf8();
-                buf.push_str(&rest[..len]);
-                rest = &rest[len..];
+                let l = ch.len_utf8();
+                buf.push_str(&rest[..l]);
+                rest = &rest[l..];
             }
             if !buf.is_empty() {
                 branches.push(MySqlAst::Sql(buf));
@@ -474,7 +500,7 @@ impl MySqlAst {
                 MySqlAst::NotInClause { expr, placeholder } => match values.get(placeholder) {
                     Some(MySqlParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() + (arr.len() - 1) * 2);
-                        sql.push_str(expr);
+                        write!(sql, "{expr} NOT IN (").unwrap();
                         sql.push_str(" NOT IN (");
                         for (i, item) in arr.iter().enumerate() {
                             if i > 0 {

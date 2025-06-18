@@ -140,12 +140,9 @@ fn test_render_order_by_apply_empty() {
 }
 
 #[test]
-fn test_mysql_parse_in_not_in_and_string() {
-    let sql =
-        "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN :statuses AND age NOT IN :ages";
+fn test_parse_in_not_in_and_string() {
+    let sql = "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN (:statuses) AND age NOT IN (:ages)";
     let ast = MySqlAst::parse(sql).expect("Failed to parse MySQL AST");
-    println!("{:#?}", ast);
-    assert!(false);
     if let MySqlAst::Root {
         branches,
         required_placeholders,
