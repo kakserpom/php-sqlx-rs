@@ -87,14 +87,19 @@ var_dump($driver->dry(
   'SELECT * FROM people WHERE name IN :names', [
     'names' => []
   ]
-));
-/*array(2) {
+));/
+```
+
+Outputs:
+
+```
+array(2) {
   [0]=>
   string(53) "SELECT * FROM people WHERE FALSE /* name IN :names */"
   [1]=>
   array(0) {
   }
-}*/
+}
 ```
 
 Same goes for `NOT IN`, except it will collapse into boolean `TRUE`.
@@ -105,17 +110,22 @@ var_dump($driver->dry(
     'names' => []
   ]
 ));
-/*array(2) {
+```
+
+Outputs:
+
+```
+array(2) {
   [0]=>
   string(56) "SELECT * FROM people WHERE TRUE /* name NOT IN :names */"
   [1]=>
   array(0) {
   }
-}*/
+}
 ```
 
 > Makes sense, right? Given that `x IN (1, 2, 3)` is sugar for `(x = 1 OR x = 2 OR x = 3)`
-> and `x NOT IN (1, 2, 3)` is sugar for `(x != 1 AND x != 2 AND x != 3)`
+> and `x NOT IN (1, 2, 3)` is sugar for `(x != 1 AND x != 2 AND x != 3)`.
 
 Keep in mind that you can use it not only in `WHERE`, in `ON` clauses when joining.
 
