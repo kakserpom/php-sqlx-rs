@@ -18,8 +18,8 @@ The project is still kind of experimental, so any feedback/ideas will be greatly
 - AST-based SQL augmentation (e.g., conditional blocks)
 - Named parameters with `$param`, `:param`, or positional `:1` syntax
 - Automatic result conversion to PHP arrays or objects
-- Painless `IN (?)` clause expansion
-- Safe and robust `ORDER BY`
+- Painless `IN (?)` / `NOT IN (?)` clauses expansion and collapse
+- Safe and robust `ORDER BY` / `GROUP BY` clauses
 - Native JSON and bigint support
 - Optional persistent connections (with connection pooling)
 
@@ -66,21 +66,65 @@ The above example will throw an exception if `$since` is not set.
 
 ---
 
-### Painless `IN (?)`
+### Painless `IN (?)` / `NOT IN (?)` clauses expansion and collapse
 
 Passing an array as a parameter to a single placeholder automatically expands it:
 
 ```php
-var_dump($driver->queryAll(
-  'SELECT * FROM people WHERE name IN (:names)', [
+// Expands to: SELECT * FROM people WHERE name IN (?, ?, ?)
+// with values ['Peter', 'John', 'Jane']
+$rows = $driver->queryAll(
+  'SELECT * FROM people WHERE name IN :names', [
     'names' => ['Peter', 'John', 'Jane']
   ]
-));
+);
 ```
 
+Omitting the parameter or passing an empty array will make `IN` collapse into boolean `FALSE`.
+
+```php
+var_dump($driver->dry(
+  'SELECT * FROM people WHERE name IN :names', [
+    'names' => []
+  ]
+));
+/*array(2) {
+  [0]=>
+  string(53) "SELECT * FROM people WHERE FALSE /* name IN :names */"
+  [1]=>
+  array(0) {
+  }
+}*/
+```
+
+Same goes for `NOT IN`, except it will collapse into boolean `TRUE`.
+
+```php
+var_dump($driver->dry(
+  'SELECT * FROM people WHERE name NOT IN :names', [
+    'names' => []
+  ]
+));
+/*array(2) {
+  [0]=>
+  string(56) "SELECT * FROM people WHERE TRUE /* name NOT IN :names */"
+  [1]=>
+  array(0) {
+  }
+}*/
+```
+
+> Makes sense, right? Given that `x IN (1, 2, 3)` is sugar for `(x = 1 OR x = 2 OR x = 3)`
+> and `x NOT IN (1, 2, 3)` is sugar for `(x != 1 AND x != 2 AND x != 3)`
+
+Keep in mind that you can use it not only in `WHERE`, in `ON` clauses when joining.
+
+> It is true that in simpler cases of `IN :empty` like the above example you could just
+> immediately return an empty result set without sending it to DBMS, but there could be a `JOIN`
+> or a `UNION`.
 ---
 
-### Safe and robust `ORDER BY` / `GROUP BY`
+### Safe and robust `ORDER BY` / `GROUP BY` clauses
 
 A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 
@@ -91,6 +135,7 @@ A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 **Examples**:
 
 ```php
+// Let's define allowed fields
 $orderBy = new Sqlx\ByClause([
     'name',
     'created_at',

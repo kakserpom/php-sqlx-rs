@@ -93,7 +93,7 @@ impl From<bool> for MySqlParameterValue {
 
 impl MySqlAst {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
-    /// but ignores them inside string literals and comments, with support for escaping via `\` and `''`.
+    /// but ignores them inside string literals and comments.
     pub fn parse(input: &str) -> Result<MySqlAst, String> {
         fn inner<'s>(
             mut rest: &'s str,
@@ -203,19 +203,19 @@ impl MySqlAst {
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
-                            consumed = offset + 1 + ident.len();
+                            consumed = offset + 2 + ident.len();
                             name_opt = Some(ident);
                         } else if let Some(sfx) = after.strip_prefix('$') {
                             let ident: String = sfx
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
-                            consumed = offset + 1 + ident.len();
+                            consumed = offset + 2 + ident.len();
                             name_opt = Some(ident);
                         } else if after.starts_with('?') {
                             *positional_counter += 1;
                             let num = positional_counter.to_string();
-                            consumed = offset + 1;
+                            consumed = offset + 2;
                             name_opt = Some(num);
                         }
                     }
@@ -246,17 +246,18 @@ impl MySqlAst {
                             .chars()
                             .take_while(|c| c.is_alphanumeric() || *c == '_')
                             .collect();
-                        (Some(ident.clone()), orig - after.len() + 1 + ident.len())
+                        let consumed = orig - after.len() + 1 + ident.len();
+                        (Some(ident), consumed)
                     } else if let Some(sfx) = after.strip_prefix('$') {
                         let ident: String = sfx
                             .chars()
                             .take_while(|c| c.is_alphanumeric() || *c == '_')
                             .collect();
-                        (Some(ident.clone()), orig - after.len() + 1 + ident.len())
+                        let consumed = orig - after.len() + 1 + ident.len();
+                        (Some(ident), consumed)
                     } else if after.starts_with('?') {
                         *positional_counter += 1;
-                        let num = positional_counter.to_string();
-                        (Some(num.clone()), orig - after.len() + 1)
+                        (Some(positional_counter.to_string()), orig - after.len() + 1)
                     } else if after.starts_with('(') {
                         if let Some(cl) = after[1..].find(')') {
                             let inside = &after[1..1 + cl].trim();
@@ -270,7 +271,7 @@ impl MySqlAst {
                             } else {
                                 return Err("Invalid placeholder inside IN (...)".into());
                             };
-                            (Some(name.clone()), orig - after.len() + 1 + cl + 1)
+                            (Some(name), orig - after.len() + 1 + cl + 1)
                         } else {
                             (None, 0)
                         }

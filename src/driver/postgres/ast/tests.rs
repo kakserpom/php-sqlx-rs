@@ -175,9 +175,9 @@ fn test_in_clause_parsing() {
 
 #[test]
 fn test_parse_in_not_in_and_string() {
-    let sql = "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN :statuses AND age NOT IN (:ages)";
+    let sql =
+        "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN (:statuses) AND age NOT IN (:ages)";
     let ast = PgAst::parse(sql).expect("Failed to parse");
-
     println!("AST = {:#?}", ast);
     if let PgAst::Root {
         branches,

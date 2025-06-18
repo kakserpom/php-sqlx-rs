@@ -95,7 +95,7 @@ impl From<bool> for PgParameterValue {
 }
 impl PgAst {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
-    /// but ignores them inside string literals and comments, with support for escaping via `\\`.
+    /// but ignores them inside string literals and comments.
     /// Returns an `AST::Nested` of top-level branches.
     pub fn parse(input: &str) -> Result<PgAst, String> {
         fn inner<'s>(
@@ -171,11 +171,16 @@ impl PgAst {
                     return Ok(r);
                 }
 
-                // --- NOT IN (...) ---
+                // NOT IN support (with or without parentheses)
                 if let Some(suffix) = rest.strip_prefix("NOT IN") {
-                    if let Some(open) = suffix.find('(') {
-                        if let Some(close_idx) = suffix[open + 1..].find(')') {
-                            let inside = &suffix[open + 1..open + 1 + close_idx].trim();
+                    let after = suffix.trim_start();
+                    let offset = rest.len() - suffix.len();
+                    let mut name_opt = None;
+                    let mut consumed = 0;
+                    // parentheses form
+                    if after.starts_with('(') {
+                        if let Some(cl) = after[1..].find(')') {
+                            let inside = &after[1..1 + cl].trim();
                             let name = if let Some(id) = inside.strip_prefix(':') {
                                 id.to_string()
                             } else if let Some(id) = inside.strip_prefix('$') {
@@ -186,24 +191,48 @@ impl PgAst {
                             } else {
                                 return Err("Invalid placeholder inside NOT IN".into());
                             };
-
-                            // split buf into prefix (with trailing space) and expr
-                            let trimmed = buf.trim_end();
-                            let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                                Some((a, b)) => (format!("{} ", a), b),
-                                None => ("".to_string(), trimmed),
-                            };
-                            if !pre.is_empty() {
-                                branches.push(PgAst::Sql(pre));
-                            }
-                            branches.push(PgAst::NotInClause {
-                                expr: expr.to_string(),
-                                placeholder: name,
-                            });
-                            buf.clear();
-                            rest = &suffix[open + 1 + close_idx + 1..];
-                            continue;
+                            consumed = offset + 1 + cl + 2;
+                            name_opt = Some(name);
                         }
+                    } else {
+                        // non-parentheses form
+                        if let Some(sfx) = after.strip_prefix(':') {
+                            let ident: String = sfx
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            consumed = offset + 2 + ident.len();
+                            name_opt = Some(ident);
+                        } else if let Some(sfx) = after.strip_prefix('$') {
+                            let ident: String = sfx
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            consumed = offset + 2 + ident.len();
+                            name_opt = Some(ident);
+                        } else if after.starts_with('?') {
+                            *positional_counter += 1;
+                            let num = positional_counter.to_string();
+                            consumed = offset + 2;
+                            name_opt = Some(num);
+                        }
+                    }
+                    if let Some(name) = name_opt {
+                        let trimmed = buf.trim_end();
+                        let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
+                            Some((a, b)) => (format!("{} ", a), b),
+                            None => (String::new(), trimmed),
+                        };
+                        if !pre.is_empty() {
+                            branches.push(PgAst::Sql(pre));
+                        }
+                        branches.push(PgAst::NotInClause {
+                            expr: expr.to_string(),
+                            placeholder: name,
+                        });
+                        buf.clear();
+                        rest = &rest[consumed..];
+                        continue;
                     }
                 }
 
@@ -218,9 +247,10 @@ impl PgAst {
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
+                            let consumed_len = original_len - rest_after_in.len() + 1 + ident.len();
                             (
-                                Some(ident.clone()),
-                                original_len - rest_after_in.len() + 1 + ident.len(),
+                                Some(ident),
+                                consumed_len,
                             )
                         } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
                             let ident: String = sfx
@@ -509,7 +539,7 @@ impl PgAst {
                         sql.push(')');
                     }
                     _ => {
-                        write!(sql, "TRUE /* {expr} IN :{placeholder} */").unwrap();
+                        write!(sql, "TRUE /* {expr} NOT IN :{placeholder} */").unwrap();
                     }
                 },
             }
