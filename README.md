@@ -89,6 +89,7 @@ var_dump($driver->dry(
   ]
 ));/
 ```
+
 ```
 array(2) {
   [0]=>
@@ -108,6 +109,7 @@ var_dump($driver->dry(
   ]
 ));
 ```
+
 ```
 array(2) {
   [0]=>

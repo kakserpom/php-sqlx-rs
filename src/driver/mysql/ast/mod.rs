@@ -177,24 +177,23 @@ impl MySqlAst {
                 if let Some(suffix) = rest.strip_prefix("NOT IN") {
                     let after = suffix.trim_start();
                     let offset = rest.len() - suffix.len();
-                    let mut name_opt = None;
                     let mut consumed = 0;
+                    let mut name_opt = None;
                     // parentheses form
                     if after.starts_with('(') {
                         if let Some(cl) = after[1..].find(')') {
                             let inside = &after[1..1 + cl].trim();
-                            let name = if let Some(id) = inside.strip_prefix(':') {
-                                id.to_string()
+                            if let Some(id) = inside.strip_prefix(':') {
+                                consumed = offset + 1 + cl + 2;
+                                name_opt = Some(id.to_string());
                             } else if let Some(id) = inside.strip_prefix('$') {
-                                id.to_string()
+                                consumed = offset + 1 + cl + 2;
+                                name_opt = Some(id.to_string());
                             } else if *inside == "?" {
                                 *positional_counter += 1;
-                                positional_counter.to_string()
-                            } else {
-                                return Err("Invalid placeholder inside NOT IN".into());
-                            };
-                            consumed = offset + 1 + cl + 2;
-                            name_opt = Some(name);
+                                consumed = offset + 1 + cl + 2;
+                                name_opt = Some(positional_counter.to_string());
+                            }
                         }
                     } else {
                         // non-parentheses form
@@ -241,44 +240,43 @@ impl MySqlAst {
                 if let Some(r2) = rest.strip_prefix("IN") {
                     let after = r2.trim_start();
                     let orig = rest.len();
-                    let (opt_name, consumed) = if let Some(sfx) = after.strip_prefix(':') {
+                    let mut consumed = 0;
+                    let mut name_opt = None;
+                    if let Some(sfx) = after.strip_prefix(':') {
                         let ident: String = sfx
                             .chars()
                             .take_while(|c| c.is_alphanumeric() || *c == '_')
                             .collect();
-                        let consumed = orig - after.len() + 1 + ident.len();
-                        (Some(ident), consumed)
+                        consumed = orig - after.len() + 1 + ident.len();
+                        name_opt = Some(ident);
                     } else if let Some(sfx) = after.strip_prefix('$') {
                         let ident: String = sfx
                             .chars()
                             .take_while(|c| c.is_alphanumeric() || *c == '_')
                             .collect();
-                        let consumed = orig - after.len() + 1 + ident.len();
-                        (Some(ident), consumed)
+                        consumed = orig - after.len() + 1 + ident.len();
+                        name_opt = Some(ident);
                     } else if after.starts_with('?') {
                         *positional_counter += 1;
-                        (Some(positional_counter.to_string()), orig - after.len() + 1)
+                        consumed = orig - after.len() + 1;
+                        name_opt = Some(positional_counter.to_string());
                     } else if after.starts_with('(') {
                         if let Some(cl) = after[1..].find(')') {
                             let inside = &after[1..1 + cl].trim();
-                            let name = if let Some(id) = inside.strip_prefix(':') {
-                                id.to_string()
+                            if let Some(id) = inside.strip_prefix(':') {
+                                consumed = orig - after.len() + 1 + cl + 1;
+                                name_opt = Some(id.to_string());
                             } else if let Some(id) = inside.strip_prefix('$') {
-                                id.to_string()
+                                consumed = orig - after.len() + 1 + cl + 1;
+                                name_opt = Some(id.to_string())
                             } else if *inside == "?" {
                                 *positional_counter += 1;
-                                positional_counter.to_string()
-                            } else {
-                                return Err("Invalid placeholder inside IN (...)".into());
-                            };
-                            (Some(name), orig - after.len() + 1 + cl + 1)
-                        } else {
-                            (None, 0)
+                                consumed = orig - after.len() + 1 + cl + 1;
+                                name_opt = Some(positional_counter.to_string());
+                            }
                         }
-                    } else {
-                        (None, 0)
-                    };
-                    if let Some(name) = opt_name {
+                    }
+                    if let Some(name) = name_opt {
                         let trimmed = buf.trim_end();
                         let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
                             Some((a, b)) => (format!("{} ", a), b),
