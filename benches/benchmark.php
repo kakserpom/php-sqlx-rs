@@ -4,20 +4,36 @@
 class AnnotatedBench
 {
     private $driver;
+    private $byClause;
     public function __construct() {
         $this->driver = new Sqlx\PgDriver([
             Sqlx\DriverOptions::OPT_URL => 'postgres://localhost/postgres',
         ]);
+        $this->byClause = new Sqlx\ByClause([
+          "name" => "u.name",
+          "email" => "u.email",
+      ]);;
     }
+
+/**
+     * @Revs(100000)
+     */
+    public function benchDrySmall(): void
+    {
+        [$sql, $values] = $this->driver->dry('SELECT id, name, meta
+FROM users
+WHERE TRUE
+{{ AND status = $status }}
+{{ AND created_at >= $since }}
+LIMIT :limit',
+         ["status" => "accepted", "created_after" => "1111111", "limit" => "10"]);
+    }
+
     /**
-     * @Revs(1000000)
+     * @Revs(100000)
      */
     public function benchDryBig(): void
     {
-        $order_by = new Sqlx\ByClause([
-            "name" => "u.name",
-            "email" => "u.email",
-        ]);
         [$sql, $values] = $this->driver->dry("SELECT
             u.id,
             u.name,
@@ -38,7 +54,7 @@ class AnnotatedBench
          {{ ORDER BY :order_by }}
          {{ LIMIT :limit }}
          {{ OFFSET :offset }}",
-         ["status" => "accepted", "created_after" => "1111111", "order_by" => $order_by(["name", "desc"]), "limit" => "10"]);
+         ["status" => "accepted", "created_after" => "1111111", "order_by" => ($this->byClause)(["name", "desc"]), "limit" => "10"]);
     }
     /**
      * @Revs(1000)

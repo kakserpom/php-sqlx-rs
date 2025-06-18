@@ -7,6 +7,7 @@ pub mod byclause;
 pub mod driver;
 pub mod selectclause;
 mod tests;
+mod utils;
 
 use crate::byclause::{ByClause, OrderFieldDefinition, ByClauseRendered};
 use crate::selectclause::{SelectClause, SelectClauseRendered};

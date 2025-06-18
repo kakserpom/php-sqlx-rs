@@ -490,16 +490,23 @@ cargo bench
 Here are M1 Max results for parsing and rendering a hefty query. No caching involved.
 
 ```
-PgAst::parse_big        time:   [3.0870 µs 3.1082 µs 3.1336 µs]
-                        change: [−1.4427% −0.6376% +0.0736%] (p = 0.10 > 0.05)
+PgAst::parse_small      time:   [1.7338 µs 1.7372 µs 1.7407 µs]
+                        change: [−0.3878% −0.1775% +0.0396%] (p = 0.16 > 0.05)
                         No change in performance detected.
-Found 15 outliers among 100 measurements (15.00%)
-  6 (6.00%) high mild
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+
+PgAst::parse_big        time:   [4.2893 µs 4.2934 µs 4.2981 µs]
+                        change: [−2.1134% −1.7715% −1.4759%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 11 outliers among 100 measurements (11.00%)
+  2 (2.00%) high mild
   9 (9.00%) high severe
 
-PgAst::render_big       time:   [1.7095 µs 1.7308 µs 1.7615 µs]
-                        change: [−1.0453% +0.1129% +1.1654%] (p = 0.86 > 0.05)
-                        No change in performance detected.
+PgAst::render_big       time:   [1.9202 µs 1.9277 µs 1.9384 µs]
+                        change: [−1.1267% −0.8127% −0.4082%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+
 ```
 
 ### PHP benchmarks
@@ -523,9 +530,9 @@ docker run php-sqlx-benches
 M1 Max results:
 
 ```
-\AnnotatedBench
-
-    benchDryBig.............................I0 - Mo3.725μs (±0.00%)
+    benchDrySmall...........................I0 - Mo2.049μs (±0.00%)
+    benchDryBig.............................I0 - Mo5.703μs (±0.00%)
+    benchSelect1kRows.......................I0 - Mo923.265μs (±0.00%)
 ```
 
 ## License

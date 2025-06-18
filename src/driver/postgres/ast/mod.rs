@@ -4,6 +4,7 @@ mod tests;
 use crate::ByClauseRendered;
 use crate::byclause::ByClauseRenderedField;
 use crate::selectclause::{SelectClauseRendered, SelectClauseRenderedField};
+use crate::utils::StripPrefixIgnoreAsciiCase;
 use anyhow::bail;
 use ext_php_rs::ZvalConvert;
 use itertools::Itertools;
@@ -171,7 +172,7 @@ impl PgAst {
                 }
 
                 // NOT IN support (with or without parentheses)
-                if let Some(suffix) = rest.strip_prefix("NOT IN") {
+                if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
                     let after = suffix.trim_start();
                     let offset = rest.len() - suffix.len();
                     let mut consumed = 0;
@@ -237,7 +238,7 @@ impl PgAst {
                 }
 
                 // --- IN ... ---
-                if let Some(rest_after_in) = rest.strip_prefix("IN") {
+                if let Some(rest_after_in) = rest.strip_prefix_ignore_ascii_case("IN") {
                     let rest_after_in = rest_after_in.trim_start();
                     let original_len = rest.len();
 

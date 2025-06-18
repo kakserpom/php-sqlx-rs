@@ -1,6 +1,5 @@
 use super::*;
 use crate::OrderFieldDefinition;
-use itertools::assert_equal;
 
 #[test]
 fn test_named_and_positional() {
