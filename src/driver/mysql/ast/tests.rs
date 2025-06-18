@@ -106,7 +106,7 @@ fn test_render_order_by_apply() {
 
     assert_eq!(
         query,
-        "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY users.name ASC, COUNT(posts.id) DESC"
+        "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY users.name, COUNT(posts.id) DESC"
     );
     assert_eq!(params, vec![]);
 }

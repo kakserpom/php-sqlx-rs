@@ -1,7 +1,9 @@
 #[cfg(test)]
 mod tests;
 
-use crate::RenderedByClause;
+use crate::ByClauseRendered;
+use crate::byclause::ByClauseRenderedField;
+use crate::selectclause::{SelectClauseRendered, SelectClauseRenderedField};
 use anyhow::bail;
 use ext_php_rs::ZvalConvert;
 use itertools::Itertools;
@@ -39,15 +41,16 @@ pub enum MySqlParameterValue {
     Bool(bool),
     Array(Vec<MySqlParameterValue>),
     Object(HashMap<String, MySqlParameterValue>),
-    RenderedByClause(RenderedByClause),
+    RenderedSelectClause(SelectClauseRendered),
+    RenderedByClause(ByClauseRendered),
 }
 impl MySqlParameterValue {
     #[must_use]
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
-            MySqlParameterValue::RenderedByClause(rendered_order_by) => {
-                rendered_order_by.is_empty()
-            }
+            MySqlParameterValue::RenderedByClause(x) => x.is_empty(),
+            MySqlParameterValue::RenderedSelectClause(x) => x.is_empty(),
             MySqlParameterValue::Array(array) => array.is_empty(),
             MySqlParameterValue::Str(_)
             | MySqlParameterValue::Int(_)
@@ -313,12 +316,41 @@ impl MySqlAst {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            MySqlParameterValue::RenderedByClause(order_by) => {
-                                for (i, item) in order_by.__inner.iter().enumerate() {
+                            MySqlParameterValue::RenderedSelectClause(fields) => {
+                                for (i, SelectClauseRenderedField { field, expression }) in
+                                    fields.__inner.iter().enumerate()
+                                {
                                     if i > 0 {
                                         sql.push_str(", ");
                                     }
-                                    sql.push_str(item);
+                                    if let Some(expression) = expression {
+                                        sql.push_str(&format!("{expression} AS `{field}`"));
+                                    } else {
+                                        sql.push_str(&format!("`{field}`"));
+                                    }
+                                }
+                            }
+                            MySqlParameterValue::RenderedByClause(order_by) => {
+                                for (
+                                    i,
+                                    ByClauseRenderedField {
+                                        expression_or_identifier,
+                                        is_expression,
+                                        descending_order,
+                                    },
+                                ) in order_by.__inner.iter().enumerate()
+                                {
+                                    if i > 0 {
+                                        sql.push_str(", ");
+                                    }
+                                    if *is_expression {
+                                        sql.push_str(expression_or_identifier);
+                                    } else {
+                                        sql.push_str(&format!("`{expression_or_identifier}`"));
+                                    }
+                                    if *descending_order {
+                                        sql.push_str(" DESC");
+                                    }
                                 }
                             }
                             MySqlParameterValue::Array(arr) => {

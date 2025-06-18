@@ -716,7 +716,8 @@ where
             MySqlParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             MySqlParameterValue::Object(s) => s.values().fold(q, walker),
-            MySqlParameterValue::RenderedByClause(_) => unimplemented!(),
+            MySqlParameterValue::RenderedByClause(_)
+            | MySqlParameterValue::RenderedSelectClause(_) => unimplemented!(),
         }
     }
 

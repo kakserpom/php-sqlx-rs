@@ -5,11 +5,11 @@
 #![cfg_attr(windows, feature(abi_vectorcall))]
 pub mod byclause;
 pub mod driver;
-pub mod fieldsclause;
+pub mod selectclause;
 mod tests;
 
-use crate::byclause::{ByClause, OrderFieldDefinition, RenderedByClause};
-use crate::fieldsclause::{FieldsClause, RenderedFieldsClause};
+use crate::byclause::{ByClause, OrderFieldDefinition, ByClauseRendered};
+use crate::selectclause::{SelectClause, SelectClauseRendered};
 use ext_php_rs::prelude::*;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;

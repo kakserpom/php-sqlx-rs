@@ -2,12 +2,13 @@ use crate::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
+use trim_in_place::TrimInPlace;
 
-#[php_class(name = "Sqlx\\FieldsClause")]
-pub struct FieldsClause {
+#[php_class(name = "Sqlx\\SelectClause")]
+pub struct SelectClause {
     pub(crate) defined_fields: HashMap<String, Option<String>>,
 }
-impl FieldsClause {
+impl SelectClause {
     pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
@@ -35,15 +36,15 @@ impl FieldsClause {
 }
 
 #[php_impl]
-impl FieldsClause {
-    /// Constructs an FieldsClause helper with allowed sortable fields.
+impl SelectClause {
+    /// Constructs an SelectClause helper with allowed sortable fields.
     ///
     /// # Arguments
     /// - `defined_fields`: Map of allowed SELECT fields
     ///
     /// # Example
     /// ```php
-    /// $order_by = new Sqlx\FieldsClause([
+    /// $order_by = new Sqlx\SelectClause([
     ///     "name",
     ///     "age",
     ///     "department_name" => "dp.name"
@@ -51,13 +52,13 @@ impl FieldsClause {
     /// ```
 
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        FieldsClause::new(defined_fields)
+        SelectClause::new(defined_fields)
     }
 
     /// __invoke magic for apply()
 
     #[must_use]
-    pub fn __invoke(&self, order_by: Vec<String>) -> RenderedFieldsClause {
+    pub fn __invoke(&self, order_by: Vec<String>) -> SelectClauseRendered {
         self.internal_apply(order_by)
     }
 
@@ -67,35 +68,30 @@ impl FieldsClause {
     /// - `fields`: List of fields
     ///
     /// # Returns
-    /// A `RenderedFieldsClause` object containing validated SQL SELECT clauses
+    /// A `RenderedSelectClause` object containing validated SQL SELECT clauses
     /// The returning value is to be used as a placeholder value
     ///
     /// # Exceptions
     /// This method does not return an error but silently ignores unknown fields.
     /// Use validation separately if strict input is required.
     #[must_use]
-    pub fn apply(&self, fields: Vec<String>) -> RenderedFieldsClause {
+    pub fn apply(&self, fields: Vec<String>) -> SelectClauseRendered {
         self.internal_apply(fields)
     }
 }
-impl FieldsClause {
+impl SelectClause {
     #[must_use]
-    pub fn internal_apply(&self, fields: Vec<String>) -> RenderedFieldsClause {
-        RenderedFieldsClause {
+    pub fn internal_apply(&self, fields: Vec<String>) -> SelectClauseRendered {
+        SelectClauseRendered {
             __inner: fields
                 .into_iter()
-                .filter_map(|field| {
-                    let field = field.trim();
-                    if let Some(definition) = self.defined_fields.get(field) {
-                        if let Some(right_side) = definition {
-                            Some(format!("{right_side} AS `{field}`"))
-                        } else {
-                            // @TODO: ` or "
-                            Some(format!("{field}"))
+                .filter_map(|mut field| {
+                    self.defined_fields.get(field.trim_in_place()).map(|expr| {
+                        SelectClauseRenderedField {
+                            field,
+                            expression: expr.clone(),
                         }
-                    } else {
-                        None
-                    }
+                    })
                 })
                 .collect(),
         }
@@ -103,11 +99,16 @@ impl FieldsClause {
 }
 /// A rendered ORDER BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
-pub struct RenderedFieldsClause {
-    // @TODO: make it impossible to alter RenderedFieldsClause from PHP side
-    pub(crate) __inner: Vec<String>,
+pub struct SelectClauseRendered {
+    // @TODO: make it impossible to alter RenderedSelectClause from PHP side
+    pub(crate) __inner: Vec<SelectClauseRenderedField>,
 }
-impl RenderedFieldsClause {
+#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+pub struct SelectClauseRenderedField {
+    pub(crate) field: String,
+    pub(crate) expression: Option<String>,
+}
+impl SelectClauseRendered {
     #[must_use]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()

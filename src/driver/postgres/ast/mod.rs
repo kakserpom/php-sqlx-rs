@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests;
 
-use crate::RenderedByClause;
-use crate::fieldsclause::RenderedFieldsClause;
+use crate::ByClauseRendered;
+use crate::byclause::ByClauseRenderedField;
+use crate::selectclause::{SelectClauseRendered, SelectClauseRenderedField};
 use anyhow::bail;
 use ext_php_rs::ZvalConvert;
 use itertools::Itertools;
@@ -40,17 +41,16 @@ pub enum PgParameterValue {
     Bool(bool),
     Array(Vec<PgParameterValue>),
     Object(HashMap<String, PgParameterValue>),
-    RenderedByClause(RenderedByClause),
-    RenderedFieldsClause(RenderedFieldsClause),
+    RenderedByClause(ByClauseRendered),
+    RenderedSelectClause(SelectClauseRendered),
 }
 impl PgParameterValue {
     #[must_use]
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
-            PgParameterValue::RenderedByClause(rendered_order_by) => rendered_order_by.is_empty(),
-            PgParameterValue::RenderedFieldsClause(rendered_order_by) => {
-                rendered_order_by.is_empty()
-            }
+            PgParameterValue::RenderedByClause(x) => x.is_empty(),
+            PgParameterValue::RenderedSelectClause(x) => x.is_empty(),
             PgParameterValue::Array(array) => array.is_empty(),
             PgParameterValue::Str(_)
             | PgParameterValue::Int(_)
@@ -316,12 +316,46 @@ impl PgAst {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            PgParameterValue::RenderedByClause(order_by) => {
-                                for (i, item) in order_by.__inner.iter().enumerate() {
+                            PgParameterValue::RenderedSelectClause(fields) => {
+                                for (
+                                    i,
+                                    SelectClauseRenderedField {
+                                        field,
+                                        expression: expr,
+                                    },
+                                ) in fields.__inner.iter().enumerate()
+                                {
                                     if i > 0 {
                                         sql.push_str(", ");
                                     }
-                                    sql.push_str(item);
+                                    if let Some(expr) = expr {
+                                        sql.push_str(&format!("{expr} AS \"{field}\""));
+                                    } else {
+                                        sql.push_str(&format!("\"{field}\""));
+                                    }
+                                }
+                            }
+                            PgParameterValue::RenderedByClause(order_by) => {
+                                for (
+                                    i,
+                                    ByClauseRenderedField {
+                                        expression_or_identifier,
+                                        is_expression,
+                                        descending_order,
+                                    },
+                                ) in order_by.__inner.iter().enumerate()
+                                {
+                                    if i > 0 {
+                                        sql.push_str(", ");
+                                    }
+                                    if *is_expression {
+                                        sql.push_str(expression_or_identifier);
+                                    } else {
+                                        sql.push_str(&format!("\"{expression_or_identifier}\""));
+                                    }
+                                    if *descending_order {
+                                        sql.push_str(" DESC");
+                                    }
                                 }
                             }
                             PgParameterValue::Array(arr) => {

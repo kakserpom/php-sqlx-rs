@@ -84,10 +84,9 @@ var_dump($driver->queryAll(
 
 A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 
-**⚠️ SAFETY:**
-
-- ✅ You can safely pass any user input as sorting settings.
-- ❌ Do NOT pass user input into the `ByClause` constructor to avoid SQL injection vulnerabilities.
+> **⚠️ SAFETY:**
+> - ✅ You can safely pass any user input as sorting settings.
+> - ❌ Do NOT pass unsanitized user input into `ByClause` constructor to avoid SQL injection vulnerabilities.
 
 **Examples**:
 
@@ -95,15 +94,44 @@ A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 $orderBy = new Sqlx\ByClause([
     'name',
     'created_at',
-    'posts' => 'COUNT(posts.*)'
+    'random' => 'RANDOM()'
 ]);
 
-// Equivalent to: SELECT * FROM users ORDER BY `name` ASC, COUNT(posts.*) DESC
+// Equivalent to: SELECT * FROM users ORDER BY `name` ASC, RANDOM()
 $driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
   'order_by' => $orderBy([
     ['name', Sqlx\ByClause::ASC],
-    ['posts', Sqlx\ByClause::DESC]
+    'random'
   ])
+]);
+
+```
+
+Field names are case-sensitive, but they get trimmed.
+
+---
+
+### Safe and robust `SELECT`
+
+A helper class for safe `SELECT` clauses from user input.
+
+> **⚠️ SAFETY:**
+> - ✅ You can safely pass any user input as invocation argument.
+>- ❌ Do NOT pass unsanitized user input into `SelectClause` constructor to avoid SQL injection vulnerabilities.
+
+**Examples**:
+
+```php
+$select = new Sqlx\SelectClause([
+    'id',
+    'created_at',
+    'name' => , 
+    '' => 'COUNT(posts.*)'
+]);
+
+// Equivalent to: SELECT `id`, FROM users
+$driver->queryAll('SELECT :select FROM users', [
+  'select' => $select(['id','name'])
 ]);
 
 // This will throw an exception: Missing required placeholder `order_by`

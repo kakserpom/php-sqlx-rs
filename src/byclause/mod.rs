@@ -2,6 +2,7 @@ use crate::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
+use trim_in_place::TrimInPlace;
 
 #[php_class(name = "Sqlx\\ByClause")]
 pub struct ByClause {
@@ -75,7 +76,7 @@ impl ByClause {
     /// __invoke magic for apply()
 
     #[must_use]
-    pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
+    pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> ByClauseRendered {
         self.internal_apply(order_by)
     }
 
@@ -92,39 +93,44 @@ impl ByClause {
     /// This method does not return an error but silently ignores unknown fields.
     /// Use validation separately if strict input is required.
     #[must_use]
-    pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
+    pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> ByClauseRendered {
         self.internal_apply(order_by)
     }
 }
 impl ByClause {
     #[must_use]
-    pub fn internal_apply(&self, order_by: Vec<OrderFieldDefinition>) -> RenderedByClause {
-        RenderedByClause {
+    pub fn internal_apply(&self, order_by: Vec<OrderFieldDefinition>) -> ByClauseRendered {
+        ByClauseRendered {
             __inner: order_by
                 .into_iter()
                 .filter_map(|definition| {
-                    let (field, dir) = match definition {
-                        OrderFieldDefinition::Short(name) => (name, ByClause::ASC),
+                    let (mut field, descending_order) = match definition {
+                        OrderFieldDefinition::Short(name) => (name, false),
                         OrderFieldDefinition::Full(vec) => (
                             vec.first()?.clone(),
                             match vec.get(1) {
-                                Some(str) if str.trim().eq_ignore_ascii_case("DESC") => {
-                                    ByClause::DESC
-                                }
-                                _ => ByClause::ASC,
+                                Some(str) if str.trim().eq_ignore_ascii_case(Self::_DESC) => true,
+                                _ => false,
                             },
                         ),
                     };
-                    let field = field.trim();
-                    if let Some(definition) = self.defined_fields.get(field) {
-                        if let Some(right_side) = definition {
-                            Some(format!("{right_side} {dir}"))
-                        } else {
-                            Some(format!("`{field}` {dir}"))
-                        }
-                    } else {
-                        None
-                    }
+                    self.defined_fields
+                        .get(field.trim_in_place())
+                        .map(|definition| {
+                            if let Some(expression) = definition {
+                                ByClauseRenderedField {
+                                    expression_or_identifier: expression.clone(),
+                                    is_expression: true,
+                                    descending_order,
+                                }
+                            } else {
+                                ByClauseRenderedField {
+                                    expression_or_identifier: field,
+                                    is_expression: false,
+                                    descending_order,
+                                }
+                            }
+                        })
                 })
                 .collect(),
         }
@@ -132,13 +138,21 @@ impl ByClause {
 }
 /// A rendered ORDER BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
-pub struct RenderedByClause {
+pub struct ByClauseRendered {
     // @TODO: make it impossible to alter RenderedByClause from PHP side
-    pub(crate) __inner: Vec<String>,
+    pub(crate) __inner: Vec<ByClauseRenderedField>,
 }
 
-impl RenderedByClause {
+#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+pub struct ByClauseRenderedField {
+    pub(crate) expression_or_identifier: String,
+    pub(crate) is_expression: bool,
+    pub(crate) descending_order: bool,
+}
+
+impl ByClauseRendered {
     #[must_use]
+    #[inline(always)]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()
     }

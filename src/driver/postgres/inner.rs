@@ -707,7 +707,7 @@ where
             PgParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             PgParameterValue::Object(s) => s.values().fold(q, walker),
-            PgParameterValue::RenderedByClause(_) | PgParameterValue::RenderedFieldsClause(_) => {
+            PgParameterValue::RenderedByClause(_) | PgParameterValue::RenderedSelectClause(_) => {
                 unimplemented!()
             }
         }

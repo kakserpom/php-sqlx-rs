@@ -1466,6 +1466,7 @@ dependencies = [
  "sqlx",
  "threadsafe-lru",
  "tokio",
+ "trim-in-place",
 ]
 
 [[package]]
@@ -2363,6 +2364,12 @@ checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
 dependencies = [
  "once_cell",
 ]
+
+[[package]]
+name = "trim-in-place"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "343e926fc669bc8cde4fa3129ab681c63671bae288b1f1081ceee6d9d37904fc"
 
 [[package]]
 name = "typenum"
