@@ -54,6 +54,7 @@ fn test_render_var_types() {
     let sql =
         "SELECT * FROM table WHERE id = $id AND active = :flag AND scores IN (?) AND data = $data";
     let ast = MySqlAst::parse(sql).unwrap();
+    println!("{:#?}", ast);
     let mut vals = ParamsMap::new();
     vals.insert("id".into(), MySqlParameterValue::Int(7));
     vals.insert("flag".into(), MySqlParameterValue::Bool(true));
