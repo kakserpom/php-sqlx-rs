@@ -93,7 +93,6 @@ impl From<bool> for PgParameterValue {
         PgParameterValue::Bool(s)
     }
 }
-
 impl PgAst {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments, with support for escaping via `\\`.
@@ -108,6 +107,47 @@ impl PgAst {
             let mut buf = String::new();
 
             while !rest.is_empty() {
+                // Handle SQL string literal '...' with '' escape
+                if rest.starts_with('\'') {
+                    let mut idx = 1;
+                    let mut iter = rest.char_indices().skip(1).peekable();
+                    while let Some((i, c)) = iter.next() {
+                        if c == '\'' {
+                            // escaped ''? skip second '
+                            if let Some((_, '\'')) = iter.peek() {
+                                iter.next();
+                                continue;
+                            }
+                            idx = i + c.len_utf8();
+                            break;
+                        }
+                    }
+                    let literal = &rest[..idx];
+                    buf.push_str(literal);
+                    rest = &rest[idx..];
+                    continue;
+                }
+                // Handle line comment -- until newline
+                if let Some(r) = rest.strip_prefix("--") {
+                    // include '--' and content up to newline
+                    let end = r.find('\n').map(|i| i + 1).unwrap_or(r.len());
+                    let comment = &rest[..2 + end];
+                    buf.push_str(comment);
+                    rest = &rest[2 + end..];
+                    continue;
+                }
+                // Handle block comment /* ... */
+                if let Some(r) = rest.strip_prefix("/*") {
+                    if let Some(close) = r.find("*/") {
+                        let comment = &rest[..2 + close + 2];
+                        buf.push_str(comment);
+                        rest = &rest[2 + close + 2..];
+                        continue;
+                    } else {
+                        return Err("Unterminated block comment".into());
+                    }
+                }
+
                 // Conditional block start
                 if let Some(r) = rest.strip_prefix("{{") {
                     if !buf.is_empty() {
@@ -126,7 +166,7 @@ impl PgAst {
                 // Conditional block end
                 if let Some(r) = rest.strip_prefix("}}") {
                     if !buf.is_empty() {
-                        branches.push(PgAst::Sql(std::mem::take(&mut (buf))));
+                        branches.push(PgAst::Sql(std::mem::take(&mut buf)));
                     }
                     return Ok(r);
                 }
@@ -136,7 +176,6 @@ impl PgAst {
                     if let Some(open) = suffix.find('(') {
                         if let Some(close_idx) = suffix[open + 1..].find(')') {
                             let inside = &suffix[open + 1..open + 1 + close_idx].trim();
-                            // determine placeholder name and handle '?' as positional
                             let name = if let Some(id) = inside.strip_prefix(':') {
                                 id.to_string()
                             } else if let Some(id) = inside.strip_prefix('$') {
@@ -161,7 +200,6 @@ impl PgAst {
                                 expr: expr.to_string(),
                                 placeholder: name.clone(),
                             });
-                            placeholders_out.push(name);
                             buf.clear();
                             rest = &suffix[open + 1 + close_idx + 1..];
                             continue;
@@ -174,7 +212,6 @@ impl PgAst {
                     let rest_after_in = rest_after_in.trim_start();
                     let original_len = rest.len();
 
-                    // determine placeholder/name and consumed length
                     let (name_opt, consumed_len) =
                         if let Some(sfx) = rest_after_in.strip_prefix(':') {
                             let ident: String = sfx
@@ -195,7 +232,6 @@ impl PgAst {
                                 original_len - rest_after_in.len() + 1 + ident.len(),
                             )
                         } else if rest_after_in.starts_with('?') {
-                            // positional inside IN
                             *positional_counter += 1;
                             let num = positional_counter.to_string();
                             (Some(num.clone()), original_len - rest_after_in.len() + 1)
@@ -224,7 +260,6 @@ impl PgAst {
                         };
 
                     if let Some(name) = name_opt {
-                        // split buf into prefix (with trailing space) and expr
                         let trimmed = buf.trim_end();
                         let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
                             Some((a, b)) => (format!("{} ", a), b),
@@ -235,9 +270,8 @@ impl PgAst {
                         }
                         branches.push(PgAst::InClause {
                             expr: expr.to_string(),
-                            placeholder: name.clone(),
+                            placeholder: name,
                         });
-                        placeholders_out.push(name);
                         buf.clear();
                         rest = &rest[consumed_len..];
                         continue;
@@ -328,6 +362,12 @@ impl PgAst {
             required_placeholders: placeholders,
         })
     }
+}
+
+impl PgAst {
+    /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
+    /// but ignores them inside string literals and comments, with support for escaping via `\\`.
+    /// Returns an `AST::Nested` of top-level branches.
 
     /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
@@ -437,8 +477,8 @@ impl PgAst {
                         }
                     }
                 }
-                PgAst::InClause { expr, placeholder } => {
-                    if let Some(PgParameterValue::Array(arr)) = values.get(placeholder) {
+                PgAst::InClause { expr, placeholder } => match values.get(placeholder) {
+                    Some(PgParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.push_str(expr);
                         sql.push_str(" IN (");
                         for (i, item) in arr.iter().enumerate() {
@@ -450,9 +490,13 @@ impl PgAst {
                         }
                         sql.push(')');
                     }
-                }
-                PgAst::NotInClause { expr, placeholder } => {
-                    if let Some(PgParameterValue::Array(arr)) = values.get(placeholder) {
+                    _ => {
+                        write!(sql, "FALSE /* {expr} IN :{placeholder} */").unwrap();
+                    }
+                },
+                PgAst::NotInClause { expr, placeholder } => match values.get(placeholder) {
+                    Some(PgParameterValue::Array(arr)) if !arr.is_empty() => {
+                        sql.reserve(expr.len() + 9 + arr.len() * 2 + (arr.len() - 1) * 2);
                         sql.push_str(expr);
                         sql.push_str(" NOT IN (");
                         for (i, item) in arr.iter().enumerate() {
@@ -464,7 +508,10 @@ impl PgAst {
                         }
                         sql.push(')');
                     }
-                }
+                    _ => {
+                        write!(sql, "TRUE /* {expr} IN :{placeholder} */").unwrap();
+                    }
+                },
             }
         }
 

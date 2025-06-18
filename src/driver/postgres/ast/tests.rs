@@ -172,3 +172,47 @@ fn test_in_clause_parsing() {
         ]
     );
 }
+
+#[test]
+fn test_parse_in_not_in_and_string() {
+    let sql = "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN :statuses AND age NOT IN (:ages)";
+    let ast = PgAst::parse(sql).expect("Failed to parse");
+
+    println!("AST = {:#?}", ast);
+    if let PgAst::Root {
+        branches,
+        required_placeholders,
+    } = ast
+    {
+        // Expect placeholders
+        assert!(required_placeholders.is_empty());
+        // Expect branch count
+        //assert_eq!(branches.len(), 5);
+        // Check sequence of branches
+        match &branches[0] {
+            PgAst::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
+            _ => panic!("Expected Sql at branch 0"),
+        }
+        match &branches[1] {
+            PgAst::InClause { expr, placeholder } => {
+                assert_eq!(expr, "status");
+                assert_eq!(placeholder, "statuses");
+            }
+            _ => panic!("Expected InClause at branch 1"),
+        }
+        match &branches[2] {
+            PgAst::Sql(s) => assert_eq!(s, " AND "),
+            _ => panic!("Expected Sql at branch 2"),
+        }
+        match &branches[3] {
+            PgAst::NotInClause { expr, placeholder } => {
+                assert_eq!(expr, "age");
+                assert_eq!(placeholder, "ages");
+            }
+            _ => panic!("Expected NotInClause at branch 3"),
+        }
+        assert_eq!(branches.len(), 4);
+    } else {
+        panic!("AST root is not Root variant");
+    }
+}
