@@ -139,45 +139,47 @@ fn test_render_order_by_apply_empty() {
     assert_eq!(params, vec![]);
 }
 
-#[cfg(test)]
-mod mysql_tests {
-    use super::*;
-
-    #[test]
-    fn test_mysql_parse_in_not_in_and_string() {
-        let sql = "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN :statuses AND age NOT IN (:ages)";
-        let ast = MySqlAst::parse(sql).expect("Failed to parse MySQL AST");
-        if let MySqlAst::Root { branches, required_placeholders } = ast {
-            assert!(required_placeholders.is_empty());
-            // 0: Sql up to AND before IN
-            match &branches[0] {
-                MySqlAst::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
-                _ => panic!("Expected Sql at branch 0"),
-            }
-            // 1: InClause
-            match &branches[1] {
-                MySqlAst::InClause { expr, placeholder } => {
-                    assert_eq!(expr, "status");
-                    assert_eq!(placeholder, "statuses");
-                }
-                _ => panic!("Expected InClause at branch 1"),
-            }
-            // 2: Sql between clauses
-            match &branches[2] {
-                MySqlAst::Sql(s) => assert_eq!(s, " AND "),
-                _ => panic!("Expected Sql at branch 2"),
-            }
-            // 3: NotInClause
-            match &branches[3] {
-                MySqlAst::NotInClause { expr, placeholder } => {
-                    assert_eq!(expr, "age");
-                    assert_eq!(placeholder, "ages");
-                }
-                _ => panic!("Expected NotInClause at branch 3"),
-            }
-            assert_eq!(branches.len(), 4);
-        } else {
-            panic!("Expected Root variant for MySqlAst");
+#[test]
+fn test_mysql_parse_in_not_in_and_string() {
+    let sql =
+        "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN :statuses AND age NOT IN :ages";
+    let ast = MySqlAst::parse(sql).expect("Failed to parse MySQL AST");
+    println!("{:#?}", ast);
+    assert!(false);
+    if let MySqlAst::Root {
+        branches,
+        required_placeholders,
+    } = ast
+    {
+        assert!(required_placeholders.is_empty());
+        // 0: Sql up to AND before IN
+        match &branches[0] {
+            MySqlAst::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
+            _ => panic!("Expected Sql at branch 0"),
         }
+        // 1: InClause
+        match &branches[1] {
+            MySqlAst::InClause { expr, placeholder } => {
+                assert_eq!(expr, "status");
+                assert_eq!(placeholder, "statuses");
+            }
+            _ => panic!("Expected InClause at branch 1"),
+        }
+        // 2: Sql between clauses
+        match &branches[2] {
+            MySqlAst::Sql(s) => assert_eq!(s, " AND "),
+            _ => panic!("Expected Sql at branch 2"),
+        }
+        // 3: NotInClause
+        match &branches[3] {
+            MySqlAst::NotInClause { expr, placeholder } => {
+                assert_eq!(expr, "age");
+                assert_eq!(placeholder, "ages");
+            }
+            _ => panic!("Expected NotInClause at branch 3"),
+        }
+        assert_eq!(branches.len(), 4);
+    } else {
+        panic!("Expected Root variant for MySqlAst");
     }
 }
