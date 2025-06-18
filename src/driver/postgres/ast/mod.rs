@@ -143,9 +143,8 @@ impl PgAst {
                         buf.push_str(comment);
                         rest = &rest[2 + close + 2..];
                         continue;
-                    } else {
-                        return Err("Unterminated block comment".into());
                     }
+                    return Err("Unterminated block comment".into());
                 }
 
                 // Conditional block start
@@ -216,18 +215,21 @@ impl PgAst {
                         }
                     }
                     if let Some(name) = name_opt {
-                        let trimmed = buf.trim_end();
-                        let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                            Some((a, b)) => (format!("{} ", a), b),
-                            None => (String::new(), trimmed),
-                        };
-                        if !pre.is_empty() {
-                            branches.push(PgAst::Sql(pre));
+                        buf.trim_end_in_place();
+                        if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
+                            if !left.is_empty() {
+                                branches.push(PgAst::Sql(format!("{} ", left)));
+                            }
+                            branches.push(PgAst::NotInClause {
+                                expr: expr.to_string(),
+                                placeholder: name,
+                            });
+                        } else {
+                            branches.push(PgAst::NotInClause {
+                                expr: buf.clone(),
+                                placeholder: name,
+                            });
                         }
-                        branches.push(PgAst::NotInClause {
-                            expr: expr.to_string(),
-                            placeholder: name,
-                        });
                         buf.clear();
                         rest = &rest[consumed..];
                         continue;
@@ -240,17 +242,17 @@ impl PgAst {
                     let original_len = rest.len();
 
                     let mut consumed = 0;
-                    let mut name_option = None;
+                    let mut name_opt = None;
                     if let Some(sfx) = rest_after_in.strip_prefix(':') {
                         let ident: String = sfx
                             .chars()
                             .take_while(|c| c.is_alphanumeric() || *c == '_')
                             .collect();
                         consumed = original_len - rest_after_in.len() + 1 + ident.len();
-                        name_option = Some(ident);
+                        name_opt = Some(ident);
                     } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
                         consumed = original_len - rest_after_in.len();
-                        name_option = Some(
+                        name_opt = Some(
                             sfx.chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect(),
@@ -258,35 +260,38 @@ impl PgAst {
                     } else if rest_after_in.starts_with('?') {
                         *positional_counter += 1;
                         consumed = original_len - rest_after_in.len() + 1;
-                        name_option = Some(positional_counter.to_string());
+                        name_opt = Some(positional_counter.to_string());
                     } else if rest_after_in.starts_with('(') {
                         if let Some(close_idx) = rest_after_in[1..].find(')') {
                             let inside = &rest_after_in[1..1 + close_idx].trim();
                             if let Some(id) = inside.strip_prefix(':') {
-                                name_option = Some(id.to_string());
+                                name_opt = Some(id.to_string());
                             } else if let Some(id) = inside.strip_prefix('$') {
-                                name_option = Some(id.to_string());
+                                name_opt = Some(id.to_string());
                             } else if *inside == "?" {
                                 *positional_counter += 1;
-                                name_option = Some(positional_counter.to_string());
+                                name_opt = Some(positional_counter.to_string());
                             }
                             consumed = original_len - rest_after_in.len() + 1 + close_idx + 1;
                         }
                     }
 
-                    if let Some(name) = name_option {
-                        let trimmed = buf.trim_end();
-                        let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                            Some((a, b)) => (format!("{} ", a), b),
-                            None => ("".to_string(), trimmed),
-                        };
-                        if !pre.is_empty() {
-                            branches.push(PgAst::Sql(pre));
+                    if let Some(name) = name_opt {
+                        buf.trim_end_in_place();
+                        if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
+                            if !left.is_empty() {
+                                branches.push(PgAst::Sql(format!("{} ", left)));
+                            }
+                            branches.push(PgAst::InClause {
+                                expr: expr.to_string(),
+                                placeholder: name,
+                            });
+                        } else {
+                            branches.push(PgAst::InClause {
+                                expr: buf.clone(),
+                                placeholder: name,
+                            });
                         }
-                        branches.push(PgAst::InClause {
-                            expr: expr.to_string(),
-                            placeholder: name,
-                        });
                         buf.clear();
                         rest = &rest[consumed..];
                         continue;
