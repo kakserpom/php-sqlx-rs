@@ -136,7 +136,8 @@ A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 
 > __SAFETY CONCERNS__
 > - 🟢 You can safely pass any user input as sorting settings.
-> - 🔴 Do NOT pass unsanitized user input into `ByClause` constructor to avoid SQL injection vulnerabilities. If you absolutely have to, then apply `array_values()` to the argument to avoid SQL injections.
+> - 🔴 Do NOT pass unsanitized user input into `ByClause` constructor to avoid SQL injection vulnerabilities. If you
+    absolutely have to, then apply `array_values()` to the argument to avoid SQL injections.
 
 **Examples**:
 
@@ -168,7 +169,8 @@ A helper class for safe `SELECT` clauses from user input.
 
 > __SAFETY CONCERNS__
 > - 🟢 You can safely pass any user input as invocation argument.
-> - 🔴 Do NOT pass unsanitized user input into `SelectClause` constructor to avoid SQL injection vulnerabilities. If you absolutely have to, then apply `array_values()` to the argument to avoid SQL injections.
+> - 🔴 Do NOT pass unsanitized user input into `SelectClause` constructor to avoid SQL injection vulnerabilities. If you
+    absolutely have to, then apply `array_values()` to the argument to avoid SQL injections.
 
 **Examples**:
 
@@ -268,7 +270,7 @@ cargo php install --release --yes
 
 ## API
 
-### Sqlx\PgDriver
+### `Sqlx\PgDriver` \| `Sqlx\MySqlDriver`
 
 ```php
 $driver = new Sqlx\PgDriver("postgres://user:pass@localhost/db");
@@ -363,14 +365,14 @@ All helpers listed above have their prepared-query counterparts:
 
 ### Dictionary helpers (first column as key, row as value)
 
-| Method                   | Returns                         | Notes                                  |
-|--------------------------|---------------------------------|----------------------------------------|
-| `queryDictionary()`      | `array<string, array \|object>` | key = first column, value = entire row |
-| `queryDictionaryAssoc()` | `array<string, array>`          | ∟ forces associative arrays            |
-| `queryDictionaryObj()`   | `array<string, object>`         | ∟ forces objects                       |
+| Method                   | Returns                                 | Notes                                  |
+|--------------------------|-----------------------------------------|----------------------------------------|
+| `queryDictionary()`      | `array<string \| int, array \| object>` | key = first column, value = entire row |
+| `queryDictionaryAssoc()` | `array<string \| int, array>`           | ∟ forces associative arrays            |
+| `queryDictionaryObj()`   | `array<string \| int, object>`          | ∟ forces objects                       |
 
-> ⚠️ First column **must** be convertible to string, otherwise an exception will be thrown.
-> 🔀 The iteration order is preserved.
+> - ⚠️ First column **must** be scalar, otherwise an exception will be thrown.
+> - 🔀 The iteration order is preserved.
 
 ```php
 var_dump($driver->queryGroupedColumnDictionary(
@@ -389,11 +391,11 @@ array(2) {
 
 ### Column Dictionary helpers (first column as key, second as value)
 
-| Method                         | Returns                | Notes                                                   |
-|--------------------------------|------------------------|---------------------------------------------------------|
-| `queryColumnDictionary()`      | `array<string, mixed>` | key = first column, value = second column               |
-| `queryColumnDictionaryAssoc()` | ↑                      | ∟ enforces array mode for second column if it's a JSON  |
-| `queryColumnDictionaryObj()`   | ↑                      | ∟ enforces object mode for second column if it's a JSON |
+| Method                         | Returns                       | Notes                                                   |
+|--------------------------------|-------------------------------|---------------------------------------------------------|
+| `queryColumnDictionary()`      | `array<string \| int, mixed>` | key = first column, value = second column               |
+| `queryColumnDictionaryAssoc()` | ↑                             | ∟ enforces array mode for second column if it's a JSON  |
+| `queryColumnDictionaryObj()`   | ↑                             | ∟ enforces object mode for second column if it's a JSON |
 
 ```php
 var_dump($driver->queryColumnDictionary(
