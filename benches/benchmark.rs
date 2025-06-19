@@ -35,17 +35,17 @@ GROUP BY u.id
 fn bench_pg_ast(c: &mut Criterion) {
     c.bench_function("PgAst::parse_small", |b| {
         b.iter(|| {
-            let _res = black_box(PgAst::parse(QUERY_SMALL));
+            let _res = black_box(PgAst::parse(QUERY_SMALL, true));
         })
     });
     c.bench_function("PgAst::parse_big", |b| {
         b.iter(|| {
-            let _res = black_box(PgAst::parse(QUERY_BIG));
+            let _res = black_box(PgAst::parse(QUERY_BIG, true));
         })
     });
 
     c.bench_function("PgAst::render_big", |b| {
-        let ast = PgAst::parse(QUERY_BIG).unwrap();
+        let ast = PgAst::parse(QUERY_BIG, true).unwrap();
         b.iter(|| {
             let _res = black_box(ast.render(HashMap::from([
                 ("status", "accepted"),
