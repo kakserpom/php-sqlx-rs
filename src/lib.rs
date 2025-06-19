@@ -24,8 +24,12 @@ const DEFAULT_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(2).unwrap();
 const DEFAULT_ASSOC_ARRAYS: bool = false;
 const DEFAULT_COLLAPSIBLE_IN: bool = true;
 
-#[allow(clippy::wildcard_imports)]
-use crate::driver::*;
+use crate::driver::DriverOptions;
+#[cfg(feature = "mysql")]
+pub use driver::mysql::*;
+#[cfg(feature = "postgres")]
+pub use driver::postgres::*;
+
 use ext_php_rs::types::Zval;
 use std::collections::HashMap;
 use std::num::NonZeroU32;

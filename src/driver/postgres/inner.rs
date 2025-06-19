@@ -1,6 +1,6 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::RUNTIME;
-use crate::driver::PgParameterValue;
+use crate::driver::postgres::PgParameterValue;
 use crate::driver::conversion::Conversion;
 use crate::driver::postgres::ast::PgAst;
 use crate::driver::postgres::options::PgDriverInnerOptions;

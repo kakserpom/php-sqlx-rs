@@ -1,4 +1,4 @@
-use crate::driver::{DriverOptions, PgParameterValue};
+use crate::driver::{DriverOptions, postgres::PgParameterValue};
 use crate::{
     DEFAULT_ASSOC_ARRAYS, DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE,
     DEFAULT_COLLAPSIBLE_IN, DEFAULT_MAX_CONNECTIONS,
