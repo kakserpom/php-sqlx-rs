@@ -1,13 +1,17 @@
 use super::*;
 use crate::OrderFieldDefinition;
 
+fn into_ast(sql: &str) -> PgAst {
+    PgAst::parse(sql, true).expect("failed to parse SQL statement")
+}
+
 #[test]
 fn test_named_and_positional() {
     let sql = "SELECT :param, ?, ? FROM table WHERE {{ x = $x }}";
     if let PgAst::Root {
         branches,
         required_placeholders,
-    } = PgAst::parse(sql).unwrap()
+    } = into_ast(sql)
     {
         println!("{:#?}", required_placeholders);
         let names: Vec<&str> = branches
@@ -31,7 +35,7 @@ fn test_named_and_positional() {
 #[test]
 fn test_render_basic() {
     let sql = "SELECT * FROM users WHERE {{status = $status AND}} id = $id";
-    let ast = PgAst::parse(sql).unwrap();
+    let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), "active".into());
     vals.insert("id".into(), "42".into());
@@ -43,7 +47,7 @@ fn test_render_basic() {
 #[test]
 fn test_render_optional_skip() {
     let sql = "SELECT * FROM users WHERE {{status = $status AND}} id = $id";
-    let ast = PgAst::parse(sql).unwrap();
+    let ast = into_ast(sql);
     let (query, params) = ast.render([("id", 100)]).expect("Rendering failed");
     assert_eq!(query, "SELECT * FROM users WHERE id = $1");
     assert_eq!(params, vec![100.into()]);
@@ -53,7 +57,7 @@ fn test_render_optional_skip() {
 fn test_render_var_types() {
     let sql =
         "SELECT * FROM table WHERE id = $id AND active = :flag AND scores IN (?) AND data = $data";
-    let ast = PgAst::parse(sql).unwrap();
+    let ast = into_ast(sql);
     let mut vals = ParamsMap::new();
     vals.insert("id".into(), PgParameterValue::Int(7));
     vals.insert("flag".into(), PgParameterValue::Bool(true));
@@ -96,7 +100,7 @@ fn test_render_order_by_apply() {
     ]);
 
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
-    let ast = PgAst::parse(sql).unwrap();
+    let ast = into_ast(sql);
     let (query, params) = ast
         .render([("order_by", PgParameterValue::RenderedByClause(rendered))])
         .expect("Rendering failed");
@@ -123,7 +127,7 @@ fn test_render_order_by_apply_empty() {
 
     let sql =
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
-    let ast = PgAst::parse(sql).unwrap();
+    let ast = into_ast(sql);
     let (query, params) = ast
         .render([("order_by", PgParameterValue::RenderedByClause(rendered))])
         .expect("Rendering failed");
@@ -138,7 +142,7 @@ fn test_render_order_by_apply_empty() {
 #[test]
 fn test_in_clause_parsing() {
     let sql = "SELECT * FROM users WHERE status IN :statuses AND age NOT IN (:ages)";
-    let ast = PgAst::parse(sql).unwrap();
+    let ast = into_ast(sql);
     println!("AST = {:#?}", ast);
     let (q, p) = ast
         .render([
@@ -176,7 +180,7 @@ fn test_in_clause_parsing() {
 #[test]
 fn test_parse_in_not_in_and_string() {
     let sql = "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN (:statuses) AND age NOT IN (:ages)";
-    let ast = PgAst::parse(sql).expect("Failed to parse");
+    let ast = into_ast(sql);
     println!("AST = {:#?}", ast);
     let PgAst::Root {
         branches,
@@ -218,7 +222,7 @@ fn test_parse_in_not_in_and_string() {
 #[test]
 fn test_parse_multi_in() {
     let sql = "SELECT * FROM users age IN (?, ?)";
-    let ast = PgAst::parse(sql).expect("Failed to parse");
+    let ast = into_ast(sql);
     println!("AST = {:#?}", ast);
     let PgAst::Root {
         required_placeholders,
@@ -233,7 +237,7 @@ fn test_parse_multi_in() {
 #[test]
 fn test_parse_required_in() {
     let sql = "SELECT * FROM users age IN (?/*required*/)";
-    let ast = PgAst::parse(sql).expect("Failed to parse");
+    let ast = into_ast(sql);
     println!("AST = {:#?}", ast);
     let PgAst::Root {
         required_placeholders,

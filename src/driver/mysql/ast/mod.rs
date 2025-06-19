@@ -95,13 +95,14 @@ impl From<bool> for MySqlParameterValue {
 impl MySqlAst {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments.
-    pub fn parse(input: &str) -> Result<MySqlAst, String> {
+    pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<MySqlAst> {
         fn inner<'s>(
             mut rest: &'s str,
             placeholders_out: &mut Vec<String>,
             branches: &mut Vec<MySqlAst>,
             positional_counter: &mut usize,
-        ) -> Result<&'s str, String> {
+            collapsible_in_enabled: bool,
+        ) -> anyhow::Result<&'s str> {
             let mut buf = String::new();
 
             while !rest.is_empty() {
@@ -150,7 +151,7 @@ impl MySqlAst {
                         rest = &rest[2 + close + 2..];
                         continue;
                     } else {
-                        return Err("Unterminated block comment".into());
+                        bail!("Unterminated block comment");
                     }
                 }
                 // Conditional block start
@@ -160,7 +161,13 @@ impl MySqlAst {
                     }
                     let mut inner_br = Vec::new();
                     let mut inner_ph = Vec::new();
-                    rest = inner(r, &mut inner_ph, &mut inner_br, positional_counter)?;
+                    rest = inner(
+                        r,
+                        &mut inner_ph,
+                        &mut inner_br,
+                        positional_counter,
+                        collapsible_in_enabled,
+                    )?;
                     branches.push(MySqlAst::ConditionalBlock {
                         branches: inner_br,
                         required_placeholders: inner_ph,
@@ -174,125 +181,127 @@ impl MySqlAst {
                     }
                     return Ok(r);
                 }
-                // NOT IN support (with or without parentheses)
-                if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
-                    let after = suffix.trim_start();
-                    let offset = rest.len() - suffix.len();
-                    let mut consumed = 0;
-                    let mut name_opt = None;
-                    // parentheses form
-                    if after.starts_with('(') {
-                        if let Some(cl) = after[1..].find(')') {
-                            let inside = &after[1..1 + cl].trim();
-                            if let Some(id) = inside.strip_prefix(':') {
-                                consumed = offset + 1 + cl + 2;
-                                name_opt = Some(id.to_string());
-                            } else if let Some(id) = inside.strip_prefix('$') {
-                                consumed = offset + 1 + cl + 2;
-                                name_opt = Some(id.to_string());
-                            } else if *inside == "?" {
+                if collapsible_in_enabled {
+                    // NOT IN support (with or without parentheses)
+                    if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
+                        let after = suffix.trim_start();
+                        let offset = rest.len() - suffix.len();
+                        let mut consumed = 0;
+                        let mut name_opt = None;
+                        // parentheses form
+                        if after.starts_with('(') {
+                            if let Some(cl) = after[1..].find(')') {
+                                let inside = &after[1..1 + cl].trim();
+                                if let Some(id) = inside.strip_prefix(':') {
+                                    consumed = offset + 1 + cl + 2;
+                                    name_opt = Some(id.to_string());
+                                } else if let Some(id) = inside.strip_prefix('$') {
+                                    consumed = offset + 1 + cl + 2;
+                                    name_opt = Some(id.to_string());
+                                } else if *inside == "?" {
+                                    *positional_counter += 1;
+                                    consumed = offset + 1 + cl + 2;
+                                    name_opt = Some(positional_counter.to_string());
+                                }
+                            }
+                        } else {
+                            // non-parentheses form
+                            if let Some(sfx) = after.strip_prefix(':') {
+                                let ident: String = sfx
+                                    .chars()
+                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                    .collect();
+                                consumed = offset + 2 + ident.len();
+                                name_opt = Some(ident);
+                            } else if let Some(sfx) = after.strip_prefix('$') {
+                                let ident: String = sfx
+                                    .chars()
+                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                    .collect();
+                                consumed = offset + 2 + ident.len();
+                                name_opt = Some(ident);
+                            } else if after.starts_with('?') {
                                 *positional_counter += 1;
-                                consumed = offset + 1 + cl + 2;
-                                name_opt = Some(positional_counter.to_string());
+                                let num = positional_counter.to_string();
+                                consumed = offset + 2;
+                                name_opt = Some(num);
                             }
                         }
-                    } else {
-                        // non-parentheses form
+                        if let Some(name) = name_opt {
+                            let trimmed = buf.trim_end();
+                            let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
+                                Some((a, b)) => (format!("{} ", a), b),
+                                None => (String::new(), trimmed),
+                            };
+                            if !pre.is_empty() {
+                                branches.push(MySqlAst::Sql(pre));
+                            }
+                            branches.push(MySqlAst::NotInClause {
+                                expr: expr.to_string(),
+                                placeholder: name,
+                            });
+                            buf.clear();
+                            rest = &rest[consumed..];
+                            continue;
+                        }
+                    }
+                    // IN support
+                    if let Some(r2) = rest.strip_prefix_ignore_ascii_case("IN") {
+                        let after = r2.trim_start();
+                        let orig = rest.len();
+                        let mut consumed = 0;
+                        let mut name_opt = None;
                         if let Some(sfx) = after.strip_prefix(':') {
                             let ident: String = sfx
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
-                            consumed = offset + 2 + ident.len();
+                            consumed = orig - after.len() + 1 + ident.len();
                             name_opt = Some(ident);
                         } else if let Some(sfx) = after.strip_prefix('$') {
                             let ident: String = sfx
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
-                            consumed = offset + 2 + ident.len();
+                            consumed = orig - after.len() + 1 + ident.len();
                             name_opt = Some(ident);
                         } else if after.starts_with('?') {
                             *positional_counter += 1;
-                            let num = positional_counter.to_string();
-                            consumed = offset + 2;
-                            name_opt = Some(num);
-                        }
-                    }
-                    if let Some(name) = name_opt {
-                        let trimmed = buf.trim_end();
-                        let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                            Some((a, b)) => (format!("{} ", a), b),
-                            None => (String::new(), trimmed),
-                        };
-                        if !pre.is_empty() {
-                            branches.push(MySqlAst::Sql(pre));
-                        }
-                        branches.push(MySqlAst::NotInClause {
-                            expr: expr.to_string(),
-                            placeholder: name,
-                        });
-                        buf.clear();
-                        rest = &rest[consumed..];
-                        continue;
-                    }
-                }
-                // IN support
-                if let Some(r2) = rest.strip_prefix_ignore_ascii_case("IN") {
-                    let after = r2.trim_start();
-                    let orig = rest.len();
-                    let mut consumed = 0;
-                    let mut name_opt = None;
-                    if let Some(sfx) = after.strip_prefix(':') {
-                        let ident: String = sfx
-                            .chars()
-                            .take_while(|c| c.is_alphanumeric() || *c == '_')
-                            .collect();
-                        consumed = orig - after.len() + 1 + ident.len();
-                        name_opt = Some(ident);
-                    } else if let Some(sfx) = after.strip_prefix('$') {
-                        let ident: String = sfx
-                            .chars()
-                            .take_while(|c| c.is_alphanumeric() || *c == '_')
-                            .collect();
-                        consumed = orig - after.len() + 1 + ident.len();
-                        name_opt = Some(ident);
-                    } else if after.starts_with('?') {
-                        *positional_counter += 1;
-                        consumed = orig - after.len() + 1;
-                        name_opt = Some(positional_counter.to_string());
-                    } else if after.starts_with('(') {
-                        if let Some(cl) = after[1..].find(')') {
-                            let inside = &after[1..1 + cl].trim();
-                            if let Some(id) = inside.strip_prefix(':') {
-                                consumed = orig - after.len() + 1 + cl + 1;
-                                name_opt = Some(id.to_string());
-                            } else if let Some(id) = inside.strip_prefix('$') {
-                                consumed = orig - after.len() + 1 + cl + 1;
-                                name_opt = Some(id.to_string())
-                            } else if *inside == "?" {
-                                *positional_counter += 1;
-                                consumed = orig - after.len() + 1 + cl + 1;
-                                name_opt = Some(positional_counter.to_string());
+                            consumed = orig - after.len() + 1;
+                            name_opt = Some(positional_counter.to_string());
+                        } else if after.starts_with('(') {
+                            if let Some(cl) = after[1..].find(')') {
+                                let inside = &after[1..1 + cl].trim();
+                                if let Some(id) = inside.strip_prefix(':') {
+                                    consumed = orig - after.len() + 1 + cl + 1;
+                                    name_opt = Some(id.to_string());
+                                } else if let Some(id) = inside.strip_prefix('$') {
+                                    consumed = orig - after.len() + 1 + cl + 1;
+                                    name_opt = Some(id.to_string())
+                                } else if *inside == "?" {
+                                    *positional_counter += 1;
+                                    consumed = orig - after.len() + 1 + cl + 1;
+                                    name_opt = Some(positional_counter.to_string());
+                                }
                             }
                         }
-                    }
-                    if let Some(name) = name_opt {
-                        let trimmed = buf.trim_end();
-                        let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                            Some((a, b)) => (format!("{} ", a), b),
-                            None => (String::new(), trimmed),
-                        };
-                        if !pre.is_empty() {
-                            branches.push(MySqlAst::Sql(pre));
+                        if let Some(name) = name_opt {
+                            let trimmed = buf.trim_end();
+                            let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
+                                Some((a, b)) => (format!("{} ", a), b),
+                                None => (String::new(), trimmed),
+                            };
+                            if !pre.is_empty() {
+                                branches.push(MySqlAst::Sql(pre));
+                            }
+                            branches.push(MySqlAst::InClause {
+                                expr: expr.to_string(),
+                                placeholder: name,
+                            });
+                            buf.clear();
+                            rest = &rest[consumed..];
+                            continue;
                         }
-                        branches.push(MySqlAst::InClause {
-                            expr: expr.to_string(),
-                            placeholder: name,
-                        });
-                        buf.clear();
-                        rest = &rest[consumed..];
-                        continue;
                     }
                 }
                 // :param
@@ -363,9 +372,15 @@ impl MySqlAst {
         let mut branches = Vec::new();
         let mut placeholders = Vec::new();
         let mut cnt = 0;
-        let rest = inner(input, &mut placeholders, &mut branches, &mut cnt)?;
+        let rest = inner(
+            input,
+            &mut placeholders,
+            &mut branches,
+            &mut cnt,
+            collapsible_in_enabled,
+        )?;
         if !rest.trim().is_empty() {
-            return Err("Unmatched `{{` or extra trailing content".into());
+            bail!("Unmatched `{{` or extra trailing content");
         }
         Ok(MySqlAst::Root {
             branches,

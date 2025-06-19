@@ -13,4 +13,5 @@ impl DriverOptions {
     pub const OPT_ASSOC_ARRAYS: &'static str = "assoc_arrays";
 
     pub const OPT_MAX_CONNECTIONS: &'static str = "max_connections";
+    pub const OPT_COLLAPSIBLE_IN: &'static str = "collapsible_in";
 }

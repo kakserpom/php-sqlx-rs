@@ -1,6 +1,6 @@
 use crate::driver::DriverOptions;
 use crate::driver::mysql::MySqlParameterValue;
-use crate::{DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE, DEFAULT_MAX_CONNECTIONS};
+use crate::{DEFAULT_ASSOC_ARRAYS, DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE, DEFAULT_COLLAPSIBLE_IN, DEFAULT_MAX_CONNECTIONS};
 use anyhow::anyhow;
 use ext_php_rs::ZvalConvert;
 use std::collections::HashMap;
@@ -13,6 +13,7 @@ pub struct MySqlDriverInnerOptions {
     pub(crate) persistent_name: Option<String>,
     pub(crate) associative_arrays: bool,
     pub(crate) max_connections: NonZeroU32,
+    pub(crate) collapsible_in: bool,
 }
 impl Default for MySqlDriverInnerOptions {
     fn default() -> Self {
@@ -21,7 +22,8 @@ impl Default for MySqlDriverInnerOptions {
             ast_cache_shard_count: DEFAULT_AST_CACHE_SHARD_COUNT,
             ast_cache_shard_size: DEFAULT_AST_CACHE_SHARD_SIZE,
             persistent_name: None,
-            associative_arrays: false,
+            associative_arrays: DEFAULT_ASSOC_ARRAYS,
+            collapsible_in: DEFAULT_COLLAPSIBLE_IN,
             max_connections: DEFAULT_MAX_CONNECTIONS,
         }
     }
@@ -112,6 +114,19 @@ impl MySqlDriverOptions {
                             Err(anyhow!(
                                 "{} must be a positive integer",
                                 DriverOptions::OPT_MAX_CONNECTIONS
+                            ))
+                        }
+                    },
+                )?,
+                collapsible_in: kv.get(DriverOptions::OPT_COLLAPSIBLE_IN).map_or(
+                    Ok(false),
+                    |value| {
+                        if let MySqlParameterValue::Bool(bool) = value {
+                            Ok(*bool)
+                        } else {
+                            Err(anyhow!(
+                                "{} must be a boolean",
+                                DriverOptions::OPT_COLLAPSIBLE_IN
                             ))
                         }
                     },

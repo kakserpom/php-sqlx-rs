@@ -79,7 +79,7 @@ impl MySqlDriverInner {
         if let Some(ast) = self.ast_cache.get(query) {
             ast.render(parameters)
         } else {
-            let ast = MySqlAst::parse(query).unwrap();
+            let ast = MySqlAst::parse(query, self.options.collapsible_in)?;
             let rendered = ast.render(parameters)?;
             self.ast_cache.insert(query.to_owned(), ast);
             Ok(rendered)

@@ -98,13 +98,14 @@ impl PgAst {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments.
     /// Returns an `AST::Nested` of top-level branches.
-    pub fn parse(input: &str) -> Result<PgAst, String> {
+    pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<PgAst> {
         fn inner<'s>(
             mut rest: &'s str,
             placeholders_out: &mut Vec<String>,
             branches: &mut Vec<PgAst>,
             positional_counter: &mut usize,
-        ) -> Result<&'s str, String> {
+            collapsible_in_enabled: bool,
+        ) -> anyhow::Result<&'s str> {
             let mut buf = String::new();
 
             while !rest.is_empty() {
@@ -145,7 +146,7 @@ impl PgAst {
                         rest = &rest[2 + close + 2..];
                         continue;
                     }
-                    return Err("Unterminated block comment".into());
+                    bail!("Unterminated block comment");
                 }
 
                 // Conditional block start
@@ -155,7 +156,7 @@ impl PgAst {
                     }
                     let mut inner_branches = Vec::new();
                     let mut inner_ph = Vec::new();
-                    rest = inner(r, &mut inner_ph, &mut inner_branches, positional_counter)?;
+                    rest = inner(r, &mut inner_ph, &mut inner_branches, positional_counter, collapsible_in_enabled)?;
                     branches.push(PgAst::ConditionalBlock {
                         branches: inner_branches,
                         required_placeholders: inner_ph,
@@ -171,131 +172,133 @@ impl PgAst {
                     return Ok(r);
                 }
 
-                // NOT IN support (with or without parentheses)
-                if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
-                    let after = suffix.trim_start();
-                    let offset = rest.len() - suffix.len();
-                    let mut consumed = 0;
-                    let mut name_opt = None;
-                    if after.starts_with('(') {
-                        // parentheses form
-                        if let Some(cl) = after[1..].find(')') {
-                            let inside = &after[1..1 + cl].trim();
-                            if let Some(id) = inside.strip_prefix(':') {
-                                consumed = offset + 1 + cl + 2;
-                                name_opt = Some(id.to_string());
-                            } else if let Some(id) = inside.strip_prefix('$') {
-                                consumed = offset + 1 + cl + 2;
-                                name_opt = Some(id.to_string());
-                            } else if *inside == "?" {
+                if collapsible_in_enabled {
+                    // NOT IN support (with or without parentheses)
+                    if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
+                        let after = suffix.trim_start();
+                        let offset = rest.len() - suffix.len();
+                        let mut consumed = 0;
+                        let mut name_opt = None;
+                        if after.starts_with('(') {
+                            // parentheses form
+                            if let Some(cl) = after[1..].find(')') {
+                                let inside = &after[1..1 + cl].trim();
+                                if let Some(id) = inside.strip_prefix(':') {
+                                    consumed = offset + 1 + cl + 2;
+                                    name_opt = Some(id.to_string());
+                                } else if let Some(id) = inside.strip_prefix('$') {
+                                    consumed = offset + 1 + cl + 2;
+                                    name_opt = Some(id.to_string());
+                                } else if *inside == "?" {
+                                    *positional_counter += 1;
+                                    consumed = offset + 1 + cl + 2;
+                                    name_opt = Some(positional_counter.to_string());
+                                }
+                            }
+                        } else {
+                            // non-parentheses form
+                            if let Some(sfx) = after.strip_prefix(':') {
+                                let name: String = sfx
+                                    .chars()
+                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                    .collect();
+                                consumed = offset + 2 + name.len();
+                                name_opt = Some(name);
+                            } else if let Some(sfx) = after.strip_prefix('$') {
+                                let name: String = sfx
+                                    .chars()
+                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                    .collect();
+                                consumed = offset + 2 + name.len();
+                                name_opt = Some(name);
+                            } else if after.starts_with('?') {
                                 *positional_counter += 1;
-                                consumed = offset + 1 + cl + 2;
+                                consumed = offset + 2;
                                 name_opt = Some(positional_counter.to_string());
                             }
                         }
-                    } else {
-                        // non-parentheses form
-                        if let Some(sfx) = after.strip_prefix(':') {
-                            let name: String = sfx
+                        if let Some(name) = name_opt {
+                            buf.trim_end_in_place();
+                            if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
+                                if !left.is_empty() {
+                                    branches.push(PgAst::Sql(format!("{} ", left)));
+                                }
+                                branches.push(PgAst::NotInClause {
+                                    expr: expr.to_string(),
+                                    placeholder: name,
+                                });
+                            } else {
+                                branches.push(PgAst::NotInClause {
+                                    expr: buf.clone(),
+                                    placeholder: name,
+                                });
+                            }
+                            buf.clear();
+                            rest = &rest[consumed..];
+                            continue;
+                        }
+                    }
+
+                    // --- IN ... ---
+                    if let Some(rest_after_in) = rest.strip_prefix_ignore_ascii_case("IN") {
+                        let rest_after_in = rest_after_in.trim_start();
+                        let original_len = rest.len();
+
+                        let mut consumed = 0;
+                        let mut name_opt = None;
+                        if let Some(sfx) = rest_after_in.strip_prefix(':') {
+                            let ident: String = sfx
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
-                            consumed = offset + 2 + name.len();
-                            name_opt = Some(name);
-                        } else if let Some(sfx) = after.strip_prefix('$') {
-                            let name: String = sfx
-                                .chars()
-                                .take_while(|c| c.is_alphanumeric() || *c == '_')
-                                .collect();
-                            consumed = offset + 2 + name.len();
-                            name_opt = Some(name);
-                        } else if after.starts_with('?') {
+                            consumed = original_len - rest_after_in.len() + 1 + ident.len();
+                            name_opt = Some(ident);
+                        } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
+                            consumed = original_len - rest_after_in.len();
+                            name_opt = Some(
+                                sfx.chars()
+                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                    .collect(),
+                            );
+                        } else if rest_after_in.starts_with('?') {
                             *positional_counter += 1;
-                            consumed = offset + 2;
+                            consumed = original_len - rest_after_in.len() + 1;
                             name_opt = Some(positional_counter.to_string());
-                        }
-                    }
-                    if let Some(name) = name_opt {
-                        buf.trim_end_in_place();
-                        if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
-                            if !left.is_empty() {
-                                branches.push(PgAst::Sql(format!("{} ", left)));
+                        } else if rest_after_in.starts_with('(') {
+                            if let Some(close_idx) = rest_after_in[1..].find(')') {
+                                let inside = &rest_after_in[1..1 + close_idx].trim();
+                                if let Some(id) = inside.strip_prefix(':') {
+                                    name_opt = Some(id.to_string());
+                                } else if let Some(id) = inside.strip_prefix('$') {
+                                    name_opt = Some(id.to_string());
+                                } else if *inside == "?" {
+                                    *positional_counter += 1;
+                                    name_opt = Some(positional_counter.to_string());
+                                }
+                                consumed = original_len - rest_after_in.len() + 1 + close_idx + 1;
                             }
-                            branches.push(PgAst::NotInClause {
-                                expr: expr.to_string(),
-                                placeholder: name,
-                            });
-                        } else {
-                            branches.push(PgAst::NotInClause {
-                                expr: buf.clone(),
-                                placeholder: name,
-                            });
                         }
-                        buf.clear();
-                        rest = &rest[consumed..];
-                        continue;
-                    }
-                }
 
-                // --- IN ... ---
-                if let Some(rest_after_in) = rest.strip_prefix_ignore_ascii_case("IN") {
-                    let rest_after_in = rest_after_in.trim_start();
-                    let original_len = rest.len();
-
-                    let mut consumed = 0;
-                    let mut name_opt = None;
-                    if let Some(sfx) = rest_after_in.strip_prefix(':') {
-                        let ident: String = sfx
-                            .chars()
-                            .take_while(|c| c.is_alphanumeric() || *c == '_')
-                            .collect();
-                        consumed = original_len - rest_after_in.len() + 1 + ident.len();
-                        name_opt = Some(ident);
-                    } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
-                        consumed = original_len - rest_after_in.len();
-                        name_opt = Some(
-                            sfx.chars()
-                                .take_while(|c| c.is_alphanumeric() || *c == '_')
-                                .collect(),
-                        );
-                    } else if rest_after_in.starts_with('?') {
-                        *positional_counter += 1;
-                        consumed = original_len - rest_after_in.len() + 1;
-                        name_opt = Some(positional_counter.to_string());
-                    } else if rest_after_in.starts_with('(') {
-                        if let Some(close_idx) = rest_after_in[1..].find(')') {
-                            let inside = &rest_after_in[1..1 + close_idx].trim();
-                            if let Some(id) = inside.strip_prefix(':') {
-                                name_opt = Some(id.to_string());
-                            } else if let Some(id) = inside.strip_prefix('$') {
-                                name_opt = Some(id.to_string());
-                            } else if *inside == "?" {
-                                *positional_counter += 1;
-                                name_opt = Some(positional_counter.to_string());
+                        if let Some(name) = name_opt {
+                            buf.trim_end_in_place();
+                            if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
+                                if !left.is_empty() {
+                                    branches.push(PgAst::Sql(format!("{} ", left)));
+                                }
+                                branches.push(PgAst::InClause {
+                                    expr: expr.to_string(),
+                                    placeholder: name,
+                                });
+                            } else {
+                                branches.push(PgAst::InClause {
+                                    expr: buf.clone(),
+                                    placeholder: name,
+                                });
                             }
-                            consumed = original_len - rest_after_in.len() + 1 + close_idx + 1;
+                            buf.clear();
+                            rest = &rest[consumed..];
+                            continue;
                         }
-                    }
-
-                    if let Some(name) = name_opt {
-                        buf.trim_end_in_place();
-                        if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
-                            if !left.is_empty() {
-                                branches.push(PgAst::Sql(format!("{} ", left)));
-                            }
-                            branches.push(PgAst::InClause {
-                                expr: expr.to_string(),
-                                placeholder: name,
-                            });
-                        } else {
-                            branches.push(PgAst::InClause {
-                                expr: buf.clone(),
-                                placeholder: name,
-                            });
-                        }
-                        buf.clear();
-                        rest = &rest[consumed..];
-                        continue;
                     }
                 }
 
@@ -373,9 +376,15 @@ impl PgAst {
         let mut branches = Vec::new();
         let mut placeholders = Vec::new();
         let mut counter = 0;
-        let rest = inner(input, &mut placeholders, &mut branches, &mut counter)?;
+        let rest = inner(
+            input,
+            &mut placeholders,
+            &mut branches,
+            &mut counter,
+            collapsible_in_enabled,
+        )?;
         if !rest.trim().is_empty() {
-            return Err("Unmatched `{{` or extra trailing content".into());
+            bail!("Unmatched `{{` or extra trailing content");
         }
 
         Ok(PgAst::Root {
