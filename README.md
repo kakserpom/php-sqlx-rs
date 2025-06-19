@@ -134,9 +134,9 @@ Keep in mind that you can not only use it in `WHERE`, but also in `ON` clauses w
 
 A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 
-> **⚠️ SAFETY:**
-> - ✅ You can safely pass any user input as sorting settings.
-> - ❌ Do NOT pass unsanitized user input into `ByClause` constructor to avoid SQL injection vulnerabilities.
+> __SAFETY CONCERNS__
+> - 🟢 You can safely pass any user input as sorting settings.
+> - 🔴 Do NOT pass unsanitized user input into `ByClause` constructor to avoid SQL injection vulnerabilities. If you absolutely have to, then apply `array_values()` to the argument to avoid SQL injections.
 
 **Examples**:
 
@@ -166,9 +166,9 @@ Field names are case-sensitive, but they get trimmed.
 
 A helper class for safe `SELECT` clauses from user input.
 
-> **⚠️ SAFETY:**
-> - ✅ You can safely pass any user input as invocation argument.
->- ❌ Do NOT pass unsanitized user input into `SelectClause` constructor to avoid SQL injection vulnerabilities.
+> __SAFETY CONCERNS__
+> - 🟢 You can safely pass any user input as invocation argument.
+> - 🔴 Do NOT pass unsanitized user input into `SelectClause` constructor to avoid SQL injection vulnerabilities. If you absolutely have to, then apply `array_values()` to the argument to avoid SQL injections.
 
 **Examples**:
 
@@ -176,7 +176,7 @@ A helper class for safe `SELECT` clauses from user input.
 $select = new Sqlx\SelectClause([
     'id',
     'created_at',
-    'name' => , 
+    'name' => ,
     '' => 'COUNT(posts.*)'
 ]);
 
@@ -251,8 +251,7 @@ Install with [`cargo-php`](https://github.com/davidcole1340/ext-php-rs):
 
 ```bash
 cargo install cargo-php --locked
-cd php-sql-cdylib
-cargo php install --features postgres mysql --release --yes
+cd php-sqlx-cdylib
 ```
 
 For macOS:
@@ -261,7 +260,7 @@ For macOS:
 export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | tr -d '\n')
 export RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup"
 cargo install cargo-php --locked
-cd php-sql-cdylib
+cd php-sqlx-cdylib
 cargo php install --release --yes
 ```
 
@@ -300,7 +299,7 @@ $driver = new Sqlx\PgDriver([
 | `queryRowObj()`        | first row (object)                  | ∟ enforces object mode        |
 | `queryMaybeRow()`      | first row (array \| object \| null) | null if no rows returned      |
 | `queryMaybeRowAssoc()` | first row (array \| null)           | ∟ enforces array mode         |
-| `queryMaybeRowObj()`   | first row (object \| null)          | ∟ enforces object mode        |            
+| `queryMaybeRowObj()`   | first row (object \| null)          | ∟ enforces object mode        |
 
 #### Column helpers (single-row)
 
@@ -370,7 +369,7 @@ All helpers listed above have their prepared-query counterparts:
 | `queryDictionaryAssoc()` | `array<string, array>`          | ∟ forces associative arrays            |
 | `queryDictionaryObj()`   | `array<string, object>`         | ∟ forces objects                       |
 
-> ⚠️ First column **must** be convertible to string, otherwise an exception will be thrown.  
+> ⚠️ First column **must** be convertible to string, otherwise an exception will be thrown.
 > 🔀 The iteration order is preserved.
 
 ```php
@@ -538,4 +537,3 @@ M1 Max results:
 ## License
 
 MIT
-

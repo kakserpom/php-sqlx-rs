@@ -229,3 +229,18 @@ fn test_parse_multi_in() {
     };
     assert_eq!(required_placeholders.len(), 2);
 }
+
+#[test]
+fn test_parse_required_in() {
+    let sql = "SELECT * FROM users age IN (?/*required*/)";
+    let ast = PgAst::parse(sql).expect("Failed to parse");
+    println!("AST = {:#?}", ast);
+    let PgAst::Root {
+        required_placeholders,
+        ..
+    } = ast
+    else {
+        panic!("Expected Root variant for MySqlAst");
+    };
+    assert_eq!(required_placeholders.len(), 1);
+}
