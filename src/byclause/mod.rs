@@ -1,4 +1,4 @@
-use crate::is_valid_ident;
+use crate::utils::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
@@ -108,10 +108,7 @@ impl ByClause {
                         OrderFieldDefinition::Short(name) => (name, false),
                         OrderFieldDefinition::Full(vec) => (
                             vec.first()?.clone(),
-                            match vec.get(1) {
-                                Some(str) if str.trim().eq_ignore_ascii_case(Self::_DESC) => true,
-                                _ => false,
-                            },
+                            matches!(vec.get(1), Some(str) if str.trim().eq_ignore_ascii_case(Self::_DESC))
                         ),
                     };
                     self.defined_fields
@@ -152,6 +149,7 @@ pub struct ByClauseRenderedField {
 
 impl ByClauseRendered {
     #[must_use]
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()

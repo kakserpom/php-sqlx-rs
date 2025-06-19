@@ -1,4 +1,4 @@
-use crate::ZvalNull;
+use crate::utils::ZvalNull;
 use anyhow::anyhow;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
@@ -21,7 +21,7 @@ pub trait Conversion: Row {
             Ok(columns
                 .iter()
                 .try_fold(
-                    zend_array::with_capacity(columns.len() as u32),
+                    zend_array::with_capacity(u32::try_from(columns.len())?),
                     |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
                         array
                             .insert(

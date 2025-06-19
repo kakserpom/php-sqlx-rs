@@ -1,3 +1,4 @@
+#![allow(clippy::inline_always)]
 #[cfg(test)]
 mod tests;
 
@@ -185,10 +186,10 @@ impl PgAst {
                         let offset = rest.len() - suffix.len();
                         let mut consumed_len = 0;
                         let mut name_opt = None;
-                        if rest_after_in.starts_with('(') {
+                        if let Some(stripped) = rest_after_in.strip_prefix('(') {
                             // parentheses form
-                            if let Some(cl) = rest_after_in[1..].find(')') {
-                                let inside = &rest_after_in[1..=cl].trim();
+                            if let Some(cl) = stripped.find(')') {
+                                let inside = &stripped[..cl].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
                                     consumed_len = offset + 1 + cl + 2;
                                     name_opt = Some(id.to_string());
@@ -405,7 +406,7 @@ impl PgAst {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments, with support for escaping via `\\`.
     /// Returns an `AST::Nested` of top-level branches.
-
+    ///
     /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
     pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<PgParameterValue>)>

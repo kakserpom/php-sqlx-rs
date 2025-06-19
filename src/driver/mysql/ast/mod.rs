@@ -54,6 +54,7 @@ pub enum MySqlParameterValue {
 }
 impl MySqlParameterValue {
     #[must_use]
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
@@ -132,15 +133,15 @@ impl MySqlAst {
                 }
                 // Line comment --
                 if let Some(r) = rest.strip_prefix("--") {
-                    let end = r.find('\n').map(|i| i + 1).unwrap_or(r.len());
+                    let end = r.find('\n').map_or(r.len(), |i| i + 1);
                     buf.push_str(&rest[..2 + end]);
                     rest = &rest[2 + end..];
                     continue;
                 }
                 // Line comment #
                 if let Some(r) = rest.strip_prefix("#") {
-                    let end = r.find('\n').map(|i| i + 1).unwrap_or(r.len());
-                    buf.push_str(&rest[..1 + end]);
+                    let end = r.find('\n').map_or(r.len(), |i| i + 1);
+                    buf.push_str(&rest[..=end]);
                     rest = &rest[1 + end..];
                     continue;
                 }
@@ -150,9 +151,8 @@ impl MySqlAst {
                         buf.push_str(&rest[..2 + close + 2]);
                         rest = &rest[2 + close + 2..];
                         continue;
-                    } else {
-                        bail!("Unterminated block comment");
                     }
+                    bail!("Unterminated block comment");
                 }
                 // Conditional block start
                 if let Some(r) = rest.strip_prefix("{{") {
@@ -189,9 +189,9 @@ impl MySqlAst {
                         let mut consumed_len = 0;
                         let mut name_opt = None;
                         // parentheses form
-                        if rest_after_in.starts_with('(') {
-                            if let Some(cl) = rest_after_in[1..].find(')') {
-                                let inside = &rest_after_in[1..1 + cl].trim();
+                        if let Some(stripped) = rest_after_in.strip_prefix('(') {
+                            if let Some(cl) = stripped.find(')') {
+                                let inside = &stripped[..cl].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
                                     consumed_len = offset + 1 + cl + 2;
                                     name_opt = Some(id.to_string());
@@ -230,7 +230,7 @@ impl MySqlAst {
                         if let Some(name) = name_opt {
                             let trimmed = buf.trim_end();
                             let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                                Some((a, b)) => (format!("{} ", a), b),
+                                Some((a, b)) => (format!("{a} "), b),
                                 None => (String::new(), trimmed),
                             };
                             if !pre.is_empty() {
@@ -280,7 +280,8 @@ impl MySqlAst {
                                     *positional_counter += 1;
                                     name_opt = Some(positional_counter.to_string());
                                 }
-                                consumed_len = original_len - rest_after_in.len() + 1 + close_idx + 1;
+                                consumed_len =
+                                    original_len - rest_after_in.len() + 1 + close_idx + 1;
                             }
                         }
                         if let Some(name) = name_opt {
@@ -452,7 +453,7 @@ impl MySqlAst {
                                     if *is_expression {
                                         sql.push_str(expression_or_identifier);
                                     } else {
-                                        sql.push_str(&format!("`{expression_or_identifier}`"));
+                                        write!(sql, "`{expression_or_identifier}`").unwrap();
                                     }
                                     if *descending_order {
                                         sql.push_str(" DESC");

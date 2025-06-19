@@ -1,14 +1,16 @@
-use crate::ZvalExtractString;
+#![allow(clippy::needless_borrow)]
+#![allow(clippy::needless_pass_by_value)]
 use crate::driver::PgParameterValue;
 use crate::driver::conversion::Conversion;
 use crate::driver::postgres::ast::PgAst;
 use crate::driver::postgres::options::PgDriverInnerOptions;
-use crate::{ColumnArgument, RUNTIME, ZvalNull};
+use crate::utils::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
+use crate::{ColumnArgument, RUNTIME};
+use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
-use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
-use ext_php_rs::ffi::{zend_array, zend_object};
-use ext_php_rs::types::{ZendHashTable, Zval};
+use ext_php_rs::ffi::zend_array;
+use ext_php_rs::types::Zval;
 use itertools::Itertools;
 use sqlx::Row;
 use sqlx::pool::Pool;
@@ -399,48 +401,19 @@ impl PgDriverInner {
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
         let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-        let mut it = RUNTIME
+        RUNTIME
             .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
             .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
             .into_iter()
             .map(|row| {
-                if let Some(key) = row
-                    .column_value_into_zval(row.column(0), false)?
-                    .extract_string()
-                {
-                    Ok((key, row.into_zval(assoc)?))
-                } else {
-                    bail!("First column must be scalar")
-                }
-            });
-
-        Ok(if assoc {
-            it.try_fold(
-                zend_array::new(),
-                |mut array, item| -> anyhow::Result<ZBox<zend_array>> {
-                    let (key, value) = item?;
-                    array
-                        .insert(&key, value)
-                        .map_err(|err| anyhow!("{err:?}"))?;
-                    Ok(array)
-                },
-            )?
+                Ok((
+                    row.column_value_into_zval(row.column(0), false)?,
+                    row.into_zval(assoc)?,
+                ))
+            })
+            .try_fold(zend_array::new(), fold_into_zend_hashmap)?
             .into_zval(false)
-            .map_err(|err| anyhow!("{err:?}"))?
-        } else {
-            it.try_fold(
-                zend_object::new_stdclass(),
-                |mut object, item| -> anyhow::Result<ZBox<zend_object>> {
-                    let (key, value) = item?;
-                    object
-                        .set_property(&key, value)
-                        .map_err(|err| anyhow!("{err:?}"))?;
-                    Ok(object)
-                },
-            )?
-            .into_zval(false)
-            .map_err(|err| anyhow!("{err:?}"))?
-        })
+            .map_err(|err| anyhow!("{err:?}"))
     }
 
     /// Executes an SQL query and returns a dictionary grouping rows by the first column.
@@ -499,28 +472,7 @@ impl PgDriverInner {
                     row.into_zval(assoc)?,
                 ))
             })
-            .try_fold(
-                zend_array::new(),
-                |mut array: ZBox<ZendHashTable>, item: anyhow::Result<_>| -> anyhow::Result<_> {
-                    let (key, value) = item?;
-                    let array_mut = &mut array;
-                    if let Some(key) = (&key).long() {
-                        if let Some(entry) = array_mut.get_index_mut(key as u64) {
-                            let entry_array = entry.array_mut().unwrap();
-                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-                        } else {
-                            let mut entry_array = zend_array::new();
-                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-                            array_mut
-                                .insert_at_index(key as u64, entry_array)
-                                .map_err(|err| anyhow!("{err:?}"))?;
-                        }
-                    } else {
-                        bail!("First column must be scalar")
-                    }
-                    Ok(array)
-                },
-            )?
+            .try_fold(zend_array::new(), fold_into_zend_hashmap)?
             .into_zval(false)
             .map_err(|err| anyhow!("{err:?}"))
     }
@@ -578,28 +530,7 @@ impl PgDriverInner {
                     row.column_value_into_zval(row.column(1), assoc)?,
                 ))
             })
-            .try_fold(
-                zend_array::new(),
-                |mut array: ZBox<ZendHashTable>, item: anyhow::Result<_>| -> anyhow::Result<_> {
-                    let (key, value) = item?;
-                    let array_mut = &mut array;
-                    if let Some(key) = (&key).long() {
-                        if let Some(entry) = array_mut.get_index_mut(key as u64) {
-                            let entry_array = entry.array_mut().unwrap();
-                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-                        } else {
-                            let mut entry_array = zend_array::new();
-                            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-                            array_mut
-                                .insert_at_index(key as u64, entry_array)
-                                .map_err(|err| anyhow!("{err:?}"))?;
-                        }
-                    } else {
-                        bail!("First column must be scalar")
-                    }
-                    Ok(array)
-                },
-            )?
+            .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
             .into_zval(false)
             .map_err(|err| anyhow!("{err:?}"))
     }
@@ -649,22 +580,7 @@ impl PgDriverInner {
                     row.column_value_into_zval(row.column(1), assoc)?,
                 ))
             })
-            .try_fold(
-                zend_array::new(),
-                |mut array, item| -> anyhow::Result<ZBox<zend_array>> {
-                    let (key, value) = item?;
-                    if let Some(key) = (&key).long() {
-                        array
-                            .insert_at_index(key as u64, value)
-                            .map_err(|err| anyhow!("{err:?}"))?;
-                    } else if let Some(key) = (&key).str() {
-                        array.insert(key, value).map_err(|err| anyhow!("{err:?}"))?;
-                    } else {
-                        bail!("First column must be scalar")
-                    }
-                    Ok(array)
-                },
-            )?
+            .try_fold(zend_array::new(), fold_into_zend_hashmap)?
             .into_zval(false)
             .map_err(|err| anyhow!("{err:?}"))
     }

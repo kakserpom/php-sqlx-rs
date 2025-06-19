@@ -2,6 +2,7 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::must_use_candidate)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
 pub mod byclause;
 pub mod driver;
@@ -25,32 +26,6 @@ const DEFAULT_ASSOC_ARRAYS: bool = false;
 const DEFAULT_COLLAPSIBLE_IN: bool = true;
 
 use ext_php_rs::types::Zval;
-
-#[must_use]
-pub fn is_valid_ident(name: &str) -> bool {
-    !name.is_empty()
-        && name.starts_with(|c: char| c.is_alphabetic() || c == '_')
-        && name.chars().all(|c| c.is_alphanumeric() || c == '_')
-}
-pub trait ZvalNull {
-    fn null() -> Zval;
-}
-impl ZvalNull for Zval {
-    fn null() -> Zval {
-        let mut zval = Zval::new();
-        zval.set_null();
-        zval
-    }
-}
-pub trait ZvalExtractString {
-    fn extract_string(self) -> Option<String>;
-}
-impl ZvalExtractString for Zval {
-    fn extract_string(self) -> Option<String> {
-        self.string()
-            .or_else(|| self.long().map(|long| format!("{long}")))
-    }
-}
 
 #[derive(Debug, ZvalConvert)]
 pub enum ColumnArgument<'a> {
