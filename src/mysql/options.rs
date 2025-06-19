@@ -57,7 +57,7 @@ impl MySqlDriverOptions {
                         })?,
                 ),
                 associative_arrays: kv.get(DriverOptions::OPT_ASSOC_ARRAYS).map_or(
-                    Ok(false),
+                    Ok(DEFAULT_ASSOC_ARRAYS),
                     |value| {
                         if let MySqlParameterValue::Bool(bool) = value {
                             Ok(*bool)
@@ -122,7 +122,7 @@ impl MySqlDriverOptions {
                     },
                 )?,
                 collapsible_in: kv.get(DriverOptions::OPT_COLLAPSIBLE_IN).map_or(
-                    Ok(false),
+                    Ok(DEFAULT_COLLAPSIBLE_IN),
                     |value| {
                         if let MySqlParameterValue::Bool(bool) = value {
                             Ok(*bool)

@@ -57,7 +57,7 @@ impl PgDriverOptions {
                         })?,
                 ),
                 associative_arrays: kv.get(DriverOptions::OPT_ASSOC_ARRAYS).map_or(
-                    Ok(false),
+                    Ok(DEFAULT_ASSOC_ARRAYS),
                     |value| {
                         if let PgParameterValue::Bool(bool) = value {
                             Ok(*bool)
@@ -122,7 +122,7 @@ impl PgDriverOptions {
                     },
                 )?,
                 collapsible_in: kv.get(DriverOptions::OPT_COLLAPSIBLE_IN).map_or(
-                    Ok(false),
+                    Ok(DEFAULT_COLLAPSIBLE_IN),
                     |value| {
                         if let PgParameterValue::Bool(bool) = value {
                             Ok(*bool)
