@@ -1,3 +1,5 @@
+#[cfg(feature = "lazy-row")]
+use crate::LazyRow;
 use crate::utils::ZvalNull;
 use anyhow::anyhow;
 use ext_php_rs::boxed::ZBox;
@@ -18,22 +20,29 @@ pub trait Conversion: Row {
     {
         let columns = self.columns();
         if associative_arrays {
-            Ok(columns
-                .iter()
-                .try_fold(
-                    zend_array::with_capacity(u32::try_from(columns.len())?),
-                    |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
-                        array
-                            .insert(
-                                column.name(),
-                                self.column_value_into_zval(column, associative_arrays)?,
-                            )
-                            .map_err(|err| anyhow!("{err:?}"))?;
-                        Ok(array)
-                    },
-                )?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?)
+            #[cfg(feature = "lazy-row")]
+            let mut lazy = false;
+            let array = columns.iter().try_fold(
+                zend_array::with_capacity(u32::try_from(columns.len())?),
+                |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
+                    //#[cfg(feature = "lazy-row")]
+                    //lazy = true;
+                    array
+                        .insert(
+                            column.name(),
+                            self.column_value_into_zval(column, associative_arrays)?,
+                        )
+                        .map_err(|err| anyhow!("{err:?}"))?;
+                    Ok(array)
+                },
+            )?;
+            #[cfg(feature = "lazy-row")]
+            if lazy {
+                LazyRow::new(array)
+                    .into_zval(false)
+                    .map_err(|err| anyhow!("{err:?}"))?
+            }
+            Ok(array.into_zval(false).map_err(|err| anyhow!("{err:?}"))?)
         } else {
             Ok(columns
                 .iter()

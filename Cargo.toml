@@ -9,15 +9,20 @@ dashmap = "6.1.0"
 ext-php-rs = { version = "0.13.1", features = ["anyhow"] }
 itertools = "0.14.0"
 serde_json = "1.0.140"
+simd-json = { optional = true, version = "0.15.1" }
 sqlx = { version = "0.8.6", features = ["json", "runtime-tokio"], optional = true }
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
+lazy_static = "1.5.0"
 
 [features]
-default = ["postgres", "mysql"]
+experimental = []
+default = ["postgres", "mysql", "simd-json"]
 postgres = ["sqlx/postgres"]
 mysql = ["sqlx/mysql"]
+simd-json = ["simd-json/default"]
+lazy-row = []
 
 [dev-dependencies]
 criterion = "0.6.0"

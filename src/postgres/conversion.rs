@@ -1,5 +1,7 @@
-use crate::utils::ZvalNull;
 use crate::conversion::{Conversion, json_into_zval};
+#[cfg(feature = "lazy-row")]
+use crate::lazy_row::LazyRowJson;
+use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
@@ -8,9 +10,8 @@ use sqlx::Column;
 use sqlx::Error::ColumnDecode;
 use sqlx::TypeInfo;
 use sqlx::error::UnexpectedNullError;
-use sqlx::postgres::PgRow;
+use sqlx::postgres::{PgRow, PgValueRef};
 use sqlx::{Decode, Row, Type};
-
 impl Conversion for PgRow {
     fn column_value_into_zval<PgColumn: Column, Postgres>(
         &self,
@@ -51,12 +52,62 @@ impl Conversion for PgRow {
             "FLOAT8" | "F64" => try_cast_into_zval::<f64>(self, column_name)?,
             "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(self, column_name)?,
             "UUID" => try_cast_into_zval::<String>(self, column_name)?,
-            "JSON" | "JSONB" => self
-                .try_get::<serde_json::Value, _>(column_name)
-                .map_err(|err| anyhow!("{err:?}"))
-                .map(|x| json_into_zval(x, associative_arrays))?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?,
+            "JSON" => self
+                .try_get_raw::<_>(column_name)
+                .map(|val_ref: PgValueRef| {
+                    let buf = val_ref.as_bytes().map_err(|err| anyhow!("{err:?}"))?;
+                    if buf.is_empty() {
+                        bail!("empty JSON raw value in {column_name}");
+                    }
+                    #[cfg(feature = "lazy-row")]
+                    if buf.len() > 4096 {
+                        return LazyRowJson::new(&buf, associative_arrays)
+                            .into_zval(associative_arrays)
+                            .map_err(|err| anyhow!("{err:?}"));
+                    }
+
+                    #[cfg(feature = "simd-json")]
+                    return json_into_zval(
+                        simd_json::from_slice::<serde_json::Value>(&mut buf.to_vec())?,
+                        associative_arrays,
+                    );
+                    #[cfg(not(feature = "simd-json"))]
+                    return crate::conversion::json_into_zval(
+                        serde_json::from_slice(&mut buf.to_vec())?
+                            .into_zval(associative_arrays)
+                            .map_err(|err| anyhow!("{err:?}")),
+                    );
+                })??,
+            "JSONB" => self
+                .try_get_raw::<_>(column_name)
+                .map(|val_ref: PgValueRef| {
+                    let buf = val_ref.as_bytes().map_err(|err| anyhow!("{err:?}"))?;
+                    if buf.is_empty() {
+                        bail!("empty JSONB raw value in {column_name}");
+                    }
+                    if buf[0] != 1 {
+                        bail!(
+                            "unsupported JSONB format version {}; please open an issue",
+                            buf[0]
+                        );
+                    }
+                    #[cfg(not(feature = "lazy-row"))]
+                    {
+                        #[cfg(feature = "simd-json")]
+                        return json_into_zval(
+                            simd_json::from_slice::<serde_json::Value>(&mut buf[1..].to_vec())?,
+                            associative_arrays,
+                        );
+                        #[cfg(not(feature = "simd-json"))]
+                        return serde_json::from_slice(&mut buf[1..].to_vec())?
+                            .into_zval(associative_arrays)
+                            .map_err(|err| anyhow!("{err:?}"));
+                    }
+                    #[cfg(feature = "lazy-row")]
+                    LazyRowJson::new(&buf[1..], associative_arrays)
+                        .into_zval(associative_arrays)
+                        .map_err(|err| anyhow!("{err:?}"))
+                })??,
             "_JSON" | "_JSONB" => self
                 .try_get::<Vec<serde_json::Value>, _>(column_name)
                 .map_err(|err| anyhow!("{err:?}"))

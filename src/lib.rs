@@ -5,6 +5,8 @@
 #![cfg_attr(windows, feature(abi_vectorcall))]
 pub mod byclause;
 pub mod conversion;
+#[cfg(feature = "lazy-row")]
+mod lazy_row;
 #[cfg(feature = "mysql")]
 pub mod mysql;
 pub mod options;
@@ -13,6 +15,8 @@ pub mod postgres;
 pub mod selectclause;
 mod tests;
 mod utils;
+#[cfg(feature = "lazy-row")]
+pub use lazy_row::{LazyRow, LazyRowJson};
 
 use crate::byclause::{ByClause, ByClauseFieldDefinition, ByClauseRendered};
 use crate::selectclause::{SelectClause, SelectClauseRendered};
@@ -40,6 +44,9 @@ pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPrepa
 pub use postgres::{PgDriver, PgDriverOptions, PgParameterValue, PgPreparedQuery};
 
 use std::num::NonZeroU32;
+#[cfg(feature = "lazy-row")]
+use ext_php_rs::types::ZendClassObject;
+
 
 /// Registers the PHP module.
 #[php_module]
