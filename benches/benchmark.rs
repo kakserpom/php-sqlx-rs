@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use php_sqlx::driver::postgres::ast::PgAst;
+use php_sqlx::postgres::ast::PgAst;
 use std::collections::HashMap;
 use std::hint::black_box;
 

@@ -10,7 +10,7 @@ pub struct ByClause {
 }
 
 #[derive(ZvalConvert, Debug)]
-pub enum OrderFieldDefinition {
+pub enum ByClauseFieldDefinition {
     Full(Vec<String>),
     Short(String),
 }
@@ -76,7 +76,7 @@ impl ByClause {
     /// __invoke magic for apply()
 
     #[must_use]
-    pub fn __invoke(&self, order_by: Vec<OrderFieldDefinition>) -> ByClauseRendered {
+    pub fn __invoke(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
         self.internal_apply(order_by)
     }
 
@@ -93,20 +93,20 @@ impl ByClause {
     /// This method does not return an error but silently ignores unknown fields.
     /// Use validation separately if strict input is required.
     #[must_use]
-    pub fn apply(&self, order_by: Vec<OrderFieldDefinition>) -> ByClauseRendered {
+    pub fn apply(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
         self.internal_apply(order_by)
     }
 }
 impl ByClause {
     #[must_use]
-    pub fn internal_apply(&self, order_by: Vec<OrderFieldDefinition>) -> ByClauseRendered {
+    pub fn internal_apply(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
         ByClauseRendered {
             __inner: order_by
                 .into_iter()
                 .filter_map(|definition| {
                     let (mut field, descending_order) = match definition {
-                        OrderFieldDefinition::Short(name) => (name, false),
-                        OrderFieldDefinition::Full(vec) => (
+                        ByClauseFieldDefinition::Short(name) => (name, false),
+                        ByClauseFieldDefinition::Full(vec) => (
                             vec.first()?.clone(),
                             matches!(vec.get(1), Some(str) if str.trim().eq_ignore_ascii_case(Self::_DESC))
                         ),

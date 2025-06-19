@@ -1,9 +1,9 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::RUNTIME;
-use crate::driver::postgres::PgParameterValue;
-use crate::driver::conversion::Conversion;
-use crate::driver::postgres::ast::PgAst;
-use crate::driver::postgres::options::PgDriverInnerOptions;
+use crate::postgres::PgParameterValue;
+use crate::conversion::Conversion;
+use crate::postgres::ast::PgAst;
+use crate::postgres::options::PgDriverInnerOptions;
 use crate::utils::ZvalNull;
 use crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
 use anyhow::{anyhow, bail};

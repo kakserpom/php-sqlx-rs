@@ -1,35 +1,37 @@
 pub mod ast;
-mod conversion;
-pub mod options;
-pub mod prepared_query;
-
-pub use crate::driver::postgres::ast::PgParameterValue;
-use crate::driver::postgres::inner::PgDriverInner;
-pub use crate::driver::postgres::options::*;
-pub use crate::driver::postgres::prepared_query::PgPreparedQuery;
+pub use crate::mysql::{
+    ast::MySqlParameterValue, inner::MySqlDriverInner, options::MySqlDriverOptions,
+};
 use crate::utils::ColumnArgument;
-
 use dashmap::DashMap;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
+mod conversion;
 pub mod inner;
+pub mod options;
+pub mod prepared_query;
 
-static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<PgDriverInner>>> =
+pub use prepared_query::*;
+static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
     LazyLock::new(DashMap::new);
 
-/// A Postgres driver using SQLx with query helpers and AST cache.
-///
-/// This class supports prepared queries, persistent connections, and augmented SQL.
-#[php_class(name = "Sqlx\\PgDriver")]
-pub struct PgDriver {
-    pub driver_inner: Arc<PgDriverInner>,
+#[php_class(name = "Sqlx\\MySqlDriver")]
+pub struct MySqlDriver {
+    pub driver_inner: Arc<MySqlDriverInner>,
 }
-
 #[php_impl]
-impl PgDriver {
+impl MySqlDriver {
+    const OPT_URL: &'static str = "url";
+    const OPT_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
+
+    const OPT_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
+
+    const OPT_PERSISTENT_NAME: &'static str = "persistent_name";
+    const OPT_ASSOC_ARRAYS: &'static str = "assoc_arrays";
+
     /// Constructs a new SQLx driver instance.
     ///
     /// # Arguments
@@ -39,7 +41,7 @@ impl PgDriver {
     ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
     ///   - `persistent_name`: (string) name of persistent connection
     ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
-    pub fn __construct(options: PgDriverOptions) -> anyhow::Result<Self> {
+    pub fn __construct(options: MySqlDriverOptions) -> anyhow::Result<Self> {
         let options = options.parse()?;
 
         if let Some(name) = options.persistent_name.as_ref() {
@@ -50,7 +52,7 @@ impl PgDriver {
             }
         }
         let persistent_name = options.persistent_name.clone();
-        let driver_inner = Arc::new(PgDriverInner::new(options)?);
+        let driver_inner = Arc::new(MySqlDriverInner::new(options)?);
         if let Some(name) = persistent_name {
             PERSISTENT_DRIVER_REGISTRY.insert(name, driver_inner.clone());
         }
@@ -85,7 +87,7 @@ impl PgDriver {
     pub fn query_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(query, parameters, None)
     }
@@ -108,7 +110,7 @@ impl PgDriver {
     pub fn query_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -118,7 +120,7 @@ impl PgDriver {
     pub fn query_value_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -147,7 +149,7 @@ impl PgDriver {
     pub fn query_value_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -172,7 +174,7 @@ impl PgDriver {
     pub fn query_maybe_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -196,7 +198,7 @@ impl PgDriver {
     pub fn query_maybe_value_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -220,7 +222,7 @@ impl PgDriver {
     pub fn query_maybe_value_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -242,7 +244,7 @@ impl PgDriver {
     pub fn query_row_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(query, parameters, Some(true))
     }
@@ -262,7 +264,7 @@ impl PgDriver {
     pub fn query_row_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(query, parameters, Some(false))
     }
@@ -282,7 +284,7 @@ impl PgDriver {
     pub fn query_maybe_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_maybe_row(query, parameters, None)
     }
@@ -305,7 +307,7 @@ impl PgDriver {
     pub fn query_maybe_row_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_maybe_row(query, parameters, Some(true))
@@ -328,7 +330,7 @@ impl PgDriver {
     pub fn query_maybe_row_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_maybe_row(query, parameters, Some(false))
@@ -352,7 +354,7 @@ impl PgDriver {
     pub fn query_column(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -374,7 +376,7 @@ impl PgDriver {
     pub fn query_column_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -396,7 +398,7 @@ impl PgDriver {
     pub fn query_column_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -421,7 +423,7 @@ impl PgDriver {
     pub fn query_all(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.query_all(query, parameters, None)
     }
@@ -441,7 +443,7 @@ impl PgDriver {
     pub fn query_all_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.query_all(query, parameters, Some(true))
     }
@@ -461,7 +463,7 @@ impl PgDriver {
     pub fn query_all_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.query_all(query, parameters, Some(false))
     }
@@ -491,7 +493,7 @@ impl PgDriver {
     pub fn query_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_dictionary(query, parameters, None)
     }
@@ -516,7 +518,7 @@ impl PgDriver {
     pub fn query_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(query, parameters, Some(true))
@@ -542,7 +544,7 @@ impl PgDriver {
     pub fn query_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(query, parameters, Some(false))
@@ -588,7 +590,7 @@ impl PgDriver {
     pub fn query_grouped_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, None)
@@ -604,7 +606,7 @@ impl PgDriver {
     pub fn query_grouped_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, Some(true))
@@ -620,7 +622,7 @@ impl PgDriver {
     pub fn query_grouped_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, Some(false))
@@ -651,7 +653,7 @@ impl PgDriver {
     pub fn query_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, None)
@@ -674,7 +676,7 @@ impl PgDriver {
     pub fn query_column_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, Some(true))
@@ -697,7 +699,7 @@ impl PgDriver {
     pub fn query_column_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, Some(false))
@@ -708,7 +710,7 @@ impl PgDriver {
     pub fn query_grouped_column_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, Some(true))
@@ -719,7 +721,7 @@ impl PgDriver {
     pub fn query_grouped_column_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, Some(false))
@@ -745,7 +747,7 @@ impl PgDriver {
     pub fn query_grouped_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, None)
@@ -758,8 +760,8 @@ impl PgDriver {
     /// # Returns
     /// Prepared query object
     #[must_use]
-    pub fn prepare(&self, query: &str) -> PgPreparedQuery {
-        PgPreparedQuery {
+    pub fn prepare(&self, query: &str) -> MySqlPreparedQuery {
+        MySqlPreparedQuery {
             driver_inner: self.driver_inner.clone(),
             query: query.to_owned(),
         }
@@ -782,7 +784,7 @@ impl PgDriver {
     pub fn execute(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<u64> {
         self.driver_inner.execute(query, parameters)
     }
@@ -804,7 +806,7 @@ impl PgDriver {
     pub fn insert(
         &self,
         table: &str,
-        row: HashMap<String, PgParameterValue>,
+        row: HashMap<String, MySqlParameterValue>,
     ) -> anyhow::Result<u64> {
         self.execute(
             &format!(
@@ -834,7 +836,7 @@ impl PgDriver {
     pub fn dry(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, PgParameterValue>>,
+        parameters: Option<HashMap<String, MySqlParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.dry(query, parameters)
     }

@@ -4,14 +4,22 @@
 #![allow(clippy::must_use_candidate)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
 pub mod byclause;
-pub mod driver;
+pub mod conversion;
+#[cfg(feature = "mysql")]
+pub mod mysql;
+pub mod options;
+#[cfg(feature = "postgres")]
+pub mod postgres;
 pub mod selectclause;
 mod tests;
 mod utils;
 
-use crate::byclause::{ByClause, ByClauseRendered, OrderFieldDefinition};
+use crate::byclause::{ByClause, ByClauseFieldDefinition, ByClauseRendered};
 use crate::selectclause::{SelectClause, SelectClauseRendered};
+use crate::utils::ColumnArgument;
 use ext_php_rs::prelude::*;
+use ext_php_rs::types::Zval;
+use std::collections::HashMap;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
 
@@ -24,17 +32,14 @@ const DEFAULT_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(2).unwrap();
 const DEFAULT_ASSOC_ARRAYS: bool = false;
 const DEFAULT_COLLAPSIBLE_IN: bool = true;
 
-use crate::driver::DriverOptions;
+use crate::options::DriverOptions;
+
 #[cfg(feature = "mysql")]
-pub use driver::mysql::*;
+pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPreparedQuery};
 #[cfg(feature = "postgres")]
-pub use driver::postgres::*;
+pub use postgres::{PgDriver, PgDriverOptions, PgParameterValue, PgPreparedQuery};
 
-use ext_php_rs::types::Zval;
-use std::collections::HashMap;
 use std::num::NonZeroU32;
-
-use utils::ColumnArgument;
 
 /// Registers the PHP module.
 #[php_module]

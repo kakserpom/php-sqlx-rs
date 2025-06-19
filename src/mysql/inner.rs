@@ -1,8 +1,8 @@
 #![allow(clippy::needless_pass_by_value)]
 
-use crate::driver::conversion::Conversion;
-use crate::driver::mysql::ast::{MySqlAst, MySqlParameterValue};
-use crate::driver::mysql::options::MySqlDriverInnerOptions;
+use crate::conversion::Conversion;
+use crate::mysql::ast::{MySqlAst, MySqlParameterValue};
+use crate::mysql::options::MySqlDriverInnerOptions;
 use crate::utils::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
 use crate::{
     RUNTIME,
