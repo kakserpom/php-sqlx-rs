@@ -132,7 +132,7 @@ impl PgAst {
                 // Handle line comment -- until newline
                 if let Some(r) = rest.strip_prefix("--") {
                     // include '--' and content up to newline
-                    let end = r.find('\n').map(|i| i + 1).unwrap_or(r.len());
+                    let end = r.find('\n').map_or(r.len(), |i| i + 1);
                     let comment = &rest[..2 + end];
                     buf.push_str(comment);
                     rest = &rest[2 + end..];
@@ -156,7 +156,13 @@ impl PgAst {
                     }
                     let mut inner_branches = Vec::new();
                     let mut inner_ph = Vec::new();
-                    rest = inner(r, &mut inner_ph, &mut inner_branches, positional_counter, collapsible_in_enabled)?;
+                    rest = inner(
+                        r,
+                        &mut inner_ph,
+                        &mut inner_branches,
+                        positional_counter,
+                        collapsible_in_enabled,
+                    )?;
                     branches.push(PgAst::ConditionalBlock {
                         branches: inner_branches,
                         required_placeholders: inner_ph,
@@ -182,7 +188,7 @@ impl PgAst {
                         if after.starts_with('(') {
                             // parentheses form
                             if let Some(cl) = after[1..].find(')') {
-                                let inside = &after[1..1 + cl].trim();
+                                let inside = &after[1..=cl].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
                                     consumed = offset + 1 + cl + 2;
                                     name_opt = Some(id.to_string());
@@ -221,7 +227,7 @@ impl PgAst {
                             buf.trim_end_in_place();
                             if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
                                 if !left.is_empty() {
-                                    branches.push(PgAst::Sql(format!("{} ", left)));
+                                    branches.push(PgAst::Sql(format!("{left} ")));
                                 }
                                 branches.push(PgAst::NotInClause {
                                     expr: expr.to_string(),
@@ -266,7 +272,7 @@ impl PgAst {
                             name_opt = Some(positional_counter.to_string());
                         } else if rest_after_in.starts_with('(') {
                             if let Some(close_idx) = rest_after_in[1..].find(')') {
-                                let inside = &rest_after_in[1..1 + close_idx].trim();
+                                let inside = &rest_after_in[1..=close_idx].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
                                     name_opt = Some(id.to_string());
                                 } else if let Some(id) = inside.strip_prefix('$') {
@@ -283,7 +289,7 @@ impl PgAst {
                             buf.trim_end_in_place();
                             if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
                                 if !left.is_empty() {
-                                    branches.push(PgAst::Sql(format!("{} ", left)));
+                                    branches.push(PgAst::Sql(format!("{left} ")));
                                 }
                                 branches.push(PgAst::InClause {
                                     expr: expr.to_string(),
@@ -446,9 +452,9 @@ impl PgAst {
                                         sql.push_str(", ");
                                     }
                                     if let Some(expr) = expr {
-                                        sql.push_str(&format!("{expr} AS \"{field}\""));
+                                        write!(sql, "{expr} AS \"{field}\"").unwrap();
                                     } else {
-                                        sql.push_str(&format!("\"{field}\""));
+                                        write!(sql, "\"{field}\"").unwrap();
                                     }
                                 }
                             }
@@ -468,7 +474,7 @@ impl PgAst {
                                     if *is_expression {
                                         sql.push_str(expression_or_identifier);
                                     } else {
-                                        sql.push_str(&format!("\"{expression_or_identifier}\""));
+                                        write!(sql, "\"{expression_or_identifier}\"").unwrap();
                                     }
                                     if *descending_order {
                                         sql.push_str(" DESC");
@@ -564,7 +570,7 @@ impl PgAst {
             ..
         } = self
         {
-            if let Some(missing_placeholder) = required_placeholders.into_iter().find(|&ph| {
+            if let Some(missing_placeholder) = required_placeholders.iter().find(|&ph| {
                 if let Some(value) = values.get(ph) {
                     value.is_empty()
                 } else {

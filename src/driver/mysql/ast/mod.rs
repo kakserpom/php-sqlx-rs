@@ -107,7 +107,7 @@ impl MySqlAst {
 
             while !rest.is_empty() {
                 // Handle single-quoted string literal with backslash and '' escapes
-                if rest.starts_with("'") {
+                if rest.starts_with('\'') {
                     let mut idx = 1;
                     let mut iter = rest.char_indices().skip(1).peekable();
                     while let Some((i, c)) = iter.next() {
@@ -271,13 +271,13 @@ impl MySqlAst {
                             name_opt = Some(positional_counter.to_string());
                         } else if after.starts_with('(') {
                             if let Some(cl) = after[1..].find(')') {
-                                let inside = &after[1..1 + cl].trim();
+                                let inside = &after[1..=cl].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
                                     consumed = orig - after.len() + 1 + cl + 1;
                                     name_opt = Some(id.to_string());
                                 } else if let Some(id) = inside.strip_prefix('$') {
                                     consumed = orig - after.len() + 1 + cl + 1;
-                                    name_opt = Some(id.to_string())
+                                    name_opt = Some(id.to_string());
                                 } else if *inside == "?" {
                                     *positional_counter += 1;
                                     consumed = orig - after.len() + 1 + cl + 1;
@@ -288,7 +288,7 @@ impl MySqlAst {
                         if let Some(name) = name_opt {
                             let trimmed = buf.trim_end();
                             let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                                Some((a, b)) => (format!("{} ", a), b),
+                                Some((a, b)) => (format!("{a} "), b),
                                 None => (String::new(), trimmed),
                             };
                             if !pre.is_empty() {
@@ -432,9 +432,9 @@ impl MySqlAst {
                                         sql.push_str(", ");
                                     }
                                     if let Some(expression) = expression {
-                                        sql.push_str(&format!("{expression} AS `{field}`"));
+                                        write!(sql, "{expression} AS `{field}`").unwrap();
                                     } else {
-                                        sql.push_str(&format!("`{field}`"));
+                                        write!(sql, "`{field}`").unwrap();
                                     }
                                 }
                             }
