@@ -1,12 +1,11 @@
-#![allow(clippy::needless_borrow)]
 #![allow(clippy::needless_pass_by_value)]
+use crate::RUNTIME;
 use crate::driver::PgParameterValue;
 use crate::driver::conversion::Conversion;
 use crate::driver::postgres::ast::PgAst;
 use crate::driver::postgres::options::PgDriverInnerOptions;
-use crate::utils::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
-use crate::{ColumnArgument, RUNTIME};
 use crate::utils::ZvalNull;
+use crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
 use anyhow::{anyhow, bail};
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_array;

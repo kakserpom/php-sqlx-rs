@@ -1,11 +1,13 @@
-#![allow(clippy::needless_borrow)]
 #![allow(clippy::needless_pass_by_value)]
 
 use crate::driver::conversion::Conversion;
 use crate::driver::mysql::ast::{MySqlAst, MySqlParameterValue};
 use crate::driver::mysql::options::MySqlDriverInnerOptions;
 use crate::utils::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
-use crate::{ColumnArgument, RUNTIME, utils::ZvalNull};
+use crate::{
+    RUNTIME,
+    utils::{ColumnArgument, ZvalNull},
+};
 use anyhow::{anyhow, bail};
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_array;

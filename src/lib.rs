@@ -1,5 +1,4 @@
 #![warn(clippy::pedantic)]
-#![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::must_use_candidate)]
@@ -10,7 +9,7 @@ pub mod selectclause;
 mod tests;
 mod utils;
 
-use crate::byclause::{ByClause, OrderFieldDefinition, ByClauseRendered};
+use crate::byclause::{ByClause, ByClauseRendered, OrderFieldDefinition};
 use crate::selectclause::{SelectClause, SelectClauseRendered};
 use ext_php_rs::prelude::*;
 use std::sync::LazyLock;
@@ -25,17 +24,13 @@ const DEFAULT_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(2).unwrap();
 const DEFAULT_ASSOC_ARRAYS: bool = false;
 const DEFAULT_COLLAPSIBLE_IN: bool = true;
 
-use ext_php_rs::types::Zval;
-
-#[derive(Debug, ZvalConvert)]
-pub enum ColumnArgument<'a> {
-    Index(usize),
-    Name(&'a str),
-}
 #[allow(clippy::wildcard_imports)]
 use crate::driver::*;
+use ext_php_rs::types::Zval;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
+
+use utils::ColumnArgument;
 
 /// Registers the PHP module.
 #[php_module]

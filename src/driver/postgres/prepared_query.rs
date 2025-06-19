@@ -1,4 +1,4 @@
-use crate::ColumnArgument;
+use crate::utils::ColumnArgument;
 use crate::PgParameterValue;
 use ext_php_rs::{prelude::*, types::Zval};
 use std::collections::HashMap;

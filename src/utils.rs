@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail};
+use ext_php_rs::ZvalConvert;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::types::{ZendHashTable, Zval};
@@ -23,7 +24,7 @@ pub fn fold_into_zend_hashmap(
     item: anyhow::Result<(Zval, Zval)>,
 ) -> anyhow::Result<ZBox<ZendHashTable>> {
     let (key, value) = item?;
-    if let Some(index) = (&key).long() {
+    if let Some(index) = key.long() {
         if let Ok(non_negative_index) = u64::try_from(index) {
             array
                 .insert_at_index(non_negative_index, value)
@@ -50,7 +51,7 @@ pub fn fold_into_zend_hashmap_grouped(
 ) -> anyhow::Result<ZBox<ZendHashTable>> {
     let (key, value) = item?;
     let array_mut = &mut array;
-    if let Some(index) = (&key).long() {
+    if let Some(index) = key.long() {
         if let Ok(non_negative_index) = u64::try_from(index) {
             if let Some(entry) = array_mut.get_index_mut(non_negative_index) {
                 let entry_array = entry.array_mut().unwrap();
@@ -107,4 +108,10 @@ impl ZvalNull for Zval {
         zval.set_null();
         zval
     }
+}
+
+#[derive(Debug, ZvalConvert)]
+pub enum ColumnArgument<'a> {
+    Index(usize),
+    Name(&'a str),
 }

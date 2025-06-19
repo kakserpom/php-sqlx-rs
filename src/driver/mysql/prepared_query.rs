@@ -1,4 +1,4 @@
-use crate::ColumnArgument;
+use crate::utils::ColumnArgument;
 use crate::driver::mysql::ast::MySqlParameterValue;
 use crate::driver::mysql::inner::MySqlDriverInner;
 use ext_php_rs::{prelude::*, types::Zval};
