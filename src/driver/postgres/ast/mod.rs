@@ -181,45 +181,45 @@ impl PgAst {
                 if collapsible_in_enabled {
                     // NOT IN support (with or without parentheses)
                     if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
-                        let after = suffix.trim_start();
+                        let rest_after_in = suffix.trim_start();
                         let offset = rest.len() - suffix.len();
-                        let mut consumed = 0;
+                        let mut consumed_len = 0;
                         let mut name_opt = None;
-                        if after.starts_with('(') {
+                        if rest_after_in.starts_with('(') {
                             // parentheses form
-                            if let Some(cl) = after[1..].find(')') {
-                                let inside = &after[1..=cl].trim();
+                            if let Some(cl) = rest_after_in[1..].find(')') {
+                                let inside = &rest_after_in[1..=cl].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
-                                    consumed = offset + 1 + cl + 2;
+                                    consumed_len = offset + 1 + cl + 2;
                                     name_opt = Some(id.to_string());
                                 } else if let Some(id) = inside.strip_prefix('$') {
-                                    consumed = offset + 1 + cl + 2;
+                                    consumed_len = offset + 1 + cl + 2;
                                     name_opt = Some(id.to_string());
                                 } else if *inside == "?" {
                                     *positional_counter += 1;
-                                    consumed = offset + 1 + cl + 2;
+                                    consumed_len = offset + 1 + cl + 2;
                                     name_opt = Some(positional_counter.to_string());
                                 }
                             }
                         } else {
                             // non-parentheses form
-                            if let Some(sfx) = after.strip_prefix(':') {
+                            if let Some(sfx) = rest_after_in.strip_prefix(':') {
                                 let name: String = sfx
                                     .chars()
                                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                                     .collect();
-                                consumed = offset + 2 + name.len();
+                                consumed_len = offset + 2 + name.len();
                                 name_opt = Some(name);
-                            } else if let Some(sfx) = after.strip_prefix('$') {
+                            } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
                                 let name: String = sfx
                                     .chars()
                                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                                     .collect();
-                                consumed = offset + 2 + name.len();
+                                consumed_len = offset + 2 + name.len();
                                 name_opt = Some(name);
-                            } else if after.starts_with('?') {
+                            } else if rest_after_in.starts_with('?') {
                                 *positional_counter += 1;
-                                consumed = offset + 2;
+                                consumed_len = offset + 2;
                                 name_opt = Some(positional_counter.to_string());
                             }
                         }
@@ -240,7 +240,7 @@ impl PgAst {
                                 });
                             }
                             buf.clear();
-                            rest = &rest[consumed..];
+                            rest = &rest[consumed_len..];
                             continue;
                         }
                     }
@@ -250,17 +250,17 @@ impl PgAst {
                         let rest_after_in = rest_after_in.trim_start();
                         let original_len = rest.len();
 
-                        let mut consumed = 0;
+                        let mut consumed_len = 0;
                         let mut name_opt = None;
                         if let Some(sfx) = rest_after_in.strip_prefix(':') {
                             let ident: String = sfx
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
-                            consumed = original_len - rest_after_in.len() + 1 + ident.len();
+                            consumed_len = original_len - rest_after_in.len() + 1 + ident.len();
                             name_opt = Some(ident);
                         } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
-                            consumed = original_len - rest_after_in.len();
+                            consumed_len = original_len - rest_after_in.len();
                             name_opt = Some(
                                 sfx.chars()
                                     .take_while(|c| c.is_alphanumeric() || *c == '_')
@@ -268,11 +268,11 @@ impl PgAst {
                             );
                         } else if rest_after_in.starts_with('?') {
                             *positional_counter += 1;
-                            consumed = original_len - rest_after_in.len() + 1;
+                            consumed_len = original_len - rest_after_in.len() + 1;
                             name_opt = Some(positional_counter.to_string());
-                        } else if rest_after_in.starts_with('(') {
-                            if let Some(close_idx) = rest_after_in[1..].find(')') {
-                                let inside = &rest_after_in[1..=close_idx].trim();
+                        } else if let Some(stripped) = rest_after_in.strip_prefix("(") {
+                            if let Some(close_idx) = stripped.find(')') {
+                                let inside = &stripped[..close_idx].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
                                     name_opt = Some(id.to_string());
                                 } else if let Some(id) = inside.strip_prefix('$') {
@@ -281,7 +281,8 @@ impl PgAst {
                                     *positional_counter += 1;
                                     name_opt = Some(positional_counter.to_string());
                                 }
-                                consumed = original_len - rest_after_in.len() + 1 + close_idx + 1;
+                                consumed_len =
+                                    original_len - rest_after_in.len() + 1 + close_idx + 1;
                             }
                         }
 
@@ -302,7 +303,7 @@ impl PgAst {
                                 });
                             }
                             buf.clear();
-                            rest = &rest[consumed..];
+                            rest = &rest[consumed_len..];
                             continue;
                         }
                     }

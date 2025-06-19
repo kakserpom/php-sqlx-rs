@@ -80,7 +80,7 @@ impl PgDriverInner {
         if let Some(ast) = self.ast_cache.get(query) {
             ast.render(parameters)
         } else {
-            let ast = PgAst::parse(query, true)?;
+            let ast = PgAst::parse(query, self.options.collapsible_in)?;
             let rendered = ast.render(parameters)?;
             self.ast_cache.insert(query.to_owned(), ast);
             Ok(rendered)
