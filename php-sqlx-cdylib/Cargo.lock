@@ -1386,7 +1386,6 @@ dependencies = [
  "dashmap",
  "ext-php-rs",
  "itertools",
- "lazy_static",
  "serde_json",
  "simd-json",
  "sqlx",
