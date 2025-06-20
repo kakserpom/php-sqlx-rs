@@ -3,6 +3,7 @@ mod tests;
 
 use crate::ByClauseRendered;
 use crate::byclause::ByClauseRenderedField;
+use crate::paginateclause::PaginateClauseRendered;
 use crate::selectclause::{SelectClauseRendered, SelectClauseRenderedField};
 use crate::utils::StripPrefixIgnoreAsciiCase;
 use anyhow::bail;
@@ -11,7 +12,7 @@ use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Write};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum MySqlAst {
     Nested(Vec<MySqlAst>),
     /// Literal SQL text
@@ -35,6 +36,9 @@ pub enum MySqlAst {
         expr: String,
         placeholder: String,
     },
+    PaginateClause {
+        placeholder: String,
+    },
 }
 
 /// Represents a placeholder identifier
@@ -49,8 +53,9 @@ pub enum MySqlParameterValue {
     Bool(bool),
     Array(Vec<MySqlParameterValue>),
     Object(HashMap<String, MySqlParameterValue>),
-    RenderedSelectClause(SelectClauseRendered),
-    RenderedByClause(ByClauseRendered),
+    SelectClauseRendered(SelectClauseRendered),
+    ByClauseRendered(ByClauseRendered),
+    PaginateClauseRendered(PaginateClauseRendered),
 }
 impl MySqlParameterValue {
     #[must_use]
@@ -58,14 +63,15 @@ impl MySqlParameterValue {
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
-            MySqlParameterValue::RenderedByClause(x) => x.is_empty(),
-            MySqlParameterValue::RenderedSelectClause(x) => x.is_empty(),
+            MySqlParameterValue::ByClauseRendered(x) => x.is_empty(),
+            MySqlParameterValue::SelectClauseRendered(x) => x.is_empty(),
             MySqlParameterValue::Array(array) => array.is_empty(),
             MySqlParameterValue::Str(_)
             | MySqlParameterValue::Int(_)
             | MySqlParameterValue::Float(_)
             | MySqlParameterValue::Bool(_)
             | MySqlParameterValue::Object(_) => false,
+            MySqlParameterValue::PaginateClauseRendered(_) => false,
         }
     }
 }
@@ -181,6 +187,41 @@ impl MySqlAst {
                     }
                     return Ok(r);
                 }
+
+                if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("PAGINATE") {
+                    let rest_after_in = suffix.trim_start();
+                    let offset = rest.len() - suffix.len();
+                    let mut consumed_len = 0;
+                    let mut name_opt = None;
+                    if let Some(sfx) = rest_after_in.strip_prefix(':') {
+                        let name: String = sfx
+                            .chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        consumed_len = offset + 2 + name.len();
+                        name_opt = Some(name);
+                    } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
+                        let name: String = sfx
+                            .chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        consumed_len = offset + 2 + name.len();
+                        name_opt = Some(name);
+                    } else if rest_after_in.starts_with('?') {
+                        *positional_counter += 1;
+                        consumed_len = offset + 2;
+                        name_opt = Some(positional_counter.to_string());
+                    }
+                    if let Some(name) = name_opt {
+                        branches.push(MySqlAst::Sql(format!("{buf} ")));
+                        buf.clear();
+                        placeholders_out.push(name.to_string());
+                        branches.push(MySqlAst::PaginateClause { placeholder: name });
+                        rest = &rest[consumed_len..];
+                        continue;
+                    }
+                }
+
                 if collapsible_in_enabled {
                     // NOT IN support (with or without parentheses)
                     if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
@@ -407,11 +448,11 @@ impl MySqlAst {
             values: &ParamsMap,
             sql: &mut String,
             out_vals: &mut Vec<MySqlParameterValue>,
-        ) {
-            match node {
+        ) -> anyhow::Result<()> {
+            Ok(match node {
                 MySqlAst::Root { branches, .. } | MySqlAst::Nested(branches) => {
                     for n in branches {
-                        walk(n, values, sql, out_vals);
+                        walk(n, values, sql, out_vals)?;
                     }
                 }
                 MySqlAst::Sql(s) => sql.push_str(s),
@@ -423,7 +464,7 @@ impl MySqlAst {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            MySqlParameterValue::RenderedSelectClause(fields) => {
+                            MySqlParameterValue::SelectClauseRendered(fields) => {
                                 for (i, SelectClauseRenderedField { field, expression }) in
                                     fields.__inner.iter().enumerate()
                                 {
@@ -437,7 +478,7 @@ impl MySqlAst {
                                     }
                                 }
                             }
-                            MySqlParameterValue::RenderedByClause(order_by) => {
+                            MySqlParameterValue::ByClauseRendered(order_by) => {
                                 for (
                                     i,
                                     ByClauseRenderedField {
@@ -488,7 +529,7 @@ impl MySqlAst {
                         }
                     }) {
                         for b in branches {
-                            walk(b, values, sql, out_vals);
+                            walk(b, values, sql, out_vals)?;
                         }
                     }
                 }
@@ -529,7 +570,17 @@ impl MySqlAst {
                         write!(sql, "TRUE /* {expr} IN :{placeholder} */").unwrap();
                     }
                 },
-            }
+                MySqlAst::PaginateClause { placeholder } => match values.get(placeholder) {
+                    Some(MySqlParameterValue::PaginateClauseRendered(rendered)) => {
+                        out_vals.push(MySqlParameterValue::Int(rendered.limit));
+                        out_vals.push(MySqlParameterValue::Int(rendered.offset));
+                        sql.push_str("LIMIT ? OFFSET ?");
+                    }
+                    _ => {
+                        bail!("PAGINATE may only accept Sqlx\\PaginateClause instance");
+                    }
+                },
+            })
         }
 
         let values: ParamsMap = values
@@ -560,7 +611,7 @@ impl MySqlAst {
                 bail!("Missing required placeholder `{missing_placeholder}`");
             }
         }
-        walk(self, &values, &mut sql, &mut out_vals);
+        walk(self, &values, &mut sql, &mut out_vals)?;
         let sql = sql.split_whitespace().join(" ");
 
         #[cfg(test)]
