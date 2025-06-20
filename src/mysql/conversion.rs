@@ -78,7 +78,7 @@ impl Conversion for MySqlRow {
                             bail!("empty JSON raw value in {column_name}");
                         }
                         #[cfg(feature = "lazy-row")]
-                        if buf.len() > 4096 {
+                        if buf.len() > crate::lazy_row::LAZY_ROW_JSON_SIZE_THRESHOLD {
                             return LazyRowJson::new(buf, associative_arrays)
                                 .into_zval(associative_arrays)
                                 .map_err(|err| anyhow!("{err:?}"));

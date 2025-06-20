@@ -7,6 +7,9 @@ use ext_php_rs::types::{ZendClassObject, Zval};
 use ext_php_rs::zend::ce;
 use ext_php_rs::{php_class, php_impl};
 use std::cell::RefCell;
+
+pub const LAZY_ROW_JSON_SIZE_THRESHOLD: usize = 4096;
+
 #[php_class]
 #[php(name = "Sqlx\\LazyRow")]
 #[php(rename = "none")]
