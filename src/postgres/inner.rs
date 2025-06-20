@@ -406,7 +406,8 @@ impl PgDriverInner {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    //row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.into_zval(assoc)?,
                 ))
             })
@@ -467,11 +468,11 @@ impl PgDriverInner {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.into_zval(assoc)?,
                 ))
             })
-            .try_fold(zend_array::new(), fold_into_zend_hashmap)?
+            .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
             .into_zval(false)
             .map_err(|err| anyhow!("{err:?}"))
     }
@@ -525,7 +526,7 @@ impl PgDriverInner {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.column_value_into_zval(row.column(1), assoc)?,
                 ))
             })
@@ -575,7 +576,7 @@ impl PgDriverInner {
             .into_iter()
             .map(|row| -> anyhow::Result<_> {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.column_value_into_zval(row.column(1), assoc)?,
                 ))
             })

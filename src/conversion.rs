@@ -20,13 +20,11 @@ pub trait Conversion: Row {
     {
         let columns = self.columns();
         if associative_arrays {
-            #[cfg(feature = "lazy-row")]
             let mut lazy = false;
             let array = columns.iter().try_fold(
                 zend_array::with_capacity(u32::try_from(columns.len())?),
                 |mut array, column| -> anyhow::Result<ZBox<zend_array>> {
-                    //#[cfg(feature = "lazy-row")]
-                    //lazy = true;
+                    lazy = true;
                     array
                         .insert(
                             column.name(),
@@ -76,7 +74,10 @@ pub trait Conversion: Row {
     where
         C: Column<Database = D>;
 
-    fn column_value_into_array_key<C, D>(&self, column: &C) -> anyhow::Result<ArrayKey>
+    fn column_value_into_array_key<'a, 'b, C, D>(
+        &'a self,
+        column: &C,
+    ) -> anyhow::Result<ArrayKey<'b>>
     where
         C: Column<Database = D>;
 }

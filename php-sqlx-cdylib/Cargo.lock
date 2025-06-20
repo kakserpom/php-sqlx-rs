@@ -540,7 +540,6 @@ dependencies = [
 [[package]]
 name = "ext-php-rs"
 version = "0.13.1"
-source = "git+https://github.com/kakserpom/ext-php-rs.git?branch=master#1fe74f753aa50eb5366495838345872d8fb36fa6"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -559,7 +558,6 @@ dependencies = [
 [[package]]
 name = "ext-php-rs-derive"
 version = "0.10.2"
-source = "git+https://github.com/kakserpom/ext-php-rs.git?branch=master#1fe74f753aa50eb5366495838345872d8fb36fa6"
 dependencies = [
  "anyhow",
  "convert_case",

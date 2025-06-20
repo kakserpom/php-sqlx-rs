@@ -18,12 +18,8 @@ mod utils;
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
 
-use crate::byclause::{ByClause, ByClauseFieldDefinition, ByClauseRendered};
-use crate::selectclause::{SelectClause, SelectClauseRendered};
-use crate::utils::ColumnArgument;
+use crate::byclause::ByClauseRendered;
 use ext_php_rs::prelude::*;
-use ext_php_rs::types::Zval;
-use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
@@ -46,11 +42,15 @@ pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPrepa
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {
     let module = selectclause::build(module);
     let module = byclause::build(module);
+    
     #[cfg(feature = "mysql")]
     let module = mysql::build(module);
+    
     #[cfg(feature = "postgres")]
     let module = postgres::build(module);
+    
     #[cfg(feature = "lazy-row")]
     let module = lazy_row::build(module);
-    module
+
+    module.class::<DriverOptions>()
 }

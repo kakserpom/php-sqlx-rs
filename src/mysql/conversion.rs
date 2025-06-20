@@ -79,21 +79,10 @@ impl Conversion for MySqlRow {
         })
     }
 
-    fn column_value_into_array_key<MySqlColumn: Column, MySql>(
-        &self,
+    fn column_value_into_array_key<'a, 'b, MySqlColumn: Column, MySql>(
+        &'a self,
         column: &MySqlColumn,
-    ) -> anyhow::Result<ArrayKey> {
-        fn try_cast_into_zval<'r, T>(row: &'r MySqlRow, name: &str) -> anyhow::Result<Zval>
-        where
-            T: Decode<'r, <MySqlRow as Row>::Database> + Type<<MySqlRow as Row>::Database>,
-            T: IntoZval,
-        {
-            row.try_get::<'r, T, _>(name)
-                .map_err(|err| anyhow!("{err:?}"))?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))
-        }
-
+    ) -> anyhow::Result<ArrayKey<'b>> {
         let column_name = column.name();
         Ok(match column.type_info().name() {
             "BOOLEAN" => ArrayKey::Long(if self.try_get::<bool, _>(column_name)? {

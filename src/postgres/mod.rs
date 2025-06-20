@@ -842,7 +842,7 @@ impl PgDriver {
 }
 
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module//.class::<PgPreparedQuery>()
+    module
         .class::<PgDriver>()
         .class::<PgPreparedQuery>()
 }

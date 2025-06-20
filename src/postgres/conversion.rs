@@ -168,21 +168,10 @@ impl Conversion for PgRow {
         })
     }
 
-    fn column_value_into_array_key<MySqlColumn: Column, MySql>(
-        &self,
-        column: &MySqlColumn,
-    ) -> anyhow::Result<ArrayKey> {
-        fn try_cast_into_zval<'r, T>(row: &'r PgRow, name: &str) -> anyhow::Result<Zval>
-        where
-            T: Decode<'r, <PgRow as Row>::Database> + Type<<PgRow as Row>::Database>,
-            T: IntoZval,
-        {
-            row.try_get::<'r, T, _>(name)
-                .map_err(|err| anyhow!("{err:?}"))?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))
-        }
-
+    fn column_value_into_array_key<'a, 'b, PgColumn: Column, Postgres>(
+        &'a self,
+        column: &PgColumn,
+    ) -> anyhow::Result<ArrayKey<'b>> {
         let column_name = column.name();
         Ok(match column.type_info().name() {
             "BOOLEAN" => ArrayKey::Long(if self.try_get::<bool, _>(column_name)? {
@@ -198,11 +187,10 @@ impl Conversion for PgRow {
                     ArrayKey::Long(0)
                 }
             }
-            "TINYINT UNSIGNED" | "TINYINT" | "SMALLINT" | "SMALLINT UNSIGNED" | "MEDIUMINT"
-            | "INTEGER" | "INT" | "BIGINT" | "BIGINT UNSIGNED" | "YEAR" => {
+            "INT2" | "INT4" | "INT" | "INT8" | "OID" => {
                 ArrayKey::Long(self.try_get::<i64, _>(column_name)?)
             }
-            "TEXT" | "TINYTEXT" | "MEDIUMTEXT" | "LONGTEXT" | "CHAR" | "VARCHAR" => {
+            "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" | "NUMERIC" | "MONEY" => {
                 ArrayKey::String(self.try_get::<String, _>(column_name)?)
             }
             "ENUM" | "SET" => ArrayKey::String(self.try_get::<String, _>(column_name)?),
