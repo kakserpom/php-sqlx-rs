@@ -174,15 +174,11 @@ impl Conversion for PgRow {
     ) -> anyhow::Result<ArrayKey<'b>> {
         let column_name = column.name();
         Ok(match column.type_info().name() {
-            "BOOLEAN" => ArrayKey::Long(if self.try_get::<bool, _>(column_name)? {
-                1
-            } else {
-                0
-            }),
+            "BOOLEAN" => ArrayKey::Long(i64::from(self.try_get::<bool, _>(column_name)?)),
             "BIT" => {
                 let v: Vec<u8> = self.try_get(column_name)?;
                 if v.len() == 1 {
-                    ArrayKey::Long(if v[0] != 0 { 1 } else { 0 })
+                    ArrayKey::Long(i64::from(v[0] != 0))
                 } else {
                     ArrayKey::Long(0)
                 }
