@@ -1,3 +1,4 @@
+use crate::LazyRowJson;
 use crate::conversion::{Conversion, json_into_zval};
 use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
@@ -6,7 +7,7 @@ use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
 use sqlx::Column;
 use sqlx::TypeInfo;
-use sqlx::mysql::MySqlRow;
+use sqlx::mysql::{MySqlRow, MySqlValueRef};
 use sqlx::{Decode, Row, Type};
 
 impl Conversion for MySqlRow {
@@ -69,12 +70,33 @@ impl Conversion for MySqlRow {
                 }
             }
             "NULL" => Zval::null(),
-            "JSON" => self
-                .try_get::<serde_json::Value, _>(column_name)
-                .map_err(|err| anyhow!("{err:?}"))
-                .map(|x| json_into_zval(x, associative_arrays))?
-                .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?,
+            "JSON" => {
+                self.try_get_raw::<_>(column_name)
+                    .map(|value_ref: MySqlValueRef<'_>| {
+                        let buf = value_ref.as_bytes().map_err(|err| anyhow!("{err:?}"))?;
+                        if buf.is_empty() {
+                            bail!("empty JSON raw value in {column_name}");
+                        }
+                        #[cfg(feature = "lazy-row")]
+                        if buf.len() > 4096 {
+                            return LazyRowJson::new(buf, associative_arrays)
+                                .into_zval(associative_arrays)
+                                .map_err(|err| anyhow!("{err:?}"));
+                        }
+
+                        #[cfg(feature = "simd-json")]
+                        return json_into_zval(
+                            simd_json::from_slice::<serde_json::Value>(&mut buf.to_vec())?,
+                            associative_arrays,
+                        );
+                        #[cfg(not(feature = "simd-json"))]
+                        return crate::conversion::json_into_zval(
+                            serde_json::from_slice(&mut buf.to_vec())?
+                                .into_zval(associative_arrays)
+                                .map_err(|err| anyhow!("{err:?}")),
+                        );
+                    })??
+            }
             other => bail!("unsupported type: {other}"),
         })
     }
