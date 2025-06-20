@@ -2,6 +2,7 @@ use crate::utils::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
+use ext_php_rs::builders::ModuleBuilder;
 use trim_in_place::TrimInPlace;
 
 #[php_class]
@@ -157,3 +158,8 @@ impl ByClauseRendered {
         self.__inner.is_empty()
     }
 }
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<ByClause>()
+}
+

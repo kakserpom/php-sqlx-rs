@@ -22,9 +22,7 @@ pub mod inner;
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<PgDriverInner>>> =
     LazyLock::new(DashMap::new);
 
-/// A Postgres driver using SQLx with query helpers and AST cache.
-///
-/// This class supports prepared queries, persistent connections, and augmented SQL.
+/// A Postgres driver using SQLx with query helpers and AST cache. This class supports prepared queries, persistent connections, and augmented SQL.
 #[php_class]
 #[php(name = "Sqlx\\PgDriver")]
 #[php(rename = "none")]
@@ -844,5 +842,8 @@ impl PgDriver {
 }
 
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<PgPreparedQuery>().class::<PgDriver>()
+    module//.class::<PgPreparedQuery>()
+        .class::<PgDriver>()
+        .class::<PgPreparedQuery>()
 }
+

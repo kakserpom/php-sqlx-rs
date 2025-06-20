@@ -41,14 +41,11 @@ use crate::options::DriverOptions;
 
 #[cfg(feature = "mysql")]
 pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPreparedQuery};
-#[cfg(feature = "postgres")]
-pub use postgres::{PgDriver, PgDriverOptions, PgParameterValue, PgPreparedQuery};
-#[cfg(feature = "lazy-row")]
-use ext_php_rs::types::ZendClassObject;
 
-/// Registers the PHP module.
 #[php_module]
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {
+    let module = selectclause::build(module);
+    let module = byclause::build(module);
     #[cfg(feature = "mysql")]
     let module = mysql::build(module);
     #[cfg(feature = "postgres")]

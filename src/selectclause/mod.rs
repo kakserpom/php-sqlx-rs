@@ -1,6 +1,6 @@
 use crate::utils::is_valid_ident;
 use anyhow::bail;
-use ext_php_rs::{ZvalConvert, php_class, php_impl};
+use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder, ZvalConvert};
 use std::collections::HashMap;
 use trim_in_place::TrimInPlace;
 
@@ -116,3 +116,8 @@ impl SelectClauseRendered {
         self.__inner.is_empty()
     }
 }
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<SelectClause>()
+}
+

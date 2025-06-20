@@ -5,9 +5,7 @@ use ext_php_rs::{prelude::*, types::Zval};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// A reusable prepared SQL query with parameter support.
-///
-/// Created using `PgDriver::prepare()`, shares context with original driver.
+/// A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
 #[php_class]
 #[php(name = "Sqlx\\PgPreparedQuery")]
 #[php(rename = "none")]
