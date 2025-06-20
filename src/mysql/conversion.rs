@@ -79,21 +79,17 @@ impl Conversion for MySqlRow {
         })
     }
 
-    fn column_value_into_array_key<'a, 'b, MySqlColumn: Column, MySql>(
-        &'a self,
+    fn column_value_into_array_key<'a, MySqlColumn: Column, MySql>(
+        &self,
         column: &MySqlColumn,
-    ) -> anyhow::Result<ArrayKey<'b>> {
+    ) -> anyhow::Result<ArrayKey<'a>> {
         let column_name = column.name();
         Ok(match column.type_info().name() {
-            "BOOLEAN" => ArrayKey::Long(if self.try_get::<bool, _>(column_name)? {
-                1
-            } else {
-                0
-            }),
+            "BOOLEAN" => ArrayKey::Long(i64::from(self.try_get::<bool, _>(column_name)?)),
             "BIT" => {
                 let v: Vec<u8> = self.try_get(column_name)?;
                 if v.len() == 1 {
-                    ArrayKey::Long(if v[0] != 0 { 1 } else { 0 })
+                    ArrayKey::Long(i64::from(v[0] != 0))
                 } else {
                     ArrayKey::Long(0)
                 }

@@ -39,7 +39,7 @@ impl LazyRow {
 
         if let Some(obj) = value.object_mut() {
             if let Some(lazy_row_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
-                let zval = LazyRowJson::take_zval(&lazy_row_json)?;
+                let zval = LazyRowJson::take_zval(lazy_row_json)?;
                 let clone = value.shallow_clone();
                 ht.insert(name, zval)?;
                 Ok(clone)
@@ -59,7 +59,7 @@ impl LazyRow {
 
         if let Some(obj) = value.object_mut() {
             if let Some(lazy_row_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
-                let zval = LazyRowJson::take_zval(&lazy_row_json)?;
+                let zval = LazyRowJson::take_zval(lazy_row_json)?;
                 let clone = value.shallow_clone();
                 ht.insert(offset.str().ok_or("Expected string offset")?, zval)?;
                 Ok(clone)

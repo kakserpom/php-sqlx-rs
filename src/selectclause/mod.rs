@@ -52,13 +52,11 @@ impl SelectClause {
     ///     "department_name" => "dp.name"
     /// ]);
     /// ```
-
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
         SelectClause::new(defined_fields)
     }
 
     /// __invoke magic for apply()
-
     #[must_use]
     pub fn __invoke(&self, order_by: Vec<String>) -> SelectClauseRendered {
         self.internal_apply(order_by)

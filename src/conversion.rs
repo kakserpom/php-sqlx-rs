@@ -36,9 +36,9 @@ pub trait Conversion: Row {
             )?;
             #[cfg(feature = "lazy-row")]
             if lazy {
-                return Ok(LazyRow::new(array)
+                return LazyRow::new(array)
                     .into_zval(false)
-                    .map_err(|err| anyhow!("{err:?}"))?);
+                    .map_err(|err| anyhow!("{err:?}"));
             }
             Ok(array.into_zval(false).map_err(|err| anyhow!("{err:?}"))?)
         } else {
@@ -74,10 +74,10 @@ pub trait Conversion: Row {
     where
         C: Column<Database = D>;
 
-    fn column_value_into_array_key<'a, 'b, C, D>(
-        &'a self,
+    fn column_value_into_array_key<'a, C, D>(
+        &self,
         column: &C,
-    ) -> anyhow::Result<ArrayKey<'b>>
+    ) -> anyhow::Result<ArrayKey<'a>>
     where
         C: Column<Database = D>;
 }

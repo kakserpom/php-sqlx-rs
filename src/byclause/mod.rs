@@ -71,13 +71,11 @@ impl ByClause {
     ///     "total_posts" => "COUNT(posts.*)"
     /// ]);
     /// ```
-
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
         ByClause::new(defined_fields)
     }
 
     /// __invoke magic for apply()
-
     #[must_use]
     pub fn __invoke(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
         self.internal_apply(order_by)

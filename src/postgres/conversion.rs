@@ -62,7 +62,7 @@ impl Conversion for PgRow {
                     }
                     #[cfg(feature = "lazy-row")]
                     if buf.len() > 4096 {
-                        return LazyRowJson::new(&buf, associative_arrays)
+                        return LazyRowJson::new(buf, associative_arrays)
                             .into_zval(associative_arrays)
                             .map_err(|err| anyhow!("{err:?}"));
                     }
@@ -168,10 +168,10 @@ impl Conversion for PgRow {
         })
     }
 
-    fn column_value_into_array_key<'a, 'b, PgColumn: Column, Postgres>(
-        &'a self,
+    fn column_value_into_array_key<'a, PgColumn: Column, Postgres>(
+        &self,
         column: &PgColumn,
-    ) -> anyhow::Result<ArrayKey<'b>> {
+    ) -> anyhow::Result<ArrayKey<'a>> {
         let column_name = column.name();
         Ok(match column.type_info().name() {
             "BOOLEAN" => ArrayKey::Long(i64::from(self.try_get::<bool, _>(column_name)?)),

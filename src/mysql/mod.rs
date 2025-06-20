@@ -304,7 +304,6 @@ impl MySqlDriver {
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
-
     pub fn query_maybe_row_assoc(
         &self,
         query: &str,
