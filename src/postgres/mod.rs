@@ -10,25 +10,28 @@ pub use crate::postgres::prepared_query::PgPreparedQuery;
 use crate::utils::ColumnArgument;
 
 use dashmap::DashMap;
+use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
-pub mod inner;
 
+pub mod inner;
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<PgDriverInner>>> =
     LazyLock::new(DashMap::new);
 
 /// A Postgres driver using SQLx with query helpers and AST cache.
 ///
 /// This class supports prepared queries, persistent connections, and augmented SQL.
-#[php_class(name = "Sqlx\\PgDriver")]
+#[php_class]
+#[php(name = "Sqlx\\PgDriver")]
+#[php(rename = "none")]
 pub struct PgDriver {
     pub driver_inner: Arc<PgDriverInner>,
 }
 
-#[php_impl]
+//#[php_impl]
 impl PgDriver {
     /// Constructs a new SQLx driver instance.
     ///
@@ -62,7 +65,6 @@ impl PgDriver {
     /// If true, result rows are returned as PHP associative arrays (key-value pairs).
     /// If false, result rows are returned as PHP `stdClass` objects.
     #[must_use]
-    #[getter]
     pub fn assoc_arrays(&self) -> bool {
         self.driver_inner.options.associative_arrays
     }
@@ -838,4 +840,8 @@ impl PgDriver {
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.dry(query, parameters)
     }
+}
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<PgPreparedQuery>().class::<PgDriver>()
 }

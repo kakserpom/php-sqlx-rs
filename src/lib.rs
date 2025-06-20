@@ -24,6 +24,7 @@ use crate::utils::ColumnArgument;
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::Zval;
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
 
@@ -39,17 +40,21 @@ const DEFAULT_COLLAPSIBLE_IN: bool = true;
 use crate::options::DriverOptions;
 
 #[cfg(feature = "mysql")]
-pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPreparedQuery};
+//pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPreparedQuery};
 #[cfg(feature = "postgres")]
-pub use postgres::{PgDriver, PgDriverOptions, PgParameterValue, PgPreparedQuery};
-
-use std::num::NonZeroU32;
+//pub use postgres::{PgDriver, PgDriverOptions, PgParameterValue, PgPreparedQuery};
 #[cfg(feature = "lazy-row")]
-use ext_php_rs::types::ZendClassObject;
-
+//use ext_php_rs::types::ZendClassObject;
+use std::num::NonZeroU32;
 
 /// Registers the PHP module.
 #[php_module]
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {
+    #[cfg(feature = "mysql")]
+    let module = crate::mysql::build(module);
+    #[cfg(feature = "postgres")]
+    let module = crate::postgres::build(module);
+    #[cfg(feature = "lazy-row")]
+    let module = lazy_row::build(module);
     module
 }

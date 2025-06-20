@@ -32,12 +32,12 @@ pub fn fold_into_zend_hashmap(
         } else {
             let key = index.to_string();
             array
-                .insert(&key, value)
+                .insert(key.as_str(), value)
                 .map_err(|err| anyhow!("{err:?}"))?;
         }
     } else if let Some(key) = key.string() {
         array
-            .insert(&key, value)
+            .insert(key.as_str(), value)
             .map_err(|err| anyhow!("{err:?}"))?;
     } else {
         bail!("First column must be scalar")
@@ -72,7 +72,7 @@ pub fn fold_into_zend_hashmap_grouped(
                 let mut entry_array = zend_array::new();
                 entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
                 array_mut
-                    .insert(&key, entry_array)
+                    .insert(key.as_str(), entry_array)
                     .map_err(|err| anyhow!("{err:?}"))?;
             }
         }
@@ -84,7 +84,7 @@ pub fn fold_into_zend_hashmap_grouped(
             let mut entry_array = zend_array::new();
             entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
             array_mut
-                .insert(&key, entry_array)
+                .insert(key.as_str(), entry_array)
                 .map_err(|err| anyhow!("{err:?}"))?;
         }
     } else {

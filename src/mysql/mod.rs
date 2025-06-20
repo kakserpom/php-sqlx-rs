@@ -4,6 +4,7 @@ pub use crate::mysql::{
 };
 use crate::utils::ColumnArgument;
 use dashmap::DashMap;
+use ext_php_rs::prelude::ModuleBuilder;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
@@ -13,7 +14,6 @@ mod conversion;
 pub mod inner;
 pub mod options;
 pub mod prepared_query;
-
 pub use prepared_query::*;
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
     LazyLock::new(DashMap::new);
@@ -64,7 +64,6 @@ impl MySqlDriver {
     /// If true, result rows are returned as PHP associative arrays (key-value pairs).
     /// If false, result rows are returned as PHP `stdClass` objects.
     #[must_use]
-    #[getter]
     pub fn assoc_arrays(&self) -> bool {
         self.driver_inner.options.associative_arrays
     }
@@ -841,3 +840,8 @@ impl MySqlDriver {
         self.driver_inner.dry(query, parameters)
     }
 }
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<MySqlPreparedQuery>().class::<MySqlDriver>()
+}
+

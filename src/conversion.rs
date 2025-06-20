@@ -6,7 +6,7 @@ use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::ffi::zend_object;
-use ext_php_rs::types::Zval;
+use ext_php_rs::types::{ArrayKey, Zval};
 use sqlx::Column;
 use sqlx::Row;
 use std::collections::HashMap;
@@ -38,9 +38,9 @@ pub trait Conversion: Row {
             )?;
             #[cfg(feature = "lazy-row")]
             if lazy {
-                LazyRow::new(array)
+                return Ok(LazyRow::new(array)
                     .into_zval(false)
-                    .map_err(|err| anyhow!("{err:?}"))?
+                    .map_err(|err| anyhow!("{err:?}"))?);
             }
             Ok(array.into_zval(false).map_err(|err| anyhow!("{err:?}"))?)
         } else {
@@ -73,6 +73,10 @@ pub trait Conversion: Row {
         column: &C,
         associative_arrays: bool,
     ) -> anyhow::Result<Zval>
+    where
+        C: Column<Database = D>;
+
+    fn column_value_into_array_key<C, D>(&self, column: &C) -> anyhow::Result<ArrayKey>
     where
         C: Column<Database = D>;
 }

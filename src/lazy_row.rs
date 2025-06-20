@@ -4,11 +4,12 @@ use ext_php_rs::boxed::ZBox;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ZendClassObject, Zval};
+use ext_php_rs::zend::ce;
 use ext_php_rs::{php_class, php_impl};
 use std::cell::RefCell;
-
 #[derive(Debug)]
 #[php_class]
+#[php(implements(ce = ce::arrayaccess, stub = "\\ArrayAccess"))]
 pub struct LazyRow {
     pub(crate) array: RefCell<ZBox<zend_array>>,
 }
@@ -21,7 +22,6 @@ impl LazyRow {
     }
 }
 #[php_impl]
-#[php(implements(ce = ce::arrayaccess, stub = "\\ArrayAccess"))]
 impl LazyRow {
     pub fn offset_exists(&self, offset: &'_ Zval) -> PhpResult<bool> {
         Ok(self
@@ -30,6 +30,26 @@ impl LazyRow {
             .get(offset.str().ok_or("Expected string offset")?)
             .is_some())
     }
+    pub fn __get(&self, name: &str) -> PhpResult<Zval> {
+        let mut ht = self.array.borrow_mut();
+        let value = ht
+            .get_mut(name)
+            .ok_or_else(|| PhpException::from("column not found"))?;
+
+        if let Some(obj) = value.object_mut() {
+            if let Some(lazy_row_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
+                let zval = LazyRowJson::take_zval(&lazy_row_json)?;
+                let clone = value.shallow_clone();
+                ht.insert(name, zval)?;
+                Ok(clone)
+            } else {
+                Ok(value.shallow_clone())
+            }
+        } else {
+            Ok(value.shallow_clone())
+        }
+    }
+
     pub fn offset_get(&self, offset: &'_ Zval) -> PhpResult<Zval> {
         let mut ht = self.array.borrow_mut();
         let value = ht
@@ -63,7 +83,7 @@ impl LazyRow {
     }
 }
 
-#[php_class]
+#[php_class(name = "Sqlx\\LazyRowJson")]
 pub struct LazyRowJson {
     pub(crate) raw: RefCell<Vec<u8>>,
     pub(crate) assoc: bool,
@@ -90,4 +110,8 @@ impl LazyRowJson {
         #[cfg(not(feature = "simd-json"))]
         return json_into_zval(serde_json::Value::from_slice(&mut buf)?, self.assoc);
     }
+}
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<LazyRow>().class::<LazyRowJson>()
 }
