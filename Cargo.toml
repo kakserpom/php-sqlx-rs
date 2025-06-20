@@ -20,7 +20,7 @@ lazy_static = "1.5.0"
 [features]
 experimental = []
 default = [
-    "postgres",
+    #"postgres",
     #"mysql",
     "lazy-row",
     "experimental",
