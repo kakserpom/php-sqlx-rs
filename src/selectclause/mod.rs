@@ -1,6 +1,6 @@
 use crate::utils::is_valid_ident;
 use anyhow::bail;
-use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder, ZvalConvert};
+use ext_php_rs::{ZvalConvert, php_class, php_impl, prelude::ModuleBuilder};
 use std::collections::HashMap;
 use trim_in_place::TrimInPlace;
 
@@ -35,6 +35,23 @@ impl SelectClause {
             )?,
         })
     }
+    #[must_use]
+    #[inline(always)]
+    pub fn internal_apply(&self, fields: Vec<String>) -> SelectClauseRendered {
+        SelectClauseRendered {
+            __inner: fields
+                .into_iter()
+                .filter_map(|mut field| {
+                    self.defined_fields.get(field.trim_in_place()).map(|expr| {
+                        SelectClauseRenderedField {
+                            field,
+                            expression: expr.clone(),
+                        }
+                    })
+                })
+                .collect(),
+        }
+    }
 }
 
 #[php_impl]
@@ -53,7 +70,7 @@ impl SelectClause {
     /// ]);
     /// ```
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        SelectClause::new(defined_fields)
+        Self::new(defined_fields)
     }
 
     /// __invoke magic for apply()
@@ -79,24 +96,6 @@ impl SelectClause {
         self.internal_apply(fields)
     }
 }
-impl SelectClause {
-    #[must_use]
-    pub fn internal_apply(&self, fields: Vec<String>) -> SelectClauseRendered {
-        SelectClauseRendered {
-            __inner: fields
-                .into_iter()
-                .filter_map(|mut field| {
-                    self.defined_fields.get(field.trim_in_place()).map(|expr| {
-                        SelectClauseRenderedField {
-                            field,
-                            expression: expr.clone(),
-                        }
-                    })
-                })
-                .collect(),
-        }
-    }
-}
 /// A rendered ORDER BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
 pub struct SelectClauseRendered {
@@ -118,4 +117,3 @@ impl SelectClauseRendered {
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module.class::<SelectClause>()
 }
-

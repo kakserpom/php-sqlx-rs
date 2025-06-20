@@ -1,7 +1,7 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::RUNTIME;
-use crate::postgres::PgParameterValue;
 use crate::conversion::Conversion;
+use crate::postgres::PgParameterValue;
 use crate::postgres::ast::PgAst;
 use crate::postgres::options::PgDriverInnerOptions;
 use crate::utils::ZvalNull;
@@ -623,7 +623,9 @@ where
             PgParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             PgParameterValue::Object(s) => s.values().fold(q, walker),
-            PgParameterValue::RenderedByClause(_) | PgParameterValue::RenderedSelectClause(_) => {
+            PgParameterValue::ByClauseRendered(_)
+            | PgParameterValue::SelectClauseRendered(_)
+            | PgParameterValue::PaginateClauseRendered(_) => {
                 unimplemented!()
             }
         }

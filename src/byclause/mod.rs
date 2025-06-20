@@ -1,8 +1,8 @@
 use crate::utils::is_valid_ident;
 use anyhow::bail;
+use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
-use ext_php_rs::builders::ModuleBuilder;
 use trim_in_place::TrimInPlace;
 
 #[php_class]
@@ -49,60 +49,12 @@ impl ByClause {
             )?,
         })
     }
-}
 
-#[php_impl]
-impl ByClause {
-    /// Ascending order (A to Z)
-    const ASC: &'static str = "ASC";
-    /// Descending order (Z to A)
-    const DESC: &'static str = "DESC";
-
-    /// Constructs an ByClause helper with allowed sortable fields.
-    ///
-    /// # Arguments
-    /// - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
-    ///
-    /// # Example
-    /// ```php
-    /// $order_by = new Sqlx\ByClause([
-    ///     "name",
-    ///     "age",
-    ///     "total_posts" => "COUNT(posts.*)"
-    /// ]);
-    /// ```
-    pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        ByClause::new(defined_fields)
-    }
-
-    /// __invoke magic for apply()
     #[must_use]
-    pub fn __invoke(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
-        self.internal_apply(order_by)
-    }
-
-    /// Applies ordering rules to a user-defined input.
-    ///
-    /// # Arguments
-    /// - `order_by`: List of fields (as strings or [field, direction] arrays)
-    ///
-    /// # Returns
-    /// A `RenderedByClause` object containing validated SQL ORDER BY clauses
-    /// The returning value is to be used as a placeholder value
-    ///
-    /// # Exceptions
-    /// This method does not return an error but silently ignores unknown fields.
-    /// Use validation separately if strict input is required.
-    #[must_use]
-    pub fn apply(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
-        self.internal_apply(order_by)
-    }
-}
-impl ByClause {
-    #[must_use]
-    pub fn internal_apply(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
+    #[inline(always)]
+    pub fn internal_apply(&self, fields: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
         ByClauseRendered {
-            __inner: order_by
+            __inner: fields
                 .into_iter()
                 .filter_map(|definition| {
                     let (mut field, descending_order) = match definition {
@@ -134,6 +86,54 @@ impl ByClause {
         }
     }
 }
+
+#[php_impl]
+impl ByClause {
+    /// Ascending order (A to Z)
+    const ASC: &'static str = "ASC";
+    /// Descending order (Z to A)
+    const DESC: &'static str = "DESC";
+
+    /// Constructs an ByClause helper with allowed sortable fields.
+    ///
+    /// # Arguments
+    /// - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
+    ///
+    /// # Example
+    /// ```php
+    /// $order_by = new Sqlx\ByClause([
+    ///     "name",
+    ///     "age",
+    ///     "total_posts" => "COUNT(posts.*)"
+    /// ]);
+    /// ```
+    pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
+        Self::new(defined_fields)
+    }
+
+    /// __invoke magic for apply()
+    #[must_use]
+    pub fn __invoke(&self, fields: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
+        self.internal_apply(fields)
+    }
+
+    /// Applies ordering rules to a user-defined input.
+    ///
+    /// # Arguments
+    /// - `fields`: List of fields (as strings or [field, direction] arrays)
+    ///
+    /// # Returns
+    /// A `RenderedByClause` object containing validated SQL ORDER BY clauses
+    /// The returning value is to be used as a placeholder value
+    ///
+    /// # Exceptions
+    /// This method does not return an error but silently ignores unknown fields.
+    /// Use validation separately if strict input is required.
+    #[must_use]
+    pub fn apply(&self, fields: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
+        self.internal_apply(fields)
+    }
+}
 /// A rendered ORDER BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
 pub struct ByClauseRendered {
@@ -160,4 +160,3 @@ impl ByClauseRendered {
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module.class::<ByClause>()
 }
-

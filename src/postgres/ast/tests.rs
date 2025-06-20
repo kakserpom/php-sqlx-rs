@@ -1,5 +1,6 @@
 use super::*;
-use crate::ByClauseFieldDefinition;
+use crate::byclause::{ByClause, ByClauseFieldDefinition};
+use crate::paginateclause::PaginateClause;
 
 fn into_ast(sql: &str) -> PgAst {
     PgAst::parse(sql, true).expect("failed to parse SQL statement")
@@ -85,8 +86,6 @@ fn test_render_var_types() {
 
 #[test]
 fn test_render_order_by_apply() {
-    use crate::ByClause;
-
     let ob = ByClause::new([
         ("name", "users.name"),
         ("age", "users.age"),
@@ -102,7 +101,7 @@ fn test_render_order_by_apply() {
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
     let ast = into_ast(sql);
     let (query, params) = ast
-        .render([("order_by", PgParameterValue::RenderedByClause(rendered))])
+        .render([("order_by", PgParameterValue::ByClauseRendered(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
@@ -129,7 +128,7 @@ fn test_render_order_by_apply_empty() {
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
     let ast = into_ast(sql);
     let (query, params) = ast
-        .render([("order_by", PgParameterValue::RenderedByClause(rendered))])
+        .render([("order_by", PgParameterValue::ByClauseRendered(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
@@ -247,4 +246,45 @@ fn test_parse_required_in() {
         panic!("Expected Root variant for MySqlAst");
     };
     assert_eq!(required_placeholders.len(), 1);
+}
+
+#[test]
+fn test_pagination() {
+    let sql = "SELECT * FROM users age ORDER BY id PAGINATE :pagination";
+    let ast = into_ast(sql);
+    println!("AST = {:#?}", ast);
+    assert_eq!(
+        ast,
+        PgAst::Root {
+            branches: vec![
+                PgAst::Sql(String::from("SELECT * FROM users age ORDER BY id  "),),
+                PgAst::PaginateClause {
+                    placeholder: String::from("pagination"),
+                },
+            ],
+            required_placeholders: vec![String::from("pagination")],
+        }
+    );
+
+    let mut paginate_clause = PaginateClause::new();
+
+    paginate_clause.min_per_page = 1;
+    paginate_clause.max_per_page = 10;
+    paginate_clause.default_per_page = 5;
+
+    let mut vals = ParamsMap::default();
+    vals.insert(
+        "pagination".into(),
+        PgParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
+    );
+    let (sql, values) = ast.render(vals).unwrap();
+    println!("sql = {:#?}", sql);
+    assert_eq!(
+        sql,
+        "SELECT * FROM users age ORDER BY id LIMIT $1 OFFSET $2"
+    );
+    assert_eq!(
+        values,
+        vec![PgParameterValue::Int(5), PgParameterValue::Int(35)]
+    );
 }

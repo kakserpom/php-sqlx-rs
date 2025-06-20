@@ -1,5 +1,5 @@
 use super::*;
-use crate::ByClauseFieldDefinition;
+use crate::byclause::{ByClause, ByClauseFieldDefinition};
 
 fn into_ast(sql: &str) -> MySqlAst {
     MySqlAst::parse(sql, true).expect("failed to parse SQL statement")
@@ -86,8 +86,6 @@ fn test_render_var_types() {
 
 #[test]
 fn test_render_order_by_apply() {
-    use crate::ByClause;
-
     let ob = ByClause::new([
         ("name", "users.name"),
         ("age", "users.age"),
@@ -115,8 +113,6 @@ fn test_render_order_by_apply() {
 
 #[test]
 fn test_render_order_by_apply_empty() {
-    use crate::ByClause;
-
     let ob = ByClause::new([
         ("name", "users.name"),
         ("age", "users.age"),

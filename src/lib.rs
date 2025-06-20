@@ -13,6 +13,7 @@ pub mod options;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 pub mod selectclause;
+pub mod paginateclause;
 mod tests;
 mod utils;
 #[cfg(feature = "lazy-row")]

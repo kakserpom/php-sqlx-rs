@@ -4,6 +4,7 @@ mod tests;
 
 use crate::ByClauseRendered;
 use crate::byclause::ByClauseRenderedField;
+use crate::paginateclause::PaginateClauseRendered;
 use crate::selectclause::{SelectClauseRendered, SelectClauseRenderedField};
 use crate::utils::StripPrefixIgnoreAsciiCase;
 use anyhow::bail;
@@ -14,6 +15,7 @@ use std::fmt::{Debug, Write};
 use trim_in_place::TrimInPlace;
 
 #[derive(Debug, Clone)]
+#[derive(PartialEq)]
 pub enum PgAst {
     Nested(Vec<PgAst>),
     /// Literal SQL text
@@ -37,6 +39,9 @@ pub enum PgAst {
         expr: String,
         placeholder: String,
     },
+    PaginateClause {
+        placeholder: String,
+    },
 }
 
 /// Represents a placeholder identifier
@@ -53,22 +58,24 @@ pub enum PgParameterValue {
     Bool(bool),
     Array(Vec<PgParameterValue>),
     Object(HashMap<String, PgParameterValue>),
-    RenderedByClause(ByClauseRendered),
-    RenderedSelectClause(SelectClauseRendered),
+    ByClauseRendered(ByClauseRendered),
+    SelectClauseRendered(SelectClauseRendered),
+    PaginateClauseRendered(PaginateClauseRendered),
 }
 impl PgParameterValue {
     #[must_use]
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
-            PgParameterValue::RenderedByClause(x) => x.is_empty(),
-            PgParameterValue::RenderedSelectClause(x) => x.is_empty(),
+            PgParameterValue::ByClauseRendered(x) => x.is_empty(),
+            PgParameterValue::SelectClauseRendered(x) => x.is_empty(),
             PgParameterValue::Array(array) => array.is_empty(),
             PgParameterValue::Str(_)
             | PgParameterValue::Int(_)
             | PgParameterValue::Float(_)
             | PgParameterValue::Bool(_)
             | PgParameterValue::Object(_) => false,
+            PgParameterValue::PaginateClauseRendered(_) => false,
         }
     }
 }
@@ -177,6 +184,40 @@ impl PgAst {
                         branches.push(PgAst::Sql(std::mem::take(&mut buf)));
                     }
                     return Ok(r);
+                }
+
+                if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("PAGINATE") {
+                    let rest_after_in = suffix.trim_start();
+                    let offset = rest.len() - suffix.len();
+                    let mut consumed_len = 0;
+                    let mut name_opt = None;
+                    if let Some(sfx) = rest_after_in.strip_prefix(':') {
+                        let name: String = sfx
+                            .chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        consumed_len = offset + 2 + name.len();
+                        name_opt = Some(name);
+                    } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
+                        let name: String = sfx
+                            .chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        consumed_len = offset + 2 + name.len();
+                        name_opt = Some(name);
+                    } else if rest_after_in.starts_with('?') {
+                        *positional_counter += 1;
+                        consumed_len = offset + 2;
+                        name_opt = Some(positional_counter.to_string());
+                    }
+                    if let Some(name) = name_opt {
+                        branches.push(PgAst::Sql(format!("{buf} ")));
+                        buf.clear();
+                        placeholders_out.push(name.to_string());
+                        branches.push(PgAst::PaginateClause { placeholder: name });
+                        rest = &rest[consumed_len..];
+                        continue;
+                    }
                 }
 
                 if collapsible_in_enabled {
@@ -425,11 +466,11 @@ impl PgAst {
             values: &ParamsMap,
             sql: &mut String,
             out_vals: &mut Vec<PgParameterValue>,
-        ) {
-            match node {
+        ) -> anyhow::Result<()> {
+            Ok(match node {
                 PgAst::Root { branches, .. } | PgAst::Nested(branches) => {
                     for n in branches {
-                        walk(n, values, sql, out_vals);
+                        walk(n, values, sql, out_vals)?;
                     }
                 }
                 PgAst::Sql(s) => sql.push_str(s),
@@ -441,7 +482,7 @@ impl PgAst {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            PgParameterValue::RenderedSelectClause(fields) => {
+                            PgParameterValue::SelectClauseRendered(fields) => {
                                 for (
                                     i,
                                     SelectClauseRenderedField {
@@ -460,7 +501,7 @@ impl PgAst {
                                     }
                                 }
                             }
-                            PgParameterValue::RenderedByClause(order_by) => {
+                            PgParameterValue::ByClauseRendered(order_by) => {
                                 for (
                                     i,
                                     ByClauseRenderedField {
@@ -511,7 +552,7 @@ impl PgAst {
                         }
                     }) {
                         for b in branches {
-                            walk(b, values, sql, out_vals);
+                            walk(b, values, sql, out_vals)?;
                         }
                     }
                 }
@@ -542,15 +583,30 @@ impl PgAst {
                                 sql.push_str(", ");
                             }
                             out_vals.push(item.clone());
-                            write!(sql, "${}", out_vals.len()).unwrap();
+                            write!(sql, "${}", out_vals.len())?;
                         }
                         sql.push(')');
                     }
                     _ => {
-                        write!(sql, "TRUE /* {expr} NOT IN :{placeholder} */").unwrap();
+                        write!(sql, "TRUE /* {expr} NOT IN :{placeholder} */")?;
                     }
                 },
-            }
+                PgAst::PaginateClause { placeholder } => match values.get(placeholder) {
+                    Some(PgParameterValue::PaginateClauseRendered(rendered)) => {
+                        out_vals.push(PgParameterValue::Int(rendered.limit));
+                        out_vals.push(PgParameterValue::Int(rendered.offset));
+                        write!(
+                            sql,
+                            "LIMIT ${} OFFSET ${}",
+                            out_vals.len() - 1,
+                            out_vals.len()
+                        )?;
+                    }
+                    _ => {
+                        bail!("PAGINATE may only accept Sqlx\\PaginateClause instance");
+                    }
+                },
+            })
         }
 
         let values: ParamsMap = values
@@ -582,7 +638,7 @@ impl PgAst {
                 bail!("Missing required placeholder `{missing_placeholder}`");
             }
         }
-        walk(self, &values, &mut sql, &mut out_vals);
+        walk(self, &values, &mut sql, &mut out_vals)?;
         let sql = sql.split_whitespace().join(" ");
         #[cfg(test)]
         println!("SQL = {sql}");
