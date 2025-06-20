@@ -43,7 +43,8 @@ pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPrepa
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {
     let module = selectclause::build(module);
     let module = byclause::build(module);
-    
+    let module = paginateclause::build(module);
+
     #[cfg(feature = "mysql")]
     let module = mysql::build(module);
     

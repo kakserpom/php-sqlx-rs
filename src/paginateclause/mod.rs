@@ -51,32 +51,32 @@ impl PaginateClause {
         self.internal_apply(page_number, per_page)
     }
 
-    pub fn per_page(&mut self, n: i64) -> anyhow::Result<()> {
-        if n < 1 {
+    pub fn per_page(&mut self, per_page: i64) -> anyhow::Result<()> {
+        if per_page < 1 {
             bail!("par_page must be greater than 0");
         }
-        self.min_per_page = n;
-        self.max_per_page = n;
-        self.default_per_page = n;
+        self.min_per_page = per_page;
+        self.max_per_page = per_page;
+        self.default_per_page = per_page;
         Ok(())
     }
-    pub fn min_per_page(&mut self, n: i64) -> anyhow::Result<()> {
-        if n < 1 {
+    pub fn min_per_page(&mut self, min_per_page: i64) -> anyhow::Result<()> {
+        if min_per_page < 1 {
             bail!("min_per_page must be greater than 0");
         }
-        self.min_per_page = n;
-        self.max_per_page = self.max_per_page.max(n);
-        self.default_per_page = self.default_per_page.max(n);
+        self.min_per_page = min_per_page;
+        self.max_per_page = self.max_per_page.max(min_per_page);
+        self.default_per_page = self.default_per_page.max(min_per_page);
         Ok(())
     }
 
-    pub fn max_per_page(&mut self, n: i64) -> anyhow::Result<()> {
-        if n < 1 {
+    pub fn max_per_page(&mut self, max_per_page: i64) -> anyhow::Result<()> {
+        if max_per_page < 1 {
             bail!("max_per_page must be greater than 0");
         }
-        self.min_per_page = self.min_per_page.min(n);
-        self.max_per_page = n;
-        self.default_per_page = self.default_per_page.min(n);
+        self.min_per_page = self.min_per_page.min(max_per_page);
+        self.max_per_page = max_per_page;
+        self.default_per_page = self.default_per_page.min(max_per_page);
         Ok(())
     }
 

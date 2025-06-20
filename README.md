@@ -20,6 +20,8 @@ The project is still kind of experimental, so any feedback/ideas will be greatly
 - Automatic result conversion to PHP arrays or objects
 - Painless `IN (?)` / `NOT IN (?)` clauses expansion and collapse
 - Safe and robust `ORDER BY` / `GROUP BY` clauses
+- Pagination with `PAGINATE`
+- Safe and robust `SELECT`
 - Native JSON and bigint support
 - Optional persistent connections (with connection pooling)
 
@@ -132,7 +134,7 @@ Keep in mind that you can not only use it in `WHERE`, but also in `ON` clauses w
 
 ### Safe and robust `ORDER BY` / `GROUP BY` clauses
 
-A helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
+`Sql\ByClause` helper class for safe `ORDER BY` / `GROUP BY` clauses from user input.
 
 > __SAFETY CONCERNS__
 > - 🟢 You can safely pass any user input as sorting settings.
@@ -163,6 +165,38 @@ Field names are case-sensitive, but they get trimmed.
 
 ---
 
+Pagination with `PAGINATE`
+---
+`Sql\PaginateClause` helper class for safe pagination based on user input.
+
+```php
+// Let's define pagination rules
+$pagination = new Sqlx\PaginateClause;
+$pagination->perPage(5);
+$pagination->maxPerPage(20);
+
+// Equivalent to: SELECT * FROM people ORDER by id LIMIT 5 OFFSET 500
+$rows = $driver->queryAll(
+  'SELECT * FROM people ORDER by id PAGINATE :pagination', [
+    'pagination' => $pagination(100)
+  ]
+);
+
+
+// Equivalent to: SELECT * FROM people ORDER by id LIMIT 10 OFFSET 1000
+$rows = $driver->queryAll(
+  'SELECT * FROM people ORDER by id PAGINATE :pagination', [
+    'pagination' => $pagination(100, 10)
+  ]
+);
+```
+
+You can safely pass any unsanitized values as arguments, but keep in mind that `perPage()`/`maxPerPage()`/
+`defaultPerPage()`
+functions take a positive integer and throw an exception otherwise.
+
+---
+
 ### Safe and robust `SELECT`
 
 A helper class for safe `SELECT` clauses from user input.
@@ -183,19 +217,19 @@ $select = new Sqlx\SelectClause([
 ]);
 
 // Equivalent to: SELECT `id`, FROM users
-$driver->queryAll('SELECT :select FROM users', [
+$rows = $driver->queryAll('SELECT :select FROM users', [
   'select' => $select(['id','name'])
 ]);
 
 // This will throw an exception: Missing required placeholder `order_by`
-$driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
+$rows = $driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
   'order_by' => $orderBy([
     ['zzzz', Sqlx\ByClause::ASC],
   ])
 ]);
 
 // Equivalent to: SELECT * FROM users
-$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
+$rows = $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
   'order_by' => $orderBy([
     ['zzzz', Sqlx\ByClause::ASC],
   ])
@@ -209,7 +243,7 @@ So this code works:
 
 ```php
 // Equivalent to: SELECT * FROM users ORDER BY `name` DESC
-$driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
+$rows = $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
   'order_by' => $orderBy([
     ['  name  ', ' DeSc  '],
    ])
