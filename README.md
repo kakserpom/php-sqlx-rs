@@ -189,6 +189,13 @@ $rows = $driver->queryAll(
     'pagination' => $pagination(100, 10)
   ]
 );
+
+// Equivalent to: SELECT * FROM people ORDER by id LIMIT 5 OFFSET 0
+$rows = $driver->queryAll(
+  'SELECT * FROM people ORDER by id PAGINATE :pagination', [
+    'pagination' => $pagination()
+  ]
+);
 ```
 
 You can safely pass any unsanitized values as arguments, but keep in mind that `perPage()`/`maxPerPage()`/
