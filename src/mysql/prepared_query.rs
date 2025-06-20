@@ -1,6 +1,6 @@
-use crate::utils::ColumnArgument;
 use crate::mysql::ast::MySqlParameterValue;
 use crate::mysql::inner::MySqlDriverInner;
+use crate::utils::ColumnArgument;
 use ext_php_rs::{prelude::*, types::Zval};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,7 +8,9 @@ use std::sync::Arc;
 /// A reusable prepared SQL query with parameter support.
 ///
 /// Created using `PgDriver::prepare()`, shares context with original driver.
-#[php_class(name = "Sqlx\\MySqlPreparedQuery")]
+#[php_class]
+#[php(name = "Sqlx\\MySqlPreparedQuery")]
+#[php(rename = "none")]
 pub struct MySqlPreparedQuery {
     pub(crate) query: String,
     pub(crate) driver_inner: Arc<MySqlDriverInner>,

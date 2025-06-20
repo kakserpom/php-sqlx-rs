@@ -18,7 +18,9 @@ pub use prepared_query::*;
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
     LazyLock::new(DashMap::new);
 
-#[php_class(name = "Sqlx\\MySqlDriver")]
+#[php_class]
+#[php(name = "Sqlx\\MySqlDriver")]
+#[php(rename = "none")]
 pub struct MySqlDriver {
     pub driver_inner: Arc<MySqlDriverInner>,
 }
@@ -844,4 +846,3 @@ impl MySqlDriver {
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module.class::<MySqlPreparedQuery>().class::<MySqlDriver>()
 }
-

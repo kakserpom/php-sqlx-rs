@@ -7,8 +7,9 @@ use ext_php_rs::types::{ZendClassObject, Zval};
 use ext_php_rs::zend::ce;
 use ext_php_rs::{php_class, php_impl};
 use std::cell::RefCell;
-#[derive(Debug)]
 #[php_class]
+#[php(name = "Sqlx\\LazyRow")]
+#[php(rename = "none")]
 #[php(implements(ce = ce::arrayaccess, stub = "\\ArrayAccess"))]
 pub struct LazyRow {
     pub(crate) array: RefCell<ZBox<zend_array>>,
@@ -83,7 +84,9 @@ impl LazyRow {
     }
 }
 
-#[php_class(name = "Sqlx\\LazyRowJson")]
+#[php_class]
+#[php(name = "Sqlx\\LazyRowJson")]
+#[php(rename = "none")]
 pub struct LazyRowJson {
     pub(crate) raw: RefCell<Vec<u8>>,
     pub(crate) assoc: bool,

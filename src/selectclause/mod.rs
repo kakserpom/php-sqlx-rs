@@ -4,7 +4,9 @@ use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
 use trim_in_place::TrimInPlace;
 
-#[php_class(name = "Sqlx\\SelectClause")]
+#[php_class]
+#[php(name = "Sqlx\\SelectClause")]
+#[php(rename = "none")]
 pub struct SelectClause {
     pub(crate) defined_fields: HashMap<String, Option<String>>,
 }

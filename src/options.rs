@@ -1,6 +1,8 @@
 use ext_php_rs::{php_class, php_impl};
 
-#[php_class(name = "Sqlx\\DriverOptions")]
+#[php_class]
+#[php(name = "Sqlx\\DriverOptions")]
+#[php(rename = "none")]
 pub struct DriverOptions {}
 #[php_impl]
 impl DriverOptions {

@@ -14,6 +14,7 @@ use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
+pub use options::PgDriverOptions;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
@@ -31,7 +32,7 @@ pub struct PgDriver {
     pub driver_inner: Arc<PgDriverInner>,
 }
 
-//#[php_impl]
+#[php_impl]
 impl PgDriver {
     /// Constructs a new SQLx driver instance.
     ///
