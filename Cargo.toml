@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1.0.98"
 dashmap = "6.1.0"
 #ext-php-rs = { git = "https://github.com/kakserpom/ext-php-rs.git", branch = "master", features = ["anyhow"] }
-ext-php-rs = { path = "ext-php-rs", features = ["anyhow"] }
+ext-php-rs = { git = "https://github.com/davidcole1340/ext-php-rs.git", branch = "master", features = ["anyhow"] }
 itertools = "0.14.0"
 serde_json = "1.0.140"
 simd-json = { optional = true, version = "0.15.1" }
