@@ -1,14 +1,14 @@
-use crate::utils::ColumnArgument;
 use crate::mysql::ast::MySqlParameterValue;
 use crate::mysql::inner::MySqlDriverInner;
+use crate::utils::ColumnArgument;
 use ext_php_rs::{prelude::*, types::Zval};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// A reusable prepared SQL query with parameter support.
-///
-/// Created using `PgDriver::prepare()`, shares context with original driver.
-#[php_class(name = "Sqlx\\MySqlPreparedQuery")]
+/// A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
+#[php_class]
+#[php(name = "Sqlx\\MySqlPreparedQuery")]
+#[php(rename = "none")]
 pub struct MySqlPreparedQuery {
     pub(crate) query: String,
     pub(crate) driver_inner: Arc<MySqlDriverInner>,
@@ -339,7 +339,6 @@ impl MySqlPreparedQuery {
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
-
     pub fn query_maybe_row_assoc(
         &self,
         parameters: Option<HashMap<String, MySqlParameterValue>>,

@@ -405,7 +405,8 @@ impl MySqlDriverInner {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    //row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.into_zval(assoc)?,
                 ))
             })
@@ -466,7 +467,7 @@ impl MySqlDriverInner {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.into_zval(assoc)?,
                 ))
             })
@@ -524,7 +525,7 @@ impl MySqlDriverInner {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.column_value_into_zval(row.column(1), assoc)?,
                 ))
             })
@@ -574,7 +575,7 @@ impl MySqlDriverInner {
             .into_iter()
             .map(|row| {
                 Ok((
-                    row.column_value_into_zval(row.column(0), false)?,
+                    row.column_value_into_array_key(row.column(0))?,
                     row.column_value_into_zval(row.column(1), assoc)?,
                 ))
             })

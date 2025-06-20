@@ -4,6 +4,7 @@ pub use crate::mysql::{
 };
 use crate::utils::ColumnArgument;
 use dashmap::DashMap;
+use ext_php_rs::prelude::ModuleBuilder;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
@@ -13,12 +14,13 @@ mod conversion;
 pub mod inner;
 pub mod options;
 pub mod prepared_query;
-
 pub use prepared_query::*;
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
     LazyLock::new(DashMap::new);
 
-#[php_class(name = "Sqlx\\MySqlDriver")]
+#[php_class]
+#[php(name = "Sqlx\\MySqlDriver")]
+#[php(rename = "none")]
 pub struct MySqlDriver {
     pub driver_inner: Arc<MySqlDriverInner>,
 }
@@ -64,7 +66,6 @@ impl MySqlDriver {
     /// If true, result rows are returned as PHP associative arrays (key-value pairs).
     /// If false, result rows are returned as PHP `stdClass` objects.
     #[must_use]
-    #[getter]
     pub fn assoc_arrays(&self) -> bool {
         self.driver_inner.options.associative_arrays
     }
@@ -303,7 +304,6 @@ impl MySqlDriver {
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
-
     pub fn query_maybe_row_assoc(
         &self,
         query: &str,
@@ -840,4 +840,8 @@ impl MySqlDriver {
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.dry(query, parameters)
     }
+}
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<MySqlPreparedQuery>().class::<MySqlDriver>()
 }

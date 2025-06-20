@@ -1,10 +1,12 @@
 use crate::utils::is_valid_ident;
 use anyhow::bail;
-use ext_php_rs::{ZvalConvert, php_class, php_impl};
+use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder, ZvalConvert};
 use std::collections::HashMap;
 use trim_in_place::TrimInPlace;
 
-#[php_class(name = "Sqlx\\SelectClause")]
+#[php_class]
+#[php(name = "Sqlx\\SelectClause")]
+#[php(rename = "none")]
 pub struct SelectClause {
     pub(crate) defined_fields: HashMap<String, Option<String>>,
 }
@@ -50,13 +52,11 @@ impl SelectClause {
     ///     "department_name" => "dp.name"
     /// ]);
     /// ```
-
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
         SelectClause::new(defined_fields)
     }
 
     /// __invoke magic for apply()
-
     #[must_use]
     pub fn __invoke(&self, order_by: Vec<String>) -> SelectClauseRendered {
         self.internal_apply(order_by)
@@ -114,3 +114,8 @@ impl SelectClauseRendered {
         self.__inner.is_empty()
     }
 }
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<SelectClause>()
+}
+

@@ -6,11 +6,12 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 dashmap = "6.1.0"
-ext-php-rs = { version = "0.13.1", features = ["anyhow"] }
+#ext-php-rs = { git = "https://github.com/kakserpom/ext-php-rs.git", branch = "master", features = ["anyhow"] }
+ext-php-rs = {path = "ext-php-rs", features = ["anyhow"] }
 itertools = "0.14.0"
 serde_json = "1.0.140"
 simd-json = { optional = true, version = "0.15.1" }
-sqlx = { version = "0.8.6", features = ["json", "runtime-tokio"], optional = true }
+sqlx = { version = "0.8.6", features = ["json", "runtime-tokio"] }
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
@@ -18,7 +19,13 @@ lazy_static = "1.5.0"
 
 [features]
 experimental = []
-default = ["postgres", "mysql", "simd-json"]
+default = [
+    "postgres",
+    "mysql",
+    "lazy-row",
+    "experimental",
+    "simd-json"
+]
 postgres = ["sqlx/postgres"]
 mysql = ["sqlx/mysql"]
 simd-json = ["simd-json/default"]

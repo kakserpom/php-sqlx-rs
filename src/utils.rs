@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use ext_php_rs::ZvalConvert;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::ffi::zend_array;
-use ext_php_rs::types::{ZendHashTable, Zval};
+use ext_php_rs::types::{ArrayKey, ZendHashTable, Zval};
 
 pub trait StripPrefixIgnoreAsciiCase {
     fn strip_prefix_ignore_ascii_case(&self, prefix: &str) -> Option<&str>;
@@ -21,74 +21,45 @@ impl<T: AsRef<str> + ?Sized> StripPrefixIgnoreAsciiCase for T {
 
 pub fn fold_into_zend_hashmap(
     mut array: ZBox<ZendHashTable>,
-    item: anyhow::Result<(Zval, Zval)>,
+    item: anyhow::Result<(ArrayKey, Zval)>,
 ) -> anyhow::Result<ZBox<ZendHashTable>> {
     let (key, value) = item?;
-    if let Some(index) = key.long() {
-        if let Ok(non_negative_index) = u64::try_from(index) {
-            array
-                .insert_at_index(non_negative_index, value)
-                .map_err(|err| anyhow!("{err:?}"))?;
-        } else {
-            let key = index.to_string();
-            array
-                .insert(&key, value)
-                .map_err(|err| anyhow!("{err:?}"))?;
-        }
-    } else if let Some(key) = key.string() {
-        array
-            .insert(&key, value)
-            .map_err(|err| anyhow!("{err:?}"))?;
-    } else {
-        bail!("First column must be scalar")
-    }
+    array.insert(key, value).map_err(|err| anyhow!("{err:?}"))?;
     Ok(array)
 }
 
 pub fn fold_into_zend_hashmap_grouped(
     mut array: ZBox<ZendHashTable>,
-    item: anyhow::Result<(Zval, Zval)>,
+    item: anyhow::Result<(ArrayKey, Zval)>,
 ) -> anyhow::Result<ZBox<ZendHashTable>> {
     let (key, value) = item?;
     let array_mut = &mut array;
-    if let Some(index) = key.long() {
-        if let Ok(non_negative_index) = u64::try_from(index) {
-            if let Some(entry) = array_mut.get_index_mut(non_negative_index) {
+    match key {
+        ArrayKey::Long(_) | ArrayKey::Str(_) => {
+            if let Some(entry) = array_mut.get_mut(key.clone()) {
                 let entry_array = entry.array_mut().unwrap();
                 entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
             } else {
                 let mut entry_array = zend_array::new();
                 entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
                 array_mut
-                    .insert_at_index(non_negative_index, entry_array)
+                    .insert(key, entry_array)
                     .map_err(|err| anyhow!("{err:?}"))?;
             }
-        } else {
-            let key = index.to_string();
-            if let Some(entry) = array_mut.get_mut(&key) {
+        }
+        ArrayKey::String(key) => {
+            let key = key.as_str();
+            if let Some(entry) = array_mut.get_mut(key) {
                 let entry_array = entry.array_mut().unwrap();
                 entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
             } else {
                 let mut entry_array = zend_array::new();
                 entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
                 array_mut
-                    .insert(&key, entry_array)
+                    .insert(key, entry_array)
                     .map_err(|err| anyhow!("{err:?}"))?;
             }
         }
-    } else if let Some(key) = key.string() {
-        if let Some(entry) = array_mut.get_mut(&key) {
-            let entry_array = entry.array_mut().unwrap();
-            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-        } else {
-            let mut entry_array = zend_array::new();
-            entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-            array_mut
-                .insert(&key, entry_array)
-                .map_err(|err| anyhow!("{err:?}"))?;
-        }
-    } else {
-        bail!("First column must be scalar")
     }
     Ok(array)
 }

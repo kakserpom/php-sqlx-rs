@@ -1,9 +1,9 @@
-use crate::utils::ZvalNull;
 use crate::conversion::{Conversion, json_into_zval};
+use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
-use ext_php_rs::types::Zval;
+use ext_php_rs::types::{ArrayKey, Zval};
 use sqlx::Column;
 use sqlx::TypeInfo;
 use sqlx::mysql::MySqlRow;
@@ -76,6 +76,34 @@ impl Conversion for MySqlRow {
                 .into_zval(false)
                 .map_err(|err| anyhow!("{err:?}"))?,
             other => bail!("unsupported type: {other}"),
+        })
+    }
+
+    fn column_value_into_array_key<'a, MySqlColumn: Column, MySql>(
+        &self,
+        column: &MySqlColumn,
+    ) -> anyhow::Result<ArrayKey<'a>> {
+        let column_name = column.name();
+        Ok(match column.type_info().name() {
+            "BOOLEAN" => ArrayKey::Long(i64::from(self.try_get::<bool, _>(column_name)?)),
+            "BIT" => {
+                let v: Vec<u8> = self.try_get(column_name)?;
+                if v.len() == 1 {
+                    ArrayKey::Long(i64::from(v[0] != 0))
+                } else {
+                    ArrayKey::Long(0)
+                }
+            }
+            "TINYINT UNSIGNED" | "TINYINT" | "SMALLINT" | "SMALLINT UNSIGNED" | "MEDIUMINT"
+            | "INTEGER" | "INT" | "BIGINT" | "BIGINT UNSIGNED" | "YEAR" => {
+                ArrayKey::Long(self.try_get::<i64, _>(column_name)?)
+            }
+            "TEXT" | "TINYTEXT" | "MEDIUMTEXT" | "LONGTEXT" | "CHAR" | "VARCHAR" => {
+                ArrayKey::String(self.try_get::<String, _>(column_name)?)
+            }
+            "ENUM" | "SET" => ArrayKey::String(self.try_get::<String, _>(column_name)?),
+            "NULL" => ArrayKey::Str(""),
+            other => bail!("unsupported type for array key: {other}"),
         })
     }
 }

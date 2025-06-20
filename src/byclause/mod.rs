@@ -2,9 +2,12 @@ use crate::utils::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
+use ext_php_rs::builders::ModuleBuilder;
 use trim_in_place::TrimInPlace;
 
-#[php_class(name = "Sqlx\\ByClause")]
+#[php_class]
+#[php(name = "Sqlx\\ByClause")]
+#[php(rename = "none")]
 pub struct ByClause {
     pub(crate) defined_fields: HashMap<String, Option<String>>,
 }
@@ -68,13 +71,11 @@ impl ByClause {
     ///     "total_posts" => "COUNT(posts.*)"
     /// ]);
     /// ```
-
     pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
         ByClause::new(defined_fields)
     }
 
     /// __invoke magic for apply()
-
     #[must_use]
     pub fn __invoke(&self, order_by: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
         self.internal_apply(order_by)
@@ -155,3 +156,8 @@ impl ByClauseRendered {
         self.__inner.is_empty()
     }
 }
+
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<ByClause>()
+}
+

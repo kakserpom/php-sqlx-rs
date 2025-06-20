@@ -5,13 +5,14 @@ use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
-use ext_php_rs::types::Zval;
+use ext_php_rs::types::{ArrayKey, Zval};
 use sqlx::Column;
 use sqlx::Error::ColumnDecode;
 use sqlx::TypeInfo;
 use sqlx::error::UnexpectedNullError;
 use sqlx::postgres::{PgRow, PgValueRef};
 use sqlx::{Decode, Row, Type};
+
 impl Conversion for PgRow {
     fn column_value_into_zval<PgColumn: Column, Postgres>(
         &self,
@@ -61,7 +62,7 @@ impl Conversion for PgRow {
                     }
                     #[cfg(feature = "lazy-row")]
                     if buf.len() > 4096 {
-                        return LazyRowJson::new(&buf, associative_arrays)
+                        return LazyRowJson::new(buf, associative_arrays)
                             .into_zval(associative_arrays)
                             .map_err(|err| anyhow!("{err:?}"));
                     }
@@ -164,6 +165,33 @@ impl Conversion for PgRow {
             "_JSONPATH" => try_cast_into_zval::<Vec<String>>(self, column_name)?,
 
             other => bail!("unsupported type: {other}"),
+        })
+    }
+
+    fn column_value_into_array_key<'a, PgColumn: Column, Postgres>(
+        &self,
+        column: &PgColumn,
+    ) -> anyhow::Result<ArrayKey<'a>> {
+        let column_name = column.name();
+        Ok(match column.type_info().name() {
+            "BOOLEAN" => ArrayKey::Long(i64::from(self.try_get::<bool, _>(column_name)?)),
+            "BIT" => {
+                let v: Vec<u8> = self.try_get(column_name)?;
+                if v.len() == 1 {
+                    ArrayKey::Long(i64::from(v[0] != 0))
+                } else {
+                    ArrayKey::Long(0)
+                }
+            }
+            "INT2" | "INT4" | "INT" | "INT8" | "OID" => {
+                ArrayKey::Long(self.try_get::<i64, _>(column_name)?)
+            }
+            "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" | "NUMERIC" | "MONEY" => {
+                ArrayKey::String(self.try_get::<String, _>(column_name)?)
+            }
+            "ENUM" | "SET" => ArrayKey::String(self.try_get::<String, _>(column_name)?),
+            "NULL" => ArrayKey::Str(""),
+            other => bail!("unsupported type for array key: {other}"),
         })
     }
 }

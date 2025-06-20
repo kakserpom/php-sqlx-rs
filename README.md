@@ -261,6 +261,7 @@ For macOS:
 ```bash
 export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | tr -d '\n')
 export RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup"
+#export RUSTFLAGS="-Zmacro-backtrace -Zproc-macro-backtrace -Clink-arg=-undefined -Clink-arg=dynamic_lookup"
 cargo install cargo-php --locked
 cd php-sqlx-cdylib
 cargo php install --release --yes

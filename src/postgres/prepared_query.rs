@@ -1,14 +1,14 @@
+use crate::postgres::PgParameterValue;
+use crate::postgres::inner::PgDriverInner;
 use crate::utils::ColumnArgument;
-use crate::PgParameterValue;
 use ext_php_rs::{prelude::*, types::Zval};
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::postgres::inner::PgDriverInner;
 
-/// A reusable prepared SQL query with parameter support.
-///
-/// Created using `PgDriver::prepare()`, shares context with original driver.
-#[php_class(name = "Sqlx\\PgPreparedQuery")]
+/// A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
+#[php_class]
+#[php(name = "Sqlx\\PgPreparedQuery")]
+#[php(rename = "none")]
 pub struct PgPreparedQuery {
     pub(crate) query: String,
     pub(crate) driver_inner: Arc<PgDriverInner>,
@@ -254,7 +254,10 @@ impl PgPreparedQuery {
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
-    pub fn execute(&self, parameters: Option<HashMap<String, PgParameterValue>>) -> anyhow::Result<u64> {
+    pub fn execute(
+        &self,
+        parameters: Option<HashMap<String, PgParameterValue>>,
+    ) -> anyhow::Result<u64> {
         self.driver_inner.execute(self.query.as_str(), parameters)
     }
 
@@ -272,7 +275,10 @@ impl PgPreparedQuery {
     /// - a parameter cannot be bound or has incorrect type;
     /// - the row contains unsupported database types;
     /// - conversion to PHP object fails.
-    pub fn query_row(&self, parameters: Option<HashMap<String, PgParameterValue>>) -> anyhow::Result<Zval> {
+    pub fn query_row(
+        &self,
+        parameters: Option<HashMap<String, PgParameterValue>>,
+    ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(&self.query, parameters, None)
     }
 
@@ -333,7 +339,6 @@ impl PgPreparedQuery {
     /// - the query is invalid or fails to execute;
     /// - parameters are invalid or cannot be bound;
     /// - the row contains unsupported or unconvertible data types.
-
     pub fn query_maybe_row_assoc(
         &self,
         parameters: Option<HashMap<String, PgParameterValue>>,
