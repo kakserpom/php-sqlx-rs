@@ -20,8 +20,6 @@ mod paramvalue;
 
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
-
-use crate::byclause::ByClauseRendered;
 use ext_php_rs::prelude::*;
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
