@@ -623,11 +623,11 @@ where
             PgParameterValue::Array(s) => s.iter().fold(q, walker),
             // @TODO: values()?
             PgParameterValue::Object(s) => s.values().fold(q, walker),
-            PgParameterValue::ByClauseRendered(_)
+            /*PgParameterValue::ByClauseRendered(_)
             | PgParameterValue::SelectClauseRendered(_)
             | PgParameterValue::PaginateClauseRendered(_) => {
                 unimplemented!()
-            }
+            }*/
         }
     }
 

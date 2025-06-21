@@ -97,7 +97,8 @@ impl SelectClause {
     }
 }
 /// A rendered ORDER BY clause result for use in query generation.
-#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+#[derive(Clone, PartialEq, Debug)]
+#[php_class]
 pub struct SelectClauseRendered {
     // @TODO: make it impossible to alter RenderedSelectClause from PHP side
     pub(crate) __inner: Vec<SelectClauseRenderedField>,
@@ -115,5 +116,7 @@ impl SelectClauseRendered {
 }
 
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<SelectClause>()
+    module
+        .class::<SelectClause>()
+        .class::<SelectClauseRendered>()
 }

@@ -135,7 +135,8 @@ impl ByClause {
     }
 }
 /// A rendered ORDER BY clause result for use in query generation.
-#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+#[derive(Clone, PartialEq, Debug)]
+#[php_class]
 pub struct ByClauseRendered {
     // @TODO: make it impossible to alter RenderedByClause from PHP side
     pub(crate) __inner: Vec<ByClauseRenderedField>,

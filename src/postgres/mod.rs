@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
 pub mod inner;
+
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<PgDriverInner>>> =
     LazyLock::new(DashMap::new);
 

@@ -16,6 +16,8 @@ pub mod selectclause;
 pub mod paginateclause;
 mod tests;
 mod utils;
+mod paramvalue;
+
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
 

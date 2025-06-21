@@ -58,24 +58,24 @@ pub enum PgParameterValue {
     Bool(bool),
     Array(Vec<PgParameterValue>),
     Object(HashMap<String, PgParameterValue>),
-    ByClauseRendered(ByClauseRendered),
-    SelectClauseRendered(SelectClauseRendered),
-    PaginateClauseRendered(PaginateClauseRendered),
+    //ByClauseRendered(ByClauseRendered),
+    //SelectClauseRendered(SelectClauseRendered),
+    //PaginateClauseRendered(PaginateClauseRendered),
 }
 impl PgParameterValue {
     #[must_use]
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
-            PgParameterValue::ByClauseRendered(x) => x.is_empty(),
-            PgParameterValue::SelectClauseRendered(x) => x.is_empty(),
+            //PgParameterValue::ByClauseRendered(x) => x.is_empty(),
+            //PgParameterValue::SelectClauseRendered(x) => x.is_empty(),
             PgParameterValue::Array(array) => array.is_empty(),
             PgParameterValue::Str(_)
             | PgParameterValue::Int(_)
             | PgParameterValue::Float(_)
             | PgParameterValue::Bool(_)
             | PgParameterValue::Object(_) => false,
-            PgParameterValue::PaginateClauseRendered(_) => false,
+            //PgParameterValue::PaginateClauseRendered(_) => false,
         }
     }
 }
@@ -482,7 +482,7 @@ impl PgAst {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            PgParameterValue::SelectClauseRendered(fields) => {
+                            /*PgParameterValue::SelectClauseRendered(fields) => {
                                 for (
                                     i,
                                     SelectClauseRenderedField {
@@ -523,7 +523,7 @@ impl PgAst {
                                         sql.push_str(" DESC");
                                     }
                                 }
-                            }
+                            }*/
                             PgParameterValue::Array(arr) => {
                                 for (i, item) in arr.iter().enumerate() {
                                     if i > 0 {
@@ -592,7 +592,7 @@ impl PgAst {
                     }
                 },
                 PgAst::PaginateClause { placeholder } => match values.get(placeholder) {
-                    Some(PgParameterValue::PaginateClauseRendered(rendered)) => {
+                    /*Some(PgParameterValue::PaginateClauseRendered(rendered)) => {
                         out_vals.push(PgParameterValue::Int(rendered.limit));
                         out_vals.push(PgParameterValue::Int(rendered.offset));
                         write!(
@@ -601,7 +601,7 @@ impl PgAst {
                             out_vals.len() - 1,
                             out_vals.len()
                         )?;
-                    }
+                    }*/
                     _ => {
                         bail!("PAGINATE may only accept Sqlx\\PaginateClause instance");
                     }

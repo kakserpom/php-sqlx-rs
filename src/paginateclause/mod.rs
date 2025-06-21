@@ -85,7 +85,8 @@ impl PaginateClause {
         self.internal_apply(page_number, per_page)
     }
 }
-#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+#[derive(Clone, PartialEq, Debug)]
+#[php_class]
 pub struct PaginateClauseRendered {
     // @TODO: make it impossible to alter PaginateClauseRendered from PHP side
     pub(crate) limit: i64,
