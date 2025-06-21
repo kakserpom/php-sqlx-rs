@@ -58,16 +58,16 @@ fn test_render_var_types() {
     let ast = into_ast(sql);
     println!("{:#?}", ast);
     let mut vals = ParamsMap::new();
-    vals.insert("id".into(), MySqlParameterValue::Int(7));
-    vals.insert("flag".into(), MySqlParameterValue::Bool(true));
+    vals.insert("id".into(), ParameterValue::Int(7));
+    vals.insert("flag".into(), ParameterValue::Bool(true));
     vals.insert(
         "0".into(),
-        MySqlParameterValue::Array(vec![
-            MySqlParameterValue::Int(1),
-            MySqlParameterValue::Int(2),
+        ParameterValue::Array(vec![
+            ParameterValue::Int(1),
+            ParameterValue::Int(2),
         ]),
     );
-    vals.insert("data".into(), MySqlParameterValue::Str("xyz".into()));
+    vals.insert("data".into(), ParameterValue::Str("xyz".into()));
     let (q, params) = ast.render(vals).expect("Rendering failed");
     assert_eq!(
         q,
@@ -76,11 +76,11 @@ fn test_render_var_types() {
     assert_eq!(
         params,
         vec![
-            MySqlParameterValue::Int(7),
-            MySqlParameterValue::Bool(true),
-            MySqlParameterValue::Int(1),
-            MySqlParameterValue::Int(2),
-            MySqlParameterValue::Str("xyz".into()),
+            ParameterValue::Int(7),
+            ParameterValue::Bool(true),
+            ParameterValue::Int(1),
+            ParameterValue::Int(2),
+            ParameterValue::Str("xyz".into()),
         ]
     );
 }
@@ -102,7 +102,7 @@ fn test_render_order_by_apply() {
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
     let ast = into_ast(sql);
     let (query, params) = ast
-        .render([("order_by", MySqlParameterValue::ByClauseRendered(rendered))])
+        .render([("order_by", ParameterValue::ByClauseRendered(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
@@ -127,7 +127,7 @@ fn test_render_order_by_apply_empty() {
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
     let ast = into_ast(sql);
     let (query, params) = ast
-        .render([("order_by", MySqlParameterValue::ByClauseRendered(rendered))])
+        .render([("order_by", ParameterValue::ByClauseRendered(rendered))])
         .expect("Rendering failed");
 
     assert_eq!(
@@ -220,7 +220,7 @@ fn test_pagination() {
     let mut vals = ParamsMap::default();
     vals.insert(
         "pagination".into(),
-        MySqlParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
+        ParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
     );
     let (sql, values) = ast.render(vals).unwrap();
     println!("sql = {:#?}", sql);
@@ -230,6 +230,6 @@ fn test_pagination() {
     );
     assert_eq!(
         values,
-        vec![MySqlParameterValue::Int(5), MySqlParameterValue::Int(35)]
+        vec![ParameterValue::Int(5), ParameterValue::Int(35)]
     );
 }
