@@ -106,15 +106,13 @@ impl LazyRowJson {
 #[php_impl]
 impl LazyRowJson {
     pub fn take_zval(self_: &ZendClassObject<LazyRowJson>) -> anyhow::Result<Zval> {
-        let mut buf = self_.raw.borrow().to_owned();
-
         #[cfg(feature = "simd-json")]
         return json_into_zval(
-            simd_json::from_slice::<serde_json::Value>(&mut buf)?,
+            simd_json::from_slice::<serde_json::Value>(&mut self_.raw.borrow().to_owned())?,
             self_.assoc,
         );
         #[cfg(not(feature = "simd-json"))]
-        return json_into_zval(serde_json::Value::from_slice(&mut buf)?, self.assoc);
+        json_into_zval(serde_json::from_slice(&self_.raw.borrow())?, self_.assoc)
     }
 }
 

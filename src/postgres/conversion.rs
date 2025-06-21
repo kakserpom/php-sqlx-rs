@@ -73,10 +73,9 @@ impl Conversion for PgRow {
                         associative_arrays,
                     );
                     #[cfg(not(feature = "simd-json"))]
-                    return crate::conversion::json_into_zval(
-                        serde_json::from_slice(&mut buf.to_vec())?
-                            .into_zval(associative_arrays)
-                            .map_err(|err| anyhow!("{err:?}")),
+                    return json_into_zval(
+                        serde_json::from_slice::<serde_json::Value>(&mut buf.to_vec())?,
+                        associative_arrays,
                     );
                 })??,
             "JSONB" => self
