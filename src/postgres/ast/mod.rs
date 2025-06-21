@@ -544,8 +544,7 @@ impl PgAst {
                         }
                         _ => {
                             bail!(
-                                "PAGINATE may only accept Sqlx\\PaginateClause instance, given {:?}",
-                                value
+                                "PAGINATE accepts only Sqlx\\PaginateClause instance, given: {placeholder:?} = {value:?}"
                             );
                         }
                     }

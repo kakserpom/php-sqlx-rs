@@ -1,8 +1,9 @@
 #![allow(clippy::needless_pass_by_value)]
 
 use crate::conversion::Conversion;
-use crate::mysql::ast::{MySqlAst, MySqlParameterValue};
+use crate::mysql::ast::MySqlAst;
 use crate::mysql::options::MySqlDriverInnerOptions;
+use crate::paramvalue::{ParameterValue, bind_values};
 use crate::utils::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
 use crate::{
     RUNTIME,
@@ -13,12 +14,11 @@ use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::types::Zval;
 use itertools::Itertools;
+use sqlx::Error;
 use sqlx::Row;
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::pool::Pool;
-use sqlx::query::Query;
 use sqlx::{Column, MySql};
-use sqlx::{Database, Encode, Error, Type};
 use std::collections::HashMap;
 use threadsafe_lru::LruCache;
 
@@ -64,7 +64,7 @@ impl MySqlDriverInner {
     pub fn execute(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<u64> {
         let (query, values) = self.render_query(query, parameters)?;
         Ok(RUNTIME
@@ -77,8 +77,8 @@ impl MySqlDriverInner {
     fn render_query(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
-    ) -> anyhow::Result<(String, Vec<MySqlParameterValue>)> {
+        parameters: Option<HashMap<String, ParameterValue>>,
+    ) -> anyhow::Result<(String, Vec<ParameterValue>)> {
         let parameters = parameters.unwrap_or_default();
         if let Some(ast) = self.ast_cache.get(query) {
             ast.render(parameters)
@@ -106,7 +106,7 @@ impl MySqlDriverInner {
     pub fn query_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
@@ -152,7 +152,7 @@ impl MySqlDriverInner {
     pub fn query_column(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
@@ -211,7 +211,7 @@ impl MySqlDriverInner {
     pub fn query_maybe_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
@@ -266,7 +266,7 @@ impl MySqlDriverInner {
     pub fn query_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -294,7 +294,7 @@ impl MySqlDriverInner {
     pub fn query_maybe_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -328,7 +328,7 @@ impl MySqlDriverInner {
     pub fn query_all(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -358,7 +358,7 @@ impl MySqlDriverInner {
     pub fn dry(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         let (query, values) = self.render_query(query, parameters)?;
         Ok(vec![
@@ -395,7 +395,7 @@ impl MySqlDriverInner {
     pub fn query_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -455,7 +455,7 @@ impl MySqlDriverInner {
     pub fn query_grouped_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -514,7 +514,7 @@ impl MySqlDriverInner {
     pub fn query_grouped_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -564,7 +564,7 @@ impl MySqlDriverInner {
     pub fn query_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         associative_arrays: Option<bool>,
     ) -> anyhow::Result<Zval> {
         let (query, values) = self.render_query(query, parameters)?;
@@ -583,50 +583,4 @@ impl MySqlDriverInner {
             .into_zval(false)
             .map_err(|err| anyhow!("{err:?}"))
     }
-}
-
-/// Binds a list of `Value` arguments to an `SQLx` query.
-fn bind_values<'a, D: Database>(
-    query: Query<'a, D, <D>::Arguments<'a>>,
-    values: &'a [MySqlParameterValue],
-) -> Query<'a, D, <D>::Arguments<'a>>
-where
-    f64: Type<D>,
-    f64: Encode<'a, D>,
-    i64: Type<D>,
-    i64: Encode<'a, D>,
-    bool: Type<D>,
-    bool: Encode<'a, D>,
-    String: Type<D>,
-    String: Encode<'a, D>,
-{
-    fn walker<'a, D: Database>(
-        q: Query<'a, D, <D>::Arguments<'a>>,
-        value: &'a MySqlParameterValue,
-    ) -> Query<'a, D, <D>::Arguments<'a>>
-    where
-        f64: Type<D>,
-        f64: Encode<'a, D>,
-        i64: Type<D>,
-        i64: Encode<'a, D>,
-        bool: Type<D>,
-        bool: Encode<'a, D>,
-        String: Type<D>,
-        String: Encode<'a, D>,
-    {
-        match value {
-            MySqlParameterValue::Str(s) => q.bind(s),
-            MySqlParameterValue::Int(s) => q.bind(s),
-            MySqlParameterValue::Bool(s) => q.bind(s),
-            MySqlParameterValue::Float(s) => q.bind(s),
-            MySqlParameterValue::Array(s) => s.iter().fold(q, walker),
-            // @TODO: values()?
-            MySqlParameterValue::Object(s) => s.values().fold(q, walker),
-            MySqlParameterValue::ByClauseRendered(_)
-            | MySqlParameterValue::SelectClauseRendered(_)
-            | MySqlParameterValue::PaginateClauseRendered(_) => unimplemented!(),
-        }
-    }
-
-    values.iter().fold(query, walker)
 }

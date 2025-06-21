@@ -1,15 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ByClauseRendered;
 use crate::byclause::ByClauseRenderedField;
-use crate::paginateclause::PaginateClauseRendered;
-use crate::selectclause::{SelectClauseRendered, SelectClauseRenderedField};
+use crate::paramvalue::{ParameterValue, ParamsMap, Placeholder};
+use crate::selectclause::SelectClauseRenderedField;
 use crate::utils::StripPrefixIgnoreAsciiCase;
 use anyhow::bail;
-use ext_php_rs::ZvalConvert;
 use itertools::Itertools;
-use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Write};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -39,64 +36,6 @@ pub enum MySqlAst {
     PaginateClause {
         placeholder: String,
     },
-}
-
-/// Represents a placeholder identifier
-pub type Placeholder = String;
-
-/// Supported parameter types
-#[derive(ZvalConvert, Debug, Clone, PartialEq)]
-pub enum MySqlParameterValue {
-    Str(String),
-    Int(i64),
-    Float(f64),
-    Bool(bool),
-    Array(Vec<MySqlParameterValue>),
-    Object(HashMap<String, MySqlParameterValue>),
-    SelectClauseRendered(SelectClauseRendered),
-    ByClauseRendered(ByClauseRendered),
-    PaginateClauseRendered(PaginateClauseRendered),
-}
-impl MySqlParameterValue {
-    #[must_use]
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        match self {
-            MySqlParameterValue::ByClauseRendered(x) => x.is_empty(),
-            MySqlParameterValue::SelectClauseRendered(x) => x.is_empty(),
-            MySqlParameterValue::Array(array) => array.is_empty(),
-            MySqlParameterValue::Str(_)
-            | MySqlParameterValue::Int(_)
-            | MySqlParameterValue::Float(_)
-            | MySqlParameterValue::Bool(_)
-            | MySqlParameterValue::Object(_) => false,
-            MySqlParameterValue::PaginateClauseRendered(_) => false,
-        }
-    }
-}
-pub type ParamsMap = BTreeMap<String, MySqlParameterValue>;
-impl From<&str> for MySqlParameterValue {
-    fn from(s: &str) -> Self {
-        MySqlParameterValue::Str(s.to_string())
-    }
-}
-impl From<String> for MySqlParameterValue {
-    fn from(s: String) -> Self {
-        MySqlParameterValue::Str(s)
-    }
-}
-
-impl From<i64> for MySqlParameterValue {
-    fn from(s: i64) -> Self {
-        MySqlParameterValue::Int(s)
-    }
-}
-
-impl From<bool> for MySqlParameterValue {
-    fn from(s: bool) -> Self {
-        MySqlParameterValue::Bool(s)
-    }
 }
 
 impl MySqlAst {
@@ -432,11 +371,11 @@ impl MySqlAst {
 impl MySqlAst {
     /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
-    pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<MySqlParameterValue>)>
+    pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<ParameterValue>)>
     where
         I: IntoIterator<Item = (K, V)> + Debug,
         K: Into<String>,
-        V: Into<MySqlParameterValue>,
+        V: Into<ParameterValue>,
     {
         #[cfg(test)]
         {
@@ -447,7 +386,7 @@ impl MySqlAst {
             node: &MySqlAst,
             values: &ParamsMap,
             sql: &mut String,
-            out_vals: &mut Vec<MySqlParameterValue>,
+            out_vals: &mut Vec<ParameterValue>,
         ) -> anyhow::Result<()> {
             Ok(match node {
                 MySqlAst::Root { branches, .. } | MySqlAst::Nested(branches) => {
@@ -464,7 +403,7 @@ impl MySqlAst {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            MySqlParameterValue::SelectClauseRendered(fields) => {
+                            ParameterValue::SelectClauseRendered(fields) => {
                                 for (i, SelectClauseRenderedField { field, expression }) in
                                     fields.__inner.iter().enumerate()
                                 {
@@ -478,7 +417,7 @@ impl MySqlAst {
                                     }
                                 }
                             }
-                            MySqlParameterValue::ByClauseRendered(by) => {
+                            ParameterValue::ByClauseRendered(by) => {
                                 for (
                                     i,
                                     ByClauseRenderedField {
@@ -501,7 +440,7 @@ impl MySqlAst {
                                     }
                                 }
                             }
-                            MySqlParameterValue::Array(arr) => {
+                            ParameterValue::Array(arr) => {
                                 for (i, item) in arr.iter().enumerate() {
                                     if i > 0 {
                                         sql.push_str(", ");
@@ -535,7 +474,7 @@ impl MySqlAst {
                 }
 
                 MySqlAst::InClause { expr, placeholder } => match values.get(placeholder) {
-                    Some(MySqlParameterValue::Array(arr)) if !arr.is_empty() => {
+                    Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 5 + arr.len() + (arr.len() - 1) * 2);
                         sql.push_str(expr);
                         sql.push_str(" IN (");
@@ -553,7 +492,7 @@ impl MySqlAst {
                     }
                 },
                 MySqlAst::NotInClause { expr, placeholder } => match values.get(placeholder) {
-                    Some(MySqlParameterValue::Array(arr)) if !arr.is_empty() => {
+                    Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() + (arr.len() - 1) * 2);
                         write!(sql, "{expr} NOT IN (").unwrap();
                         sql.push_str(" NOT IN (");
@@ -570,16 +509,21 @@ impl MySqlAst {
                         write!(sql, "TRUE /* {expr} IN :{placeholder} */").unwrap();
                     }
                 },
-                MySqlAst::PaginateClause { placeholder } => match values.get(placeholder) {
-                    Some(MySqlParameterValue::PaginateClauseRendered(rendered)) => {
-                        out_vals.push(MySqlParameterValue::Int(rendered.limit));
-                        out_vals.push(MySqlParameterValue::Int(rendered.offset));
-                        sql.push_str("LIMIT ? OFFSET ?");
+                MySqlAst::PaginateClause { placeholder } => {
+                    let value = values.get(placeholder);
+                    match value {
+                        Some(ParameterValue::PaginateClauseRendered(rendered)) => {
+                            out_vals.push(ParameterValue::Int(rendered.limit));
+                            out_vals.push(ParameterValue::Int(rendered.offset));
+                            sql.push_str("LIMIT ? OFFSET ?");
+                        }
+                        _ => {
+                            bail!(
+                                "PAGINATE accepts only Sqlx\\PaginateClause instance, given: {placeholder:?} = {value:?}"
+                            );
+                        }
                     }
-                    _ => {
-                        bail!("PAGINATE may only accept Sqlx\\PaginateClause instance");
-                    }
-                },
+                }
             })
         }
 

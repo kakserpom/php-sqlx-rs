@@ -6,12 +6,11 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 dashmap = "6.1.0"
-#ext-php-rs = { git = "https://github.com/kakserpom/ext-php-rs.git", branch = "master", features = ["anyhow"] }
-ext-php-rs = {path = "ext-php-rs", features = ["anyhow"] }
+ext-php-rs = { git = "https://github.com/kakserpom/ext-php-rs.git", branch = "master", features = ["anyhow"] }
+#ext-php-rs = {path = "ext-php-rs", features = ["anyhow"] }
 itertools = "0.14.0"
 serde_json = "1.0.140"
 simd-json = { optional = true, version = "0.15.1" }
-#sqlx = { version = "0.8.6", features = ["json", "runtime-tokio"] }
 #sqlx = { path = "sqlx", features = ["json", "runtime-tokio"] }
 sqlx = { git = "https://github.com/kakserpom/sqlx", branch = "mysqlvalueref_visibility", features = ["json", "runtime-tokio"] }
 threadsafe-lru = "0.1.2"
@@ -22,7 +21,7 @@ trim-in-place = "0.1.7"
 experimental = []
 default = [
     "postgres",
-    #"mysql",
+    "mysql",
     "lazy-row",
     "experimental",
     "simd-json"
