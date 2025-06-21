@@ -478,7 +478,7 @@ impl MySqlAst {
                                     }
                                 }
                             }
-                            MySqlParameterValue::ByClauseRendered(order_by) => {
+                            MySqlParameterValue::ByClauseRendered(by) => {
                                 for (
                                     i,
                                     ByClauseRenderedField {
@@ -486,7 +486,7 @@ impl MySqlAst {
                                         is_expression,
                                         descending_order,
                                     },
-                                ) in order_by.__inner.iter().enumerate()
+                                ) in by.__inner.iter().enumerate()
                                 {
                                     if i > 0 {
                                         sql.push_str(", ");

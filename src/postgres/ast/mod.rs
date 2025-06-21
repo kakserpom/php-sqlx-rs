@@ -501,7 +501,7 @@ impl PgAst {
                                     }
                                 }
                             }
-                            PgParameterValue::ByClauseRendered(order_by) => {
+                            PgParameterValue::ByClauseRendered(by) => {
                                 for (
                                     i,
                                     ByClauseRenderedField {
@@ -509,7 +509,7 @@ impl PgAst {
                                         is_expression,
                                         descending_order,
                                     },
-                                ) in order_by.__inner.iter().enumerate()
+                                ) in by.__inner.iter().enumerate()
                                 {
                                     if i > 0 {
                                         sql.push_str(", ");
