@@ -1,7 +1,5 @@
 pub mod ast;
-pub use crate::mysql::{
-    ast::MySqlParameterValue, inner::MySqlDriverInner, options::MySqlDriverOptions,
-};
+pub use crate::mysql::{inner::MySqlDriverInner, options::MySqlDriverOptions};
 use crate::utils::ColumnArgument;
 use dashmap::DashMap;
 use ext_php_rs::prelude::ModuleBuilder;
@@ -15,6 +13,8 @@ pub mod inner;
 pub mod options;
 pub mod prepared_query;
 pub use prepared_query::*;
+use crate::paramvalue::ParameterValue;
+
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
     LazyLock::new(DashMap::new);
 
@@ -88,7 +88,7 @@ impl MySqlDriver {
     pub fn query_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(query, parameters, None)
     }
@@ -111,7 +111,7 @@ impl MySqlDriver {
     pub fn query_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -121,7 +121,7 @@ impl MySqlDriver {
     pub fn query_value_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -150,7 +150,7 @@ impl MySqlDriver {
     pub fn query_value_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -175,7 +175,7 @@ impl MySqlDriver {
     pub fn query_maybe_value(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -199,7 +199,7 @@ impl MySqlDriver {
     pub fn query_maybe_value_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -223,7 +223,7 @@ impl MySqlDriver {
     pub fn query_maybe_value_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
@@ -245,7 +245,7 @@ impl MySqlDriver {
     pub fn query_row_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(query, parameters, Some(true))
     }
@@ -265,7 +265,7 @@ impl MySqlDriver {
     pub fn query_row_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_row(query, parameters, Some(false))
     }
@@ -285,7 +285,7 @@ impl MySqlDriver {
     pub fn query_maybe_row(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_maybe_row(query, parameters, None)
     }
@@ -307,7 +307,7 @@ impl MySqlDriver {
     pub fn query_maybe_row_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_maybe_row(query, parameters, Some(true))
@@ -330,7 +330,7 @@ impl MySqlDriver {
     pub fn query_maybe_row_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_maybe_row(query, parameters, Some(false))
@@ -354,7 +354,7 @@ impl MySqlDriver {
     pub fn query_column(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -376,7 +376,7 @@ impl MySqlDriver {
     pub fn query_column_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -398,7 +398,7 @@ impl MySqlDriver {
     pub fn query_column_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
         column: Option<ColumnArgument>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner
@@ -423,7 +423,7 @@ impl MySqlDriver {
     pub fn query_all(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.query_all(query, parameters, None)
     }
@@ -443,7 +443,7 @@ impl MySqlDriver {
     pub fn query_all_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.query_all(query, parameters, Some(true))
     }
@@ -463,7 +463,7 @@ impl MySqlDriver {
     pub fn query_all_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.query_all(query, parameters, Some(false))
     }
@@ -493,7 +493,7 @@ impl MySqlDriver {
     pub fn query_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner.query_dictionary(query, parameters, None)
     }
@@ -518,7 +518,7 @@ impl MySqlDriver {
     pub fn query_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(query, parameters, Some(true))
@@ -544,7 +544,7 @@ impl MySqlDriver {
     pub fn query_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_dictionary(query, parameters, Some(false))
@@ -590,7 +590,7 @@ impl MySqlDriver {
     pub fn query_grouped_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, None)
@@ -606,7 +606,7 @@ impl MySqlDriver {
     pub fn query_grouped_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, Some(true))
@@ -622,7 +622,7 @@ impl MySqlDriver {
     pub fn query_grouped_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_dictionary(query, parameters, Some(false))
@@ -653,7 +653,7 @@ impl MySqlDriver {
     pub fn query_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, None)
@@ -676,7 +676,7 @@ impl MySqlDriver {
     pub fn query_column_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, Some(true))
@@ -699,7 +699,7 @@ impl MySqlDriver {
     pub fn query_column_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_column_dictionary(query, parameters, Some(false))
@@ -710,7 +710,7 @@ impl MySqlDriver {
     pub fn query_grouped_column_dictionary_assoc(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, Some(true))
@@ -721,7 +721,7 @@ impl MySqlDriver {
     pub fn query_grouped_column_dictionary_obj(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, Some(false))
@@ -747,7 +747,7 @@ impl MySqlDriver {
     pub fn query_grouped_column_dictionary(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Zval> {
         self.driver_inner
             .query_grouped_column_dictionary(query, parameters, None)
@@ -784,7 +784,7 @@ impl MySqlDriver {
     pub fn execute(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<u64> {
         self.driver_inner.execute(query, parameters)
     }
@@ -806,7 +806,7 @@ impl MySqlDriver {
     pub fn insert(
         &self,
         table: &str,
-        row: HashMap<String, MySqlParameterValue>,
+        row: HashMap<String, ParameterValue>,
     ) -> anyhow::Result<u64> {
         self.execute(
             &format!(
@@ -836,7 +836,7 @@ impl MySqlDriver {
     pub fn dry(
         &self,
         query: &str,
-        parameters: Option<HashMap<String, MySqlParameterValue>>,
+        parameters: Option<HashMap<String, ParameterValue>>,
     ) -> anyhow::Result<Vec<Zval>> {
         self.driver_inner.dry(query, parameters)
     }

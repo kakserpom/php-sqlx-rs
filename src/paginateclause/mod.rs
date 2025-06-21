@@ -1,5 +1,5 @@
 use anyhow::bail;
-use ext_php_rs::{ZvalConvert, php_class, php_impl, prelude::ModuleBuilder};
+use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 
 #[php_class]
 #[php(name = "Sqlx\\PaginateClause")]
@@ -85,12 +85,17 @@ impl PaginateClause {
         self.internal_apply(page_number, per_page)
     }
 }
-#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+#[derive(Clone, PartialEq, Debug)]
+#[php_class]
+#[php(name = "Sqlx\\PaginateClauseRendered")]
+#[php(rename = "none")]
 pub struct PaginateClauseRendered {
     // @TODO: make it impossible to alter PaginateClauseRendered from PHP side
     pub(crate) limit: i64,
     pub(crate) offset: i64,
 }
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<PaginateClause>()
+    module
+        .class::<PaginateClause>()
+        .class::<PaginateClauseRendered>()
 }

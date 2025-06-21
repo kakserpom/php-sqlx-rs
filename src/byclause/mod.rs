@@ -135,7 +135,10 @@ impl ByClause {
     }
 }
 /// A rendered ORDER BY clause result for use in query generation.
-#[derive(Clone, PartialEq, Debug, ZvalConvert)]
+#[derive(Clone, PartialEq, Debug)]
+#[php_class]
+#[php(name = "Sqlx\\ByClauseRendered")]
+#[php(rename = "none")]
 pub struct ByClauseRendered {
     // @TODO: make it impossible to alter RenderedByClause from PHP side
     pub(crate) __inner: Vec<ByClauseRenderedField>,
@@ -158,5 +161,5 @@ impl ByClauseRendered {
 }
 
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<ByClause>()
+    module.class::<ByClause>().class::<ByClauseRendered>()
 }

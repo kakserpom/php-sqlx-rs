@@ -16,10 +16,10 @@ pub mod selectclause;
 pub mod paginateclause;
 mod tests;
 mod utils;
+mod paramvalue;
+
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
-
-use crate::byclause::ByClauseRendered;
 use ext_php_rs::prelude::*;
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
@@ -37,7 +37,7 @@ const DEFAULT_COLLAPSIBLE_IN: bool = true;
 use crate::options::DriverOptions;
 
 #[cfg(feature = "mysql")]
-pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlParameterValue, MySqlPreparedQuery};
+pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlPreparedQuery};
 
 #[php_module]
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {
