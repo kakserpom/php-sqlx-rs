@@ -182,9 +182,8 @@ impl Conversion for PgRow {
                     ArrayKey::Long(0)
                 }
             }
-            "INT2" | "INT4" | "INT" | "INT8" | "OID" => {
-                ArrayKey::Long(self.try_get::<i64, _>(column_name)?)
-            }
+            "INT2" | "INT4" | "INT" => ArrayKey::Long(self.try_get::<i32, _>(column_name)?.into()),
+            "INT8" | "OID" => ArrayKey::Long(self.try_get::<i64, _>(column_name)?),
             "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" | "NUMERIC" | "MONEY" => {
                 ArrayKey::String(self.try_get::<String, _>(column_name)?)
             }

@@ -1,7 +1,7 @@
 <?php
 /**
  */
-class AnnotatedBench
+class BasicBenchmark
 {
     private $driver;
     private $byClause;
