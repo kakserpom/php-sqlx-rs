@@ -58,7 +58,7 @@ fn test_render_basic() {
     let (query, params) = ast
         .render(vals, &RENDERING_SETTINGS)
         .expect("Rendering failed");
-    assert_eq!(query, "SELECT * FROM users WHERE status = ? AND id = ?");
+    assert_eq!(query, "SELECT * FROM users WHERE status = @p1 AND id = @p2");
     assert_eq!(params, vec!["active".into(), "42".into()]);
 }
 
@@ -69,7 +69,7 @@ fn test_render_optional_skip() {
     let (query, params) = ast
         .render([("id", 100)], &RENDERING_SETTINGS)
         .expect("Rendering failed");
-    assert_eq!(query, "SELECT * FROM users WHERE id = ?");
+    assert_eq!(query, "SELECT * FROM users WHERE id = @p1");
     assert_eq!(params, vec![100.into()]);
 }
 
@@ -92,7 +92,7 @@ fn test_render_var_types() {
         .expect("Rendering failed");
     assert_eq!(
         q,
-        "SELECT * FROM table WHERE id = ? AND active = ? AND scores IN (?, ?) AND data = ?"
+        "SELECT * FROM table WHERE id = @p1 AND active = @p2 AND scores IN (@p3, @p4) AND data = @p5"
     );
     assert_eq!(
         params,
@@ -251,7 +251,7 @@ fn test_pagination() {
     );
     let (sql, values) = ast.render(vals, &RENDERING_SETTINGS).unwrap();
     println!("sql = {:#?}", sql);
-    assert_eq!(sql, "SELECT * FROM users age ORDER BY id LIMIT ? OFFSET ?");
+    assert_eq!(sql, "SELECT * FROM users age ORDER BY id LIMIT @p1 OFFSET @p2");
     assert_eq!(
         values,
         vec![ParameterValue::Int(5), ParameterValue::Int(35)]

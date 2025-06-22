@@ -606,7 +606,7 @@ impl Ast {
                             } else if rendering_settings.placeholder_at_sign {
                                 write!(
                                     sql,
-                                    "LIMIT @{} OFFSET @{}",
+                                    "LIMIT @p{} OFFSET @p{}",
                                     out_vals.len() - 1,
                                     out_vals.len()
                                 )?;
