@@ -4,18 +4,40 @@ use ext_php_rs::boxed::ZBox;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::types::{ArrayKey, ZendHashTable, Zval};
 
-pub trait StripPrefixIgnoreAsciiCase {
-    fn strip_prefix_ignore_ascii_case(&self, prefix: &str) -> Option<&str>;
+pub trait StripPrefixWordIgnoreAsciiCase {
+    fn strip_prefix_word_ignore_ascii_case(&self, prefix_words: &[&str]) -> Option<&str>;
 }
-impl<T: AsRef<str> + ?Sized> StripPrefixIgnoreAsciiCase for T {
-    fn strip_prefix_ignore_ascii_case(&self, prefix: &str) -> Option<&str> {
-        let s = self.as_ref();
-        let prefix_len = prefix.len();
-        if s.len() >= prefix_len && s[..prefix_len].eq_ignore_ascii_case(prefix) {
-            Some(&s[prefix_len..])
-        } else {
-            None
+impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
+    fn strip_prefix_word_ignore_ascii_case(&self, prefix_words: &[&str]) -> Option<&str> {
+        let mut s = self.as_ref();
+        for (i, prefix) in prefix_words.iter().enumerate() {
+            if i > 0 {
+                s = &s.trim_start();
+            }
+
+            let prefix_len = prefix.len();
+            if s.len() < prefix_len || !s[..prefix_len].eq_ignore_ascii_case(prefix) {
+                return None;
+            }
+            if let Some(c) = &s[prefix_len..].chars().next() {
+                if c.is_alphanumeric() {
+                    return None;
+                }
+            }
+            s = &s[prefix_len..];
         }
+        Some(s)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use crate::utils::StripPrefixWordIgnoreAsciiCase;
+
+    #[test]
+    pub fn test_strip_prefix_word_ignore_ascii_case() {
+        "NOT IN (:ph)"
+            .strip_prefix_word_ignore_ascii_case(&["NOT", "IN"])
+            .unwrap();
     }
 }
 

@@ -4,7 +4,7 @@ mod tests;
 use crate::byclause::ByClauseRenderedField;
 use crate::paramvalue::{ParameterValue, ParamsMap, Placeholder};
 use crate::selectclause::SelectClauseRenderedField;
-use crate::utils::StripPrefixIgnoreAsciiCase;
+use crate::utils::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use itertools::Itertools;
 use std::fmt::{Debug, Write};
@@ -127,7 +127,7 @@ impl Ast {
                     return Ok(r);
                 }
 
-                if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("PAGINATE") {
+                if let Some(suffix) = rest.strip_prefix_word_ignore_ascii_case(&["PAGINATE"]) {
                     let rest_after_in = suffix.trim_start();
                     let offset = rest.len() - suffix.len();
                     let mut consumed_len = 0;
@@ -163,7 +163,7 @@ impl Ast {
 
                 if collapsible_in_enabled {
                     // NOT IN support (with or without parentheses)
-                    if let Some(suffix) = rest.strip_prefix_ignore_ascii_case("NOT IN") {
+                    if let Some(suffix) = rest.strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]) {
                         let rest_after_in = suffix.trim_start();
                         let offset = rest.len() - suffix.len();
                         let mut consumed_len = 0;
@@ -226,7 +226,7 @@ impl Ast {
                         }
                     }
                     // IN support
-                    if let Some(r2) = rest.strip_prefix_ignore_ascii_case("IN") {
+                    if let Some(r2) = rest.strip_prefix_word_ignore_ascii_case(&["IN"]) {
                         let rest_after_in = r2.trim_start();
                         let original_len = rest.len();
                         let mut consumed_len = 0;
