@@ -1,12 +1,11 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
     ( $struct:ident, $className:literal, $inner:ident, $prepared:ident $(,)? ) => {
-        
         mod conversion;
         pub mod prepared_query;
+        use crate::utils::ColumnArgument;
         use inner::$inner;
         pub use prepared_query::$prepared;
-        use crate::utils::ColumnArgument;
 
         use crate::options::DriverOptionsArg;
         use crate::paramvalue::ParameterValue;
@@ -855,31 +854,44 @@ macro_rules! php_sqlx_impl_driver {
                 match callbable_ret {
                     Ok(value) => {
                         if value.is_false() {
-                            crate::RUNTIME.block_on(tx.rollback()).map_err(|err| anyhow!("{err:?}"))?;
+                            crate::RUNTIME
+                                .block_on(tx.rollback())
+                                .map_err(|err| anyhow!("{err:?}"))?;
                         } else {
-                            crate::RUNTIME.block_on(tx.commit()).map_err(|err| anyhow!("{err:?}"))?;
+                            crate::RUNTIME
+                                .block_on(tx.commit())
+                                .map_err(|err| anyhow!("{err:?}"))?;
                         }
                         Ok(())
                     }
                     Err(err) => {
-                        crate::RUNTIME.block_on(tx.rollback()).map_err(|err| anyhow!("{err:?}"))?;
+                        crate::RUNTIME
+                            .block_on(tx.rollback())
+                            .map_err(|err| anyhow!("{err:?}"))?;
                         match err {
-                            ext_php_rs::error::Error::Exception(exception) => {
-                                Err(
-                                    exception.properties_table[0]
-                                        .string()
-                                        .as_ref()
-                                        .map(String::as_str)
-                                        .unwrap_or("Unknown error inside callback.")
-                                        .into()
-                                )
-                            }
-                            _ => {
-                                Err(err.into())
-                            }
+                            ext_php_rs::error::Error::Exception(exception) => Err(exception
+                                .properties_table[0]
+                                .string()
+                                .as_ref()
+                                .map(String::as_str)
+                                .unwrap_or("Unknown error inside callback.")
+                                .into()),
+                            _ => Err(err.into()),
                         }
                     }
                 }
+            }
+
+            pub fn savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                self.driver_inner.savepoint(savepoint)
+            }
+
+            pub fn rollback_to_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                self.driver_inner.rollback_to_savepoint(savepoint)
+            }
+
+            pub fn release_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                self.driver_inner.release_savepoint(savepoint)
             }
         }
     };

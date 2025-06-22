@@ -22,6 +22,7 @@ The project is still kind of experimental, so any feedback/ideas will be greatly
 - Safe and robust `ORDER BY` / `GROUP BY` clauses
 - Pagination with `PAGINATE`
 - Safe and robust `SELECT`
+- SQL transactions are supported in full
 - Native JSON and bigint support
 - Optional persistent connections (with connection pooling)
 
@@ -258,6 +259,32 @@ $rows = $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
 ```
 
 Note that field names are case-sensitive.
+
+
+--- 
+
+## Transactions
+
+```php
+$driver->begin(function($driver) {
+    // All queries inside this function will be wrapped in a transaction.
+    // You can use all driver functions here.
+    
+    $driver->insert('users', ['name' => 'John', 'age' => 25]);
+    $driver->insert('users', ['name' => 'Mary', 'age' => 20]);
+    
+    // return false; 
+});
+```
+
+A `ROLLBACK` happens if the closure returns `false` or throw an exception.
+Otherwise a `COMMIT` gets sent when functions finishes normally.
+
+Additional supported methods:
+
+- `savepoint(name: String)`
+- `rollbackToSavepoint(name: String)`
+- `releaseSavepoint(name: String)`
 
 ---
 

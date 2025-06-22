@@ -3,6 +3,7 @@ macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
         use crate::ast::{Ast, RenderingSettings, ParsingSettings};
         use crate::conversion::Conversion;
+        use crate::utils::is_valid_ident;
         use crate::options::DriverInnerOptions;
         use crate::paramvalue::{ParameterValue, bind_values};
         use sqlx::$database;
@@ -63,6 +64,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     options,
                 })
             }
+
             /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
             ///
             /// # Arguments
@@ -84,9 +86,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<u64> {
                 let (query, values) = self.render_query(query, parameters)?;
 
-
-                Ok(if let Some(tx) = self.retrieve_ongoing_transaction() {
-                    let mut tx = tx;
+                Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
                         .block_on(bind_values(sqlx::query(&query), &values).execute(&mut *tx));
                     self.place_ongoing_transaction(tx);
@@ -490,8 +490,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
 
-                if let Some(tx) = self.retrieve_ongoing_transaction() {
-                    let mut tx = tx;
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
                         .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&mut *tx));
                     self.place_ongoing_transaction(tx);
@@ -627,6 +626,54 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .map_err(|err| anyhow!("{err}"))?);
                 Ok(())
 
+            }
+
+            pub fn savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                if !is_valid_ident(savepoint) {
+                    bail!("Invalid savepoint format");
+                }
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(sqlx::query(&format!("SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .map_err(|err| anyhow!("{err}"));
+                    self.place_ongoing_transaction(tx);
+                    val?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction"))
+                }
+            }
+
+            pub fn rollback_to_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                if !is_valid_ident(savepoint) {
+                    bail!("Invalid savepoint format");
+                }
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(sqlx::query(&format!("ROLLBACK TO SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .map_err(|err| anyhow!("{err}"));
+                    self.place_ongoing_transaction(tx);
+                    val?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction"))
+                }
+            }
+
+            pub fn release_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                if !is_valid_ident(savepoint) {
+                    bail!("Invalid savepoint format");
+                }
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(sqlx::query(&format!("RELEASE SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .map_err(|err| anyhow!("{err}"));
+                    self.place_ongoing_transaction(tx);
+                    val?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction"))
+                }
             }
 
             #[inline(always)]
