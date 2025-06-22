@@ -277,8 +277,8 @@ $driver->begin(function($driver) {
 });
 ```
 
-A `ROLLBACK` happens if the closure returns `false` or throw an exception.
-Otherwise a `COMMIT` gets sent when functions finishes normally.
+A `ROLLBACK` happens if the closure returns `false` or throws an exception.
+Otherwise, a `COMMIT` gets sent when functions finishes normally.
 
 Additional supported methods:
 
@@ -560,22 +560,26 @@ cargo bench
 Here are M1 Max results for parsing and rendering a hefty query. No caching involved.
 
 ```
-PgAst::parse_small      time:   [1.7338 µs 1.7372 µs 1.7407 µs]
-                        change: [−0.3878% −0.1775% +0.0396%] (p = 0.16 > 0.05)
+     Running benches/benchmark.rs (target/release/deps/benchmark-eaed67cfaa034b35)
+Gnuplot not found, using plotters backend
+Ast::parse_small        time:   [2.5877 µs 2.5928 µs 2.5981 µs]
+                        change: [−0.4151% −0.0902% +0.2146%] (p = 0.57 > 0.05)
                         No change in performance detected.
 Found 3 outliers among 100 measurements (3.00%)
-  3 (3.00%) high mild
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  1 (1.00%) high severe
 
-PgAst::parse_big        time:   [4.2893 µs 4.2934 µs 4.2981 µs]
-                        change: [−2.1134% −1.7715% −1.4759%] (p = 0.00 < 0.05)
-                        Performance has improved.
-Found 11 outliers among 100 measurements (11.00%)
-  2 (2.00%) high mild
-  9 (9.00%) high severe
-
-PgAst::render_big       time:   [1.9202 µs 1.9277 µs 1.9384 µs]
-                        change: [−1.1267% −0.8127% −0.4082%] (p = 0.00 < 0.05)
+Ast::parse_big          time:   [7.2626 µs 7.2785 µs 7.2958 µs]
+                        change: [+0.1364% +0.4485% +0.7694%] (p = 0.00 < 0.05)
                         Change within noise threshold.
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+
+Ast::render_big         time:   [1.9188 µs 1.9215 µs 1.9243 µs]
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
 
 ```
 

@@ -44,7 +44,7 @@ GROUP BY u.id
 {{ LIMIT :limit }}
 {{ OFFSET :offset }}";
 
-fn bench_pg_ast(c: &mut Criterion) {
+fn bench_ast(c: &mut Criterion) {
     c.bench_function("Ast::parse_small", |b| {
         b.iter(|| {
             let _res = black_box(Ast::parse(QUERY_SMALL, &PARSING_SETTINGS));
