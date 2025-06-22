@@ -1,3 +1,4 @@
+#![allow(clippy::inline_always)]
 #[cfg(test)]
 mod tests;
 
@@ -8,6 +9,7 @@ use crate::utils::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use itertools::Itertools;
 use std::fmt::{Debug, Write};
+use trim_in_place::TrimInPlace;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
@@ -41,6 +43,7 @@ pub enum Ast {
 impl Ast {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments.
+    /// Returns an `AST::Nested` of top-level branches.
     pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<Ast> {
         fn inner<'s>(
             mut rest: &'s str,
@@ -76,10 +79,12 @@ impl Ast {
                     rest = &rest[idx..];
                     continue;
                 }
-                // Line comment --
+                // Handle line comment -- until newline
                 if let Some(r) = rest.strip_prefix("--") {
+                    // include '--' and content up to newline
                     let end = r.find('\n').map_or(r.len(), |i| i + 1);
-                    buf.push_str(&rest[..2 + end]);
+                    let comment = &rest[..2 + end];
+                    buf.push_str(comment);
                     rest = &rest[2 + end..];
                     continue;
                 }
@@ -168,8 +173,8 @@ impl Ast {
                         let offset = rest.len() - suffix.len();
                         let mut consumed_len = 0;
                         let mut name_opt = None;
-                        // parentheses form
                         if let Some(stripped) = rest_after_in.strip_prefix('(') {
+                            // parentheses form
                             if let Some(cl) = stripped.find(')') {
                                 let inside = &stripped[..cl].trim();
                                 if let Some(id) = inside.strip_prefix(':') {
@@ -202,33 +207,37 @@ impl Ast {
                                 name_opt = Some(ident);
                             } else if rest_after_in.starts_with('?') {
                                 *positional_counter += 1;
-                                let num = positional_counter.to_string();
                                 consumed_len = offset + 2;
-                                name_opt = Some(num);
+                                name_opt = Some(positional_counter.to_string());
                             }
                         }
                         if let Some(name) = name_opt {
-                            let trimmed = buf.trim_end();
-                            let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                                Some((a, b)) => (format!("{a} "), b),
-                                None => (String::new(), trimmed),
-                            };
-                            if !pre.is_empty() {
-                                branches.push(Ast::Sql(pre));
+                            buf.trim_end_in_place();
+                            if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
+                                if !left.is_empty() {
+                                    branches.push(Ast::Sql(format!("{left} ")));
+                                }
+                                branches.push(Ast::NotInClause {
+                                    expr: expr.to_string(),
+                                    placeholder: name,
+                                });
+                            } else {
+                                branches.push(Ast::NotInClause {
+                                    expr: buf.clone(),
+                                    placeholder: name,
+                                });
                             }
-                            branches.push(Ast::NotInClause {
-                                expr: expr.to_string(),
-                                placeholder: name,
-                            });
                             buf.clear();
                             rest = &rest[consumed_len..];
                             continue;
                         }
                     }
-                    // IN support
-                    if let Some(r2) = rest.strip_prefix_word_ignore_ascii_case(&["IN"]) {
-                        let rest_after_in = r2.trim_start();
+
+                    // --- IN ... ---
+                    if let Some(rest_after_in) = rest.strip_prefix_word_ignore_ascii_case(&["IN"]) {
+                        let rest_after_in = rest_after_in.trim_start();
                         let original_len = rest.len();
+
                         let mut consumed_len = 0;
                         let mut name_opt = None;
                         if let Some(sfx) = rest_after_in.strip_prefix(':') {
@@ -264,103 +273,115 @@ impl Ast {
                                     original_len - rest_after_in.len() + 1 + close_idx + 1;
                             }
                         }
+
                         if let Some(name) = name_opt {
-                            let trimmed = buf.trim_end();
-                            let (pre, expr) = match trimmed.rsplit_once(char::is_whitespace) {
-                                Some((a, b)) => (format!("{a} "), b),
-                                None => (String::new(), trimmed),
-                            };
-                            if !pre.is_empty() {
-                                branches.push(Ast::Sql(pre));
+                            buf.trim_end_in_place();
+                            if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
+                                if !left.is_empty() {
+                                    branches.push(Ast::Sql(format!("{left} ")));
+                                }
+                                branches.push(Ast::InClause {
+                                    expr: expr.to_string(),
+                                    placeholder: name,
+                                });
+                            } else {
+                                branches.push(Ast::InClause {
+                                    expr: buf.clone(),
+                                    placeholder: name,
+                                });
                             }
-                            branches.push(Ast::InClause {
-                                expr: expr.to_string(),
-                                placeholder: name,
-                            });
                             buf.clear();
                             rest = &rest[consumed_len..];
                             continue;
                         }
                     }
                 }
-                // :param
-                if let Some(a) = rest.strip_prefix(":") {
-                    if let Some((nm, rm)) = a
+
+                // --- :named placeholder ---
+                if let Some(after) = rest.strip_prefix(":") {
+                    if let Some((name, rem)) = after
                         .char_indices()
                         .take_while(|(_, c)| c.is_alphanumeric() || *c == '_')
                         .map(|(i, _)| i)
                         .last()
-                        .map(|i| a.split_at(i + 1))
+                        .map(|i| after.split_at(i + 1))
                     {
                         if !buf.is_empty() {
                             branches.push(Ast::Sql(std::mem::take(&mut buf)));
                         }
-                        branches.push(Ast::Placeholder(nm.to_string()));
-                        placeholders_out.push(nm.to_string());
-                        rest = rm;
+                        branches.push(Ast::Placeholder(name.to_string()));
+                        placeholders_out.push(name.to_string());
+                        rest = rem;
                         continue;
                     }
                 }
-                // $param
-                if let Some(a) = rest.strip_prefix("$") {
-                    if let Some((nm, rm)) = a
+
+                // --- $named placeholder ---
+                if let Some(after) = rest.strip_prefix("$") {
+                    if let Some((name, rem)) = after
                         .char_indices()
                         .take_while(|(_, c)| c.is_alphanumeric() || *c == '_')
                         .map(|(i, _)| i)
                         .last()
-                        .map(|i| a.split_at(i + 1))
+                        .map(|i| after.split_at(i + 1))
                     {
                         if !buf.is_empty() {
                             branches.push(Ast::Sql(std::mem::take(&mut buf)));
                         }
-                        branches.push(Ast::Placeholder(nm.to_string()));
-                        placeholders_out.push(nm.to_string());
-                        rest = rm;
+                        branches.push(Ast::Placeholder(name.to_string()));
+                        placeholders_out.push(name.to_string());
+                        rest = rem;
                         continue;
                     }
                 }
-                // ? positional
-                if let Some(rp) = rest.strip_prefix("?") {
+
+                // --- ? positional placeholder ---
+                if let Some(r) = rest.strip_prefix("?") {
                     if !buf.is_empty() {
                         branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     *positional_counter += 1;
-                    let nm = positional_counter.to_string();
-                    branches.push(Ast::Placeholder(nm.clone()));
-                    placeholders_out.push(nm);
-                    rest = rp;
+                    let name = positional_counter.to_string();
+                    branches.push(Ast::Placeholder(name.clone()));
+                    placeholders_out.push(name);
+                    rest = r;
                     continue;
                 }
-                // :: cast
-                if let Some(rp) = rest.strip_prefix("::") {
+
+                // --- :: type cast ---
+                if let Some(r) = rest.strip_prefix("::") {
                     buf.push_str("::");
-                    rest = rp;
+                    rest = r;
                     continue;
                 }
-                // default char
+
+                // Default: consume one character
                 let ch = rest.chars().next().unwrap();
-                let l = ch.len_utf8();
-                buf.push_str(&rest[..l]);
-                rest = &rest[l..];
+                let ch_len = ch.len_utf8();
+                buf.push_str(&rest[..ch_len]);
+                rest = &rest[ch_len..];
             }
+
             if !buf.is_empty() {
                 branches.push(Ast::Sql(buf));
             }
             Ok(rest)
         }
+
         let mut branches = Vec::new();
         let mut placeholders = Vec::new();
-        let mut cnt = 0;
+        let mut counter = 0;
         let rest = inner(
             input,
             &mut placeholders,
             &mut branches,
-            &mut cnt,
+            &mut counter,
             collapsible_in_enabled,
         )?;
         if !rest.trim().is_empty() {
             bail!("Unmatched `{{` or extra trailing content");
         }
+
         Ok(Ast::Root {
             branches,
             required_placeholders: placeholders,
@@ -369,6 +390,10 @@ impl Ast {
 }
 
 impl Ast {
+    /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
+    /// but ignores them inside string literals and comments, with support for escaping via `\\`.
+    /// Returns an `AST::Nested` of top-level branches.
+    ///
     /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
     pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<ParameterValue>)>
@@ -404,8 +429,13 @@ impl Ast {
                     if let Some(val) = values.get(name) {
                         match val {
                             ParameterValue::SelectClauseRendered(fields) => {
-                                for (i, SelectClauseRenderedField { field, expression }) in
-                                    fields.__inner.iter().enumerate()
+                                for (
+                                    i,
+                                    SelectClauseRenderedField {
+                                        field,
+                                        expression,
+                                    },
+                                ) in fields.__inner.iter().enumerate()
                                 {
                                     if i > 0 {
                                         sql.push_str(", ");
@@ -494,8 +524,7 @@ impl Ast {
                 Ast::NotInClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() + (arr.len() - 1) * 2);
-                        write!(sql, "{expr} NOT IN (").unwrap();
-                        sql.push_str(" NOT IN (");
+                        write!(sql, "{expr} NOT IN (")?;
                         for (i, item) in arr.iter().enumerate() {
                             if i > 0 {
                                 sql.push_str(", ");
@@ -506,7 +535,7 @@ impl Ast {
                         sql.push(')');
                     }
                     _ => {
-                        write!(sql, "TRUE /* {expr} IN :{placeholder} */").unwrap();
+                        write!(sql, "TRUE /* {expr} IN :{placeholder} */")?;
                     }
                 },
                 Ast::PaginateClause { placeholder } => {
@@ -540,6 +569,7 @@ impl Ast {
 
         let mut sql = String::new();
         let mut out_vals = Vec::new();
+
         if let Ast::Root {
             required_placeholders,
             ..

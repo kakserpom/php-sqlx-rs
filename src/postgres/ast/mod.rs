@@ -1,6 +1,7 @@
 #![allow(clippy::inline_always)]
 #[cfg(test)]
 mod tests;
+
 use crate::byclause::ByClauseRenderedField;
 use crate::paramvalue::{ParameterValue, ParamsMap, Placeholder};
 use crate::selectclause::SelectClauseRenderedField;
@@ -10,7 +11,7 @@ use itertools::Itertools;
 use std::fmt::{Debug, Write};
 use trim_in_place::TrimInPlace;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
     Nested(Vec<Ast>),
     /// Literal SQL text
@@ -39,7 +40,6 @@ pub enum Ast {
     },
 }
 
-/// Represents a placeholder identifier
 impl Ast {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments.
@@ -184,19 +184,19 @@ impl Ast {
                         } else {
                             // non-parentheses form
                             if let Some(sfx) = rest_after_in.strip_prefix(':') {
-                                let name: String = sfx
+                                let ident: String = sfx
                                     .chars()
                                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                                     .collect();
-                                consumed_len = offset + 2 + name.len();
-                                name_opt = Some(name);
+                                consumed_len = offset + 2 + ident.len();
+                                name_opt = Some(ident);
                             } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
-                                let name: String = sfx
+                                let ident: String = sfx
                                     .chars()
                                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                                     .collect();
-                                consumed_len = offset + 2 + name.len();
-                                name_opt = Some(name);
+                                consumed_len = offset + 2 + ident.len();
+                                name_opt = Some(ident);
                             } else if rest_after_in.starts_with('?') {
                                 *positional_counter += 1;
                                 consumed_len = offset + 2;
@@ -240,12 +240,12 @@ impl Ast {
                             consumed_len = original_len - rest_after_in.len() + 1 + ident.len();
                             name_opt = Some(ident);
                         } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
-                            consumed_len = original_len - rest_after_in.len();
-                            name_opt = Some(
-                                sfx.chars()
-                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
-                                    .collect(),
-                            );
+                            let ident: String = sfx
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            consumed_len = original_len - rest_after_in.len() + 1 + ident.len();
+                            name_opt = Some(ident);
                         } else if rest_after_in.starts_with('?') {
                             *positional_counter += 1;
                             consumed_len = original_len - rest_after_in.len() + 1;
@@ -425,15 +425,15 @@ impl Ast {
                                     i,
                                     SelectClauseRenderedField {
                                         field,
-                                        expression: expr,
+                                        expression,
                                     },
                                 ) in fields.__inner.iter().enumerate()
                                 {
                                     if i > 0 {
                                         sql.push_str(", ");
                                     }
-                                    if let Some(expr) = expr {
-                                        write!(sql, "{expr} AS \"{field}\"").unwrap();
+                                    if let Some(expression) = expression {
+                                        write!(sql, "{expression} AS \"{field}\"").unwrap();
                                     } else {
                                         write!(sql, "\"{field}\"").unwrap();
                                     }
@@ -494,6 +494,7 @@ impl Ast {
                         }
                     }
                 }
+
                 Ast::InClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.push_str(expr);
@@ -514,8 +515,7 @@ impl Ast {
                 Ast::NotInClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() * 2 + (arr.len() - 1) * 2);
-                        sql.push_str(expr);
-                        sql.push_str(" NOT IN (");
+                        write!(sql, "{expr} NOT IN (")?;
                         for (i, item) in arr.iter().enumerate() {
                             if i > 0 {
                                 sql.push_str(", ");
@@ -583,6 +583,7 @@ impl Ast {
         }
         walk(self, &values, &mut sql, &mut out_vals)?;
         let sql = sql.split_whitespace().join(" ");
+
         #[cfg(test)]
         println!("SQL = {sql}");
         Ok((sql, out_vals))
