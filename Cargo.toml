@@ -11,8 +11,8 @@ ext-php-rs = { git = "https://github.com/kakserpom/ext-php-rs.git", branch = "ma
 itertools = "0.14.0"
 serde_json = "1.0.140"
 simd-json = { optional = true, version = "0.15.1" }
-#sqlx = { path = "sqlx", features = ["json", "runtime-tokio"] }
-sqlx = { git = "https://github.com/kakserpom/sqlx", branch = "mysqlvalueref_visibility", features = ["json", "runtime-tokio"] }
+#sqlx-oldapi = { path = "sqlx-oldapi", features = ["json", "runtime-tokio-rustls"] }
+sqlx-oldapi = { git = "https://github.com/kakserpom/sqlx-oldapi", branch = "mysqlvalueref_visibility", features = ["json", "runtime-tokio-rustls"] }
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
@@ -26,8 +26,8 @@ default = [
     "experimental",
     "simd-json"
 ]
-postgres = ["sqlx/postgres"]
-mysql = ["sqlx/mysql"]
+postgres = ["sqlx-oldapi/postgres"]
+mysql = ["sqlx-oldapi/mysql"]
 simd-json = ["simd-json/default"]
 lazy-row = []
 

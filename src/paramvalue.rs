@@ -5,8 +5,9 @@ use ext_php_rs::convert::{FromZval, IntoZval};
 use ext_php_rs::flags::DataType;
 use ext_php_rs::types::{ZendClassObject, ZendHashTable, Zval};
 use itertools::Itertools;
-use sqlx::query::Query;
-use sqlx::{Database, Encode, Type};
+use sqlx_oldapi::database::HasArguments;
+use sqlx_oldapi::query::Query;
+use sqlx_oldapi::{Database, Encode, Type};
 use std::collections::{BTreeMap, HashMap};
 
 pub type Placeholder = String;
@@ -182,9 +183,9 @@ impl FromZval<'_> for ParameterValue {
 
 /// Binds a list of `Value` arguments to an `SQLx` query.
 pub fn bind_values<'a, D: Database>(
-    query: Query<'a, D, <D>::Arguments<'a>>,
+    query: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
     values: &'a [ParameterValue],
-) -> Query<'a, D, <D>::Arguments<'a>>
+) -> Query<'a, D, <D as HasArguments<'a>>::Arguments>
 where
     f64: Type<D>,
     f64: Encode<'a, D>,
@@ -196,9 +197,9 @@ where
     String: Encode<'a, D>,
 {
     fn walker<'a, D: Database>(
-        q: Query<'a, D, <D>::Arguments<'a>>,
+        q: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
         value: &'a ParameterValue,
-    ) -> Query<'a, D, <D>::Arguments<'a>>
+    ) -> Query<'a, D, <D as HasArguments<'a>>::Arguments>
     where
         f64: Type<D>,
         f64: Encode<'a, D>,

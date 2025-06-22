@@ -7,8 +7,8 @@ use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::ffi::zend_object;
 use ext_php_rs::types::{ArrayKey, Zval};
-use sqlx::Column;
-use sqlx::Row;
+use sqlx_oldapi::Column;
+use sqlx_oldapi::Row;
 use std::collections::HashMap;
 
 /// Trait to convert a row into a PHP value.

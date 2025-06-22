@@ -6,12 +6,12 @@ use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
-use sqlx::Column;
-use sqlx::Error::ColumnDecode;
-use sqlx::TypeInfo;
-use sqlx::error::UnexpectedNullError;
-use sqlx::postgres::{PgRow, PgValueRef};
-use sqlx::{Decode, Row, Type};
+use sqlx_oldapi::Column;
+use sqlx_oldapi::Error::ColumnDecode;
+use sqlx_oldapi::TypeInfo;
+use sqlx_oldapi::error::UnexpectedNullError;
+use sqlx_oldapi::postgres::{PgRow, PgValueRef};
+use sqlx_oldapi::{Decode, Row, Type};
 
 impl Conversion for PgRow {
     fn column_value_into_zval<PgColumn: Column, Postgres>(

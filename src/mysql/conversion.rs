@@ -5,10 +5,10 @@ use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
-use sqlx::Column;
-use sqlx::TypeInfo;
-use sqlx::mysql::{MySqlRow, MySqlValueRef};
-use sqlx::{Decode, Row, Type};
+use sqlx_oldapi::Column;
+use sqlx_oldapi::TypeInfo;
+use sqlx_oldapi::mysql::{MySqlRow, MySqlValueRef};
+use sqlx_oldapi::{Decode, Row, Type};
 
 impl Conversion for MySqlRow {
     fn column_value_into_zval<MySqlColumn: Column, MySql>(
