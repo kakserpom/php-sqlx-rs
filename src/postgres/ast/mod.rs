@@ -55,13 +55,11 @@ impl Ast {
             let mut buf = String::new();
 
             while !rest.is_empty() {
-                // Handle SQL string literal '...' with '' escape
                 if rest.starts_with('\'') {
                     let mut idx = 1;
                     let mut iter = rest.char_indices().skip(1).peekable();
                     while let Some((i, c)) = iter.next() {
                         if c == '\'' {
-                            // escaped ''? skip second '
                             if let Some((_, '\'')) = iter.peek() {
                                 iter.next();
                                 continue;
@@ -84,11 +82,10 @@ impl Ast {
                     rest = &rest[2 + end..];
                     continue;
                 }
-                // Handle block comment /* ... */
+                // Block comment /* */
                 if let Some(r) = rest.strip_prefix("/*") {
                     if let Some(close) = r.find("*/") {
-                        let comment = &rest[..2 + close + 2];
-                        buf.push_str(comment);
+                        buf.push_str(&rest[..2 + close + 2]);
                         rest = &rest[2 + close + 2..];
                         continue;
                     }
@@ -101,17 +98,17 @@ impl Ast {
                         branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     let mut inner_branches = Vec::new();
-                    let mut inner_ph = Vec::new();
+                    let mut inner_placeholders = Vec::new();
                     rest = inner(
                         r,
-                        &mut inner_ph,
+                        &mut inner_placeholders,
                         &mut inner_branches,
                         positional_counter,
                         collapsible_in_enabled,
                     )?;
                     branches.push(Ast::ConditionalBlock {
                         branches: inner_branches,
-                        required_placeholders: inner_ph,
+                        required_placeholders: inner_placeholders,
                     });
                     continue;
                 }
