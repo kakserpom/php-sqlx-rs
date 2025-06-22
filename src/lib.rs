@@ -17,6 +17,7 @@ pub mod postgres;
 pub mod selectclause;
 mod tests;
 mod utils;
+mod driver;
 
 use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]
