@@ -1,9 +1,23 @@
+use crate::ast::{Ast, ParsingSettings, RenderingSettings};
 use super::*;
 use crate::byclause::{ByClause, ByClauseFieldDefinition};
 use crate::paginateclause::PaginateClause;
+use crate::paramvalue::ParamsMap;
+
+const PARSING_SETTINGS: LazyLock<ParsingSettings> = LazyLock::new(|| ParsingSettings {
+    collapsible_in_enabled: true,
+    escaping_double_single_quotes: true,
+    comment_hash: true,
+});
+
+const RENDERING_SETTINGS: LazyLock<RenderingSettings> = LazyLock::new(|| RenderingSettings {
+    column_backticks: true,
+    dollar_sign_placeholders: false,
+});
+
 
 fn into_ast(sql: &str) -> Ast {
-    Ast::parse(sql, true).expect("failed to parse SQL statement")
+    Ast::parse(sql, &PARSING_SETTINGS).expect("failed to parse SQL statement")
 }
 #[test]
 fn test_named_and_positional() {
@@ -37,7 +51,7 @@ fn test_render_basic() {
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), "active".into());
     vals.insert("id".into(), "42".into());
-    let (query, params) = ast.render(vals).expect("Rendering failed");
+    let (query, params) = ast.render(vals, &RENDERING_SETTINGS).expect("Rendering failed");
     assert_eq!(query, "SELECT * FROM users WHERE status = ? AND id = ?");
     assert_eq!(params, vec!["active".into(), "42".into()]);
 }
@@ -46,7 +60,7 @@ fn test_render_basic() {
 fn test_render_optional_skip() {
     let sql = "SELECT * FROM users WHERE {{status = $status AND}} id = $id";
     let ast = into_ast(sql);
-    let (query, params) = ast.render([("id", 100)]).expect("Rendering failed");
+    let (query, params) = ast.render([("id", 100)], &RENDERING_SETTINGS).expect("Rendering failed");
     assert_eq!(query, "SELECT * FROM users WHERE id = ?");
     assert_eq!(params, vec![100.into()]);
 }
@@ -68,7 +82,7 @@ fn test_render_var_types() {
         ]),
     );
     vals.insert("data".into(), ParameterValue::Str("xyz".into()));
-    let (q, params) = ast.render(vals).expect("Rendering failed");
+    let (q, params) = ast.render(vals, &RENDERING_SETTINGS).expect("Rendering failed");
     assert_eq!(
         q,
         "SELECT * FROM table WHERE id = ? AND active = ? AND scores IN (?, ?) AND data = ?"
@@ -102,7 +116,7 @@ fn test_render_order_by_apply() {
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";
     let ast = into_ast(sql);
     let (query, params) = ast
-        .render([("order_by", ParameterValue::ByClauseRendered(rendered))])
+        .render([("order_by", ParameterValue::ByClauseRendered(rendered))], &RENDERING_SETTINGS)
         .expect("Rendering failed");
 
     assert_eq!(
@@ -127,7 +141,7 @@ fn test_render_order_by_apply_empty() {
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
     let ast = into_ast(sql);
     let (query, params) = ast
-        .render([("order_by", ParameterValue::ByClauseRendered(rendered))])
+        .render([("order_by", ParameterValue::ByClauseRendered(rendered))], &RENDERING_SETTINGS)
         .expect("Rendering failed");
 
     assert_eq!(
@@ -222,7 +236,7 @@ fn test_pagination() {
         "pagination".into(),
         ParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
     );
-    let (sql, values) = ast.render(vals).unwrap();
+    let (sql, values) = ast.render(vals, &RENDERING_SETTINGS).unwrap();
     println!("sql = {:#?}", sql);
     assert_eq!(
         sql,

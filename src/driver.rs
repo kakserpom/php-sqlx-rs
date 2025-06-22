@@ -1,8 +1,7 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
     ( $struct:ident, $className:literal, $inner:ident, $prepared:ident $(,)? ) => {
-
-        pub mod ast;
+        
         mod conversion;
         pub mod prepared_query;
         use inner::$inner;

@@ -1,6 +1,7 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
+        use crate::ast::{Ast, RenderingSettings, ParsingSettings};
         use crate::conversion::Conversion;
         use crate::options::DriverInnerOptions;
         use crate::paramvalue::{ParameterValue, bind_values};
@@ -26,6 +27,8 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub ast_cache: LruCache<String, Ast>,
             pub options: DriverInnerOptions,
             pub tx_registry: RwLock<Vec<Transaction<'static, $database>>>,
+            pub parsing_settings: ParsingSettings,
+            pub rendering_settings: RenderingSettings,
         }
 
         impl $struct {
@@ -48,6 +51,15 @@ macro_rules! php_sqlx_impl_driver_inner {
                         options.ast_cache_shard_count,
                         options.ast_cache_shard_size,
                     ),
+                    parsing_settings: ParsingSettings {
+                        collapsible_in_enabled: options.collapsible_in_enabled,
+                        escaping_double_single_quotes: ESCAPING_DOUBLE_SINGLE_QUOTES,
+                        comment_hash: COMMENT_HASH,
+                    },
+                    rendering_settings: RenderingSettings {
+                        column_backticks: COLUMN_BACKTICKS,
+                        dollar_sign_placeholders: DOLLAR_SIGN_PLACEHOLDERS,
+                    },
                     options,
                 })
             }
@@ -96,10 +108,10 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<(String, Vec<ParameterValue>)> {
                 let parameters = parameters.unwrap_or_default();
                 if let Some(ast) = self.ast_cache.get(query) {
-                    ast.render(parameters)
+                    ast.render(parameters, &self.rendering_settings)
                 } else {
-                    let ast = Ast::parse(query, self.options.collapsible_in)?;
-                    let rendered = ast.render(parameters)?;
+                    let ast = Ast::parse(query, &self.parsing_settings)?;
+                    let rendered = ast.render(parameters, &self.rendering_settings)?;
                     self.ast_cache.insert(query.to_owned(), ast);
                     Ok(rendered)
                 }

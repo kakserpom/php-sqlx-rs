@@ -15,7 +15,7 @@ pub struct DriverInnerOptions {
     pub(crate) persistent_name: Option<String>,
     pub(crate) associative_arrays: bool,
     pub(crate) max_connections: NonZeroU32,
-    pub(crate) collapsible_in: bool,
+    pub(crate) collapsible_in_enabled: bool,
 }
 impl Default for DriverInnerOptions {
     fn default() -> Self {
@@ -26,7 +26,7 @@ impl Default for DriverInnerOptions {
             persistent_name: None,
             associative_arrays: DEFAULT_ASSOC_ARRAYS,
             max_connections: DEFAULT_MAX_CONNECTIONS,
-            collapsible_in: DEFAULT_COLLAPSIBLE_IN,
+            collapsible_in_enabled: DEFAULT_COLLAPSIBLE_IN,
         }
     }
 }
@@ -135,7 +135,7 @@ impl DriverOptionsArg {
                         }
                     },
                 )?,
-                collapsible_in: kv.get(DriverOptions::OPT_COLLAPSIBLE_IN).map_or(
+                collapsible_in_enabled: kv.get(DriverOptions::OPT_COLLAPSIBLE_IN).map_or(
                     Ok(DEFAULT_COLLAPSIBLE_IN),
                     |value| {
                         if let ParameterValue::Bool(bool) = value {
