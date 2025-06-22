@@ -51,7 +51,6 @@ impl ByClause {
     }
 
     #[must_use]
-    #[inline(always)]
     pub fn internal_apply(&self, fields: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
         ByClauseRendered {
             __inner: fields

@@ -12,7 +12,7 @@ impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
         let mut s = self.as_ref();
         for (i, prefix) in prefix_words.iter().enumerate() {
             if i > 0 {
-                s = &s.trim_start();
+                s = s.trim_start();
             }
 
             let prefix_len = prefix.len();
