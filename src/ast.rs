@@ -45,7 +45,8 @@ pub struct ParsingSettings {
 
 pub struct RenderingSettings {
     pub column_backticks: bool,
-    pub dollar_sign_placeholders: bool,
+    pub placeholder_dollar_sign: bool,
+    pub placeholder_at_sign: bool,
 }
 
 impl Ast {
@@ -504,8 +505,10 @@ impl Ast {
                                         sql.push_str(", ");
                                     }
                                     out_vals.push(item.clone());
-                                    if rendering_settings.dollar_sign_placeholders {
+                                    if rendering_settings.placeholder_dollar_sign {
                                         write!(sql, "${}", out_vals.len())?;
+                                    } else if rendering_settings.placeholder_at_sign {
+                                        write!(sql, "@p{}", out_vals.len())?;
                                     } else {
                                         sql.push('?');
                                     }
@@ -513,8 +516,10 @@ impl Ast {
                             }
                             _ => {
                                 out_vals.push(val.clone());
-                                if rendering_settings.dollar_sign_placeholders {
+                                if rendering_settings.placeholder_dollar_sign {
                                     write!(sql, "${}", out_vals.len())?;
+                                } else if rendering_settings.placeholder_at_sign {
+                                    write!(sql, "@p{}", out_vals.len())?;
                                 } else {
                                     sql.push('?');
                                 }
@@ -548,8 +553,10 @@ impl Ast {
                                 sql.push_str(", ");
                             }
                             out_vals.push(item.clone());
-                            if rendering_settings.dollar_sign_placeholders {
+                            if rendering_settings.placeholder_dollar_sign {
                                 write!(sql, "${}", out_vals.len())?;
+                            } else if rendering_settings.placeholder_at_sign {
+                                write!(sql, "@p{}", out_vals.len())?;
                             } else {
                                 sql.push('?');
                             }
@@ -569,7 +576,13 @@ impl Ast {
                                 sql.push_str(", ");
                             }
                             out_vals.push(item.clone());
-                            write!(sql, "${}", out_vals.len())?;
+                            if rendering_settings.placeholder_dollar_sign {
+                                write!(sql, "${}", out_vals.len())?;
+                            } else if rendering_settings.placeholder_at_sign {
+                                write!(sql, "@p{}", out_vals.len())?;
+                            } else {
+                                sql.push('?');
+                            }
                         }
                         sql.push(')');
                     }
@@ -583,10 +596,17 @@ impl Ast {
                         Some(ParameterValue::PaginateClauseRendered(rendered)) => {
                             out_vals.push(ParameterValue::Int(rendered.limit));
                             out_vals.push(ParameterValue::Int(rendered.offset));
-                            if rendering_settings.dollar_sign_placeholders {
+                            if rendering_settings.placeholder_dollar_sign {
                                 write!(
                                     sql,
                                     "LIMIT ${} OFFSET ${}",
+                                    out_vals.len() - 1,
+                                    out_vals.len()
+                                )?;
+                            } else if rendering_settings.placeholder_at_sign {
+                                write!(
+                                    sql,
+                                    "LIMIT @{} OFFSET @{}",
                                     out_vals.len() - 1,
                                     out_vals.len()
                                 )?;

@@ -59,7 +59,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                     },
                     rendering_settings: RenderingSettings {
                         column_backticks: COLUMN_BACKTICKS,
-                        dollar_sign_placeholders: DOLLAR_SIGN_PLACEHOLDERS,
+                        placeholder_dollar_sign: PLACEHOLDER_DOLLAR_SIGN,
+                        placeholder_at_sign: PLACEHOLDER_AT_SIGN,
                     },
                     options,
                 })
@@ -363,7 +364,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))?
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
+                    .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| row.into_zval(assoc))
                     .try_collect()

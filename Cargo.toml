@@ -22,12 +22,14 @@ experimental = []
 default = [
     "postgres",
     "mysql",
+    "mssql",
     "lazy-row",
     "experimental",
     "simd-json"
 ]
 postgres = ["sqlx-oldapi/postgres"]
 mysql = ["sqlx-oldapi/mysql"]
+mssql = ["sqlx-oldapi/mssql"]
 simd-json = ["simd-json/default"]
 lazy-row = []
 

@@ -711,6 +711,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
+name = "encoding_rs"
+version = "0.8.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75030f3c4f45dafd7586dd6780965a8c7e8e285a5ecb86713e63a79c5b2766f3"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2236,7 +2245,7 @@ dependencies = [
 [[package]]
 name = "sqlx-core-oldapi"
 version = "0.6.45"
-source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#8b528987f9e2c4c0949e3a2c946b4d2f489235cc"
+source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#5c60e56bbb3c0735a42a7a4c5b107d66a46bfdd2"
 dependencies = [
  "ahash",
  "atoi",
@@ -2250,6 +2259,7 @@ dependencies = [
  "dirs",
  "dotenvy",
  "either",
+ "encoding_rs",
  "event-listener",
  "futures-channel",
  "futures-core",
@@ -2270,6 +2280,7 @@ dependencies = [
  "paste",
  "percent-encoding",
  "rand",
+ "regex",
  "rsa",
  "rustls",
  "rustls-pemfile",
@@ -2284,6 +2295,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "url",
+ "uuid",
  "webpki-roots",
  "whoami",
 ]
@@ -2291,7 +2303,7 @@ dependencies = [
 [[package]]
 name = "sqlx-macros-oldapi"
 version = "0.6.45"
-source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#8b528987f9e2c4c0949e3a2c946b4d2f489235cc"
+source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#5c60e56bbb3c0735a42a7a4c5b107d66a46bfdd2"
 dependencies = [
  "dotenvy",
  "either",
@@ -2310,7 +2322,7 @@ dependencies = [
 [[package]]
 name = "sqlx-oldapi"
 version = "0.6.45"
-source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#8b528987f9e2c4c0949e3a2c946b4d2f489235cc"
+source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#5c60e56bbb3c0735a42a7a4c5b107d66a46bfdd2"
 dependencies = [
  "sqlx-core-oldapi",
  "sqlx-macros-oldapi",
@@ -2319,7 +2331,7 @@ dependencies = [
 [[package]]
 name = "sqlx-rt-oldapi"
 version = "0.6.45"
-source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#8b528987f9e2c4c0949e3a2c946b4d2f489235cc"
+source = "git+https://github.com/kakserpom/sqlx-oldapi?branch=mysqlvalueref_visibility#5c60e56bbb3c0735a42a7a4c5b107d66a46bfdd2"
 dependencies = [
  "once_cell",
  "tokio",
@@ -2634,6 +2646,16 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
+
+[[package]]
+name = "uuid"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cf4199d1e5d15ddd86a694e4d0dffa9c323ce759fea589f00fef9d81cc1931d"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "value-trait"
