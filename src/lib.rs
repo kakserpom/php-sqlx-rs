@@ -18,6 +18,8 @@ pub mod selectclause;
 mod tests;
 mod utils;
 mod driver;
+mod prepared_query;
+mod inner_driver;
 
 use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]
