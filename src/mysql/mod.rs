@@ -26,14 +26,6 @@ pub struct MySqlDriver {
 }
 #[php_impl]
 impl MySqlDriver {
-    const OPT_URL: &'static str = "url";
-    const OPT_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
-
-    const OPT_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
-
-    const OPT_PERSISTENT_NAME: &'static str = "persistent_name";
-    const OPT_ASSOC_ARRAYS: &'static str = "assoc_arrays";
-
     /// Constructs a new SQLx driver instance.
     ///
     /// # Arguments

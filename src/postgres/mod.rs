@@ -6,6 +6,7 @@ use crate::postgres::inner::PgDriverInner;
 pub use crate::postgres::prepared_query::PgPreparedQuery;
 use crate::utils::ColumnArgument;
 
+use crate::options::DriverOptionsArg;
 use crate::paramvalue::ParameterValue;
 use dashmap::DashMap;
 use ext_php_rs::builders::ModuleBuilder;
@@ -14,7 +15,6 @@ use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
-use crate::options::DriverOptionsArg;
 
 pub mod inner;
 
