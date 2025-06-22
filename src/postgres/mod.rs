@@ -9,14 +9,15 @@ use crate::utils::ColumnArgument;
 use crate::options::DriverOptionsArg;
 use crate::paramvalue::ParameterValue;
 use crate::php_sqlx_impl_driver;
+use anyhow::anyhow;
 use dashmap::DashMap;
 use ext_php_rs::builders::ModuleBuilder;
+use ext_php_rs::prelude::*;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
-
 pub mod inner;
 
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<PgDriverInner>>> =
@@ -28,6 +29,7 @@ static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<PgDriverInner>>>
 #[php_class]
 #[php(name = "Sqlx\\PgDriver")]
 #[php(rename = "none")]
+#[derive(Clone)]
 pub struct PgDriver {
     pub driver_inner: Arc<PgDriverInner>,
 }

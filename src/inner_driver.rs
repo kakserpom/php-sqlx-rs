@@ -1,7 +1,37 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
     // Список типов, которым нужно вставить один и тот же impl
-    ( $struct:ident ) => {
+    ( $struct:ident, $database:ident ) => {
+        use crate::conversion::Conversion;
+        use crate::options::DriverInnerOptions;
+        use crate::paramvalue::{ParameterValue, bind_values};
+        use sqlx::$database;
+        use crate::utils::ZvalNull;
+        use crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
+        use crate::RUNTIME;
+        use anyhow::{anyhow, bail};
+        use ext_php_rs::convert::IntoZval;
+        use ext_php_rs::ffi::zend_array;
+        use ext_php_rs::types::Zval;
+        use itertools::Itertools;
+        use sqlx::Error;
+        use sqlx::Row;
+        use sqlx::pool::Pool;
+        use sqlx::Column;
+        use std::collections::HashMap;
+        use threadsafe_lru::LruCache;
+        use sqlx::Transaction;
+        use dashmap::DashMap;
+        use std::sync::LazyLock;
+
+
+        pub struct $struct {
+            pub pool: Pool<$database>,
+            pub ast_cache: LruCache<String, Ast>,
+            pub options: DriverInnerOptions,
+            pub tx_registry: DashMap<usize, Transaction<'static, $database>>,
+        }
+
         impl $struct {
             pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
                 let pool = RUNTIME.block_on(
@@ -16,6 +46,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         ),
                 )?;
                 Ok(Self {
+                    tx_registry: DashMap::new(),
                     pool,
                     ast_cache: LruCache::new(
                         options.ast_cache_shard_count,
@@ -440,19 +471,28 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
 
-                RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
-                    .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
-                    .into_iter()
-                    .map(|row| {
-                        Ok((
-                            row.column_value_into_array_key(row.column(0))?,
-                            row.into_zval(assoc)?,
-                        ))
-                    })
-                    .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
-                    .into_zval(false)
-                    .map_err(|err| anyhow!("{err:?}"))
+                if let Some(tx) = self.retrieve_ongoing_transaction() {
+                    let mut tx = tx;
+                    let val = RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&mut *tx));
+                    println!("{tx:?}");
+                    self.place_ongoing_transaction(tx);
+                    val
+                } else {
+                    RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+                }
+                .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        row.column_value_into_array_key(row.column(0))?,
+                        row.into_zval(assoc)?,
+                    ))
+                })
+                .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))
             }
 
             /// Executes the given SQL query and returns a grouped dictionary where:
@@ -562,12 +602,31 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .into_zval(false)
                     .map_err(|err| anyhow!("{err:?}"))
             }
+
+            pub fn begin(&self) -> anyhow::Result<()> {
+                self.tx_registry.insert(1, RUNTIME
+                    .block_on(self.pool.begin())
+                    .map_err(|err| anyhow!("{err}"))?);
+                println!("tx begin: {:?}", self.tx_registry);
+                Ok(())
+
+            }
+
+            #[inline(always)]
+            pub fn retrieve_ongoing_transaction(&self) -> Option<Transaction<'static, $database>> {
+                self.tx_registry.remove(&1).map(|x| x.1)
+            }
+            #[inline(always)]
+            pub fn place_ongoing_transaction(&self, tx: Transaction<'static, $database>) {
+                self.tx_registry.insert(1, tx);
+            }
         }
     };
     ( $( $t:tt )* ) => {
         compile_error!(
-            "php_sqlx_impl_driver_inner! accepts 1 argument: \
-             ($struct)"
+            "php_sqlx_impl_driver_inner! accepts 2 arguments: \
+             ($struct, $database)"
         );
     };
+
 }

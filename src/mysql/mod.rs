@@ -14,6 +14,8 @@ pub mod prepared_query;
 use crate::options::DriverOptionsArg;
 use crate::paramvalue::ParameterValue;
 use crate::php_sqlx_impl_driver;
+use anyhow::anyhow;
+use ext_php_rs::prelude::*;
 pub use prepared_query::*;
 
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
@@ -22,6 +24,7 @@ static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner
 #[php_class]
 #[php(name = "Sqlx\\MySqlDriver")]
 #[php(rename = "none")]
+#[derive(Clone)]
 pub struct MySqlDriver {
     pub driver_inner: Arc<MySqlDriverInner>,
 }

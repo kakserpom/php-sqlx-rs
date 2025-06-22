@@ -16,6 +16,7 @@ sqlx = { git = "https://github.com/kakserpom/sqlx", branch = "mysqlvalueref_visi
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
+veccell = "0.4.0"
 
 [features]
 experimental = []

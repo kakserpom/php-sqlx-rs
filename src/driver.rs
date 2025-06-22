@@ -811,6 +811,40 @@ macro_rules! php_sqlx_impl_driver {
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner.dry(query, parameters)
             }
+
+            pub fn begin(&self, callable: ZendCallable) -> PhpResult<()> {
+                self.driver_inner.begin()?;
+                let callbable_ret = callable.try_call(vec![self]);
+                let tx = self.driver_inner.retrieve_ongoing_transaction().unwrap();
+                match callbable_ret {
+                    Ok(value) => {
+                        if value.is_false() {
+                            crate::RUNTIME.block_on(tx.rollback()).map_err(|err| anyhow!("{err:?}"))?;
+                        } else {
+                            crate::RUNTIME.block_on(tx.commit()).map_err(|err| anyhow!("{err:?}"))?;
+                        }
+                        Ok(())
+                    }
+                    Err(err) => {
+                        crate::RUNTIME.block_on(tx.rollback()).map_err(|err| anyhow!("{err:?}"))?;
+                        match err {
+                            ext_php_rs::error::Error::Exception(exception) => {
+                                Err(
+                                    exception.properties_table[0]
+                                        .string()
+                                        .as_ref()
+                                        .map(String::as_str)
+                                        .unwrap_or("Unknown error inside callback.")
+                                        .into()
+                                )
+                            }
+                            _ => {
+                                Err(err.into())
+                            }
+                        }
+                    }
+                }
+            }
         }
     };
 
