@@ -1,8 +1,46 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
-    ( $driver:ident, $inner:ident, $prepared:ident $(,)? ) => {
+    ( $struct:ident, $className:literal, $inner:ident, $prepared:ident $(,)? ) => {
+
+        pub mod ast;
+        mod conversion;
+        pub mod prepared_query;
+        use inner::$inner;
+        pub use prepared_query::$prepared;
+        use crate::utils::ColumnArgument;
+
+        use crate::options::DriverOptionsArg;
+        use crate::paramvalue::ParameterValue;
+        use anyhow::anyhow;
+        use dashmap::DashMap;
+        use ext_php_rs::builders::ModuleBuilder;
+        use ext_php_rs::prelude::*;
+        use ext_php_rs::types::Zval;
+        use ext_php_rs::{php_class, php_impl};
+        use itertools::Itertools;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+        use std::sync::LazyLock;
+        pub mod inner;
+
+        static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<$inner>>> =
+            LazyLock::new(|| DashMap::new());
+
+        /// This class supports prepared queries, persistent connections, and augmented SQL.
+        #[php_class]
+        #[php(name = $className)]
+        #[php(rename = "none")]
+        #[derive(Clone)]
+        pub struct $struct {
+            pub driver_inner: Arc<$inner>,
+        }
+
+        pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+            module.class::<$struct>().class::<$prepared>()
+        }
+
         #[php_impl]
-        impl $driver {
+        impl $struct {
             /// Constructs a new SQLx driver instance.
             ///
             /// # Arguments
@@ -849,8 +887,8 @@ macro_rules! php_sqlx_impl_driver {
 
     ( $( $t:tt )* ) => {
         compile_error!(
-            "php_sqlx_impl_driver! accepts 3 arguments: \
-             (DriverType, InnerDriverType, PreparedQueryType)"
+            "php_sqlx_impl_driver! accepts 4 arguments: \
+             (DriverType, $className, InnerDriverType, PreparedQueryType)"
         );
     };
 }

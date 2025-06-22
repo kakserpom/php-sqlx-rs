@@ -20,15 +20,12 @@ macro_rules! php_sqlx_impl_driver_inner {
         use std::collections::HashMap;
         use threadsafe_lru::LruCache;
         use sqlx::Transaction;
-        use dashmap::DashMap;
-        use std::sync::LazyLock;
-
-
+        use std::sync::RwLock;
         pub struct $struct {
             pub pool: Pool<$database>,
             pub ast_cache: LruCache<String, Ast>,
             pub options: DriverInnerOptions,
-            pub tx_registry: DashMap<usize, Transaction<'static, $database>>,
+            pub tx_registry: RwLock<Vec<Transaction<'static, $database>>>,
         }
 
         impl $struct {
@@ -45,7 +42,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         ),
                 )?;
                 Ok(Self {
-                    tx_registry: DashMap::new(),
+                    tx_registry: RwLock::new(Vec::new()),
                     pool,
                     ast_cache: LruCache::new(
                         options.ast_cache_shard_count,
@@ -74,10 +71,21 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<HashMap<String, ParameterValue>>,
             ) -> anyhow::Result<u64> {
                 let (query, values) = self.render_query(query, parameters)?;
-                Ok(RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))
+
+
+                Ok(if let Some(tx) = self.retrieve_ongoing_transaction() {
+                    let mut tx = tx;
+                    let val = RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).execute(&mut *tx));
+                    self.place_ongoing_transaction(tx);
+                    val
+                } else {
+                    RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))
+                }
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .rows_affected())
+
             }
 
             /// Render the final SQL query and parameters using the AST cache.
@@ -474,7 +482,6 @@ macro_rules! php_sqlx_impl_driver_inner {
                     let mut tx = tx;
                     let val = RUNTIME
                         .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&mut *tx));
-                    println!("{tx:?}");
                     self.place_ongoing_transaction(tx);
                     val
                 } else {
@@ -603,21 +610,21 @@ macro_rules! php_sqlx_impl_driver_inner {
             }
 
             pub fn begin(&self) -> anyhow::Result<()> {
-                self.tx_registry.insert(1, RUNTIME
+                self.place_ongoing_transaction(RUNTIME
                     .block_on(self.pool.begin())
                     .map_err(|err| anyhow!("{err}"))?);
-                println!("tx begin: {:?}", self.tx_registry);
                 Ok(())
 
             }
 
             #[inline(always)]
             pub fn retrieve_ongoing_transaction(&self) -> Option<Transaction<'static, $database>> {
-                self.tx_registry.remove(&1).map(|x| x.1)
+                self.tx_registry.write().unwrap().pop()
             }
+
             #[inline(always)]
             pub fn place_ongoing_transaction(&self, tx: Transaction<'static, $database>) {
-                self.tx_registry.insert(1, tx);
+                self.tx_registry.write().unwrap().push(tx);
             }
         }
     };
