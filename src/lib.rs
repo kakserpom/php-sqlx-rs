@@ -20,6 +20,7 @@ mod utils;
 mod driver;
 mod prepared_query;
 mod inner_driver;
+pub mod ast;
 
 use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]

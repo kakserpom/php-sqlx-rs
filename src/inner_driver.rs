@@ -1,7 +1,37 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
-    // Список типов, которым нужно вставить один и тот же impl
-    ( $struct:ident ) => {
+    ( $struct:ident, $database:ident ) => {
+        use crate::ast::{Ast, RenderingSettings, ParsingSettings};
+        use crate::conversion::Conversion;
+        use crate::utils::is_valid_ident;
+        use crate::options::DriverInnerOptions;
+        use crate::paramvalue::{ParameterValue, bind_values};
+        use sqlx::$database;
+        use crate::utils::ZvalNull;
+        use crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
+        use crate::RUNTIME;
+        use anyhow::{anyhow, bail};
+        use ext_php_rs::convert::IntoZval;
+        use ext_php_rs::ffi::zend_array;
+        use ext_php_rs::types::Zval;
+        use itertools::Itertools;
+        use sqlx::Error;
+        use sqlx::Row;
+        use sqlx::pool::Pool;
+        use sqlx::Column;
+        use std::collections::HashMap;
+        use threadsafe_lru::LruCache;
+        use sqlx::Transaction;
+        use std::sync::RwLock;
+        pub struct $struct {
+            pub pool: Pool<$database>,
+            pub ast_cache: LruCache<String, Ast>,
+            pub options: DriverInnerOptions,
+            pub tx_registry: RwLock<Vec<Transaction<'static, $database>>>,
+            pub parsing_settings: ParsingSettings,
+            pub rendering_settings: RenderingSettings,
+        }
+
         impl $struct {
             pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
                 let pool = RUNTIME.block_on(
@@ -16,14 +46,25 @@ macro_rules! php_sqlx_impl_driver_inner {
                         ),
                 )?;
                 Ok(Self {
+                    tx_registry: RwLock::new(Vec::new()),
                     pool,
                     ast_cache: LruCache::new(
                         options.ast_cache_shard_count,
                         options.ast_cache_shard_size,
                     ),
+                    parsing_settings: ParsingSettings {
+                        collapsible_in_enabled: options.collapsible_in_enabled,
+                        escaping_double_single_quotes: ESCAPING_DOUBLE_SINGLE_QUOTES,
+                        comment_hash: COMMENT_HASH,
+                    },
+                    rendering_settings: RenderingSettings {
+                        column_backticks: COLUMN_BACKTICKS,
+                        dollar_sign_placeholders: DOLLAR_SIGN_PLACEHOLDERS,
+                    },
                     options,
                 })
             }
+
             /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
             ///
             /// # Arguments
@@ -44,10 +85,19 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<HashMap<String, ParameterValue>>,
             ) -> anyhow::Result<u64> {
                 let (query, values) = self.render_query(query, parameters)?;
-                Ok(RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))
+
+                Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).execute(&mut *tx));
+                    self.place_ongoing_transaction(tx);
+                    val
+                } else {
+                    RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))
+                }
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .rows_affected())
+
             }
 
             /// Render the final SQL query and parameters using the AST cache.
@@ -58,10 +108,10 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<(String, Vec<ParameterValue>)> {
                 let parameters = parameters.unwrap_or_default();
                 if let Some(ast) = self.ast_cache.get(query) {
-                    ast.render(parameters)
+                    ast.render(parameters, &self.rendering_settings)
                 } else {
-                    let ast = Ast::parse(query, self.options.collapsible_in)?;
-                    let rendered = ast.render(parameters)?;
+                    let ast = Ast::parse(query, &self.parsing_settings)?;
+                    let rendered = ast.render(parameters, &self.rendering_settings)?;
                     self.ast_cache.insert(query.to_owned(), ast);
                     Ok(rendered)
                 }
@@ -440,19 +490,26 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
 
-                RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
-                    .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
-                    .into_iter()
-                    .map(|row| {
-                        Ok((
-                            row.column_value_into_array_key(row.column(0))?,
-                            row.into_zval(assoc)?,
-                        ))
-                    })
-                    .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
-                    .into_zval(false)
-                    .map_err(|err| anyhow!("{err:?}"))
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&mut *tx));
+                    self.place_ongoing_transaction(tx);
+                    val
+                } else {
+                    RUNTIME
+                        .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+                }
+                .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        row.column_value_into_array_key(row.column(0))?,
+                        row.into_zval(assoc)?,
+                    ))
+                })
+                .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
+                .into_zval(false)
+                .map_err(|err| anyhow!("{err:?}"))
             }
 
             /// Executes the given SQL query and returns a grouped dictionary where:
@@ -562,12 +619,79 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .into_zval(false)
                     .map_err(|err| anyhow!("{err:?}"))
             }
+
+            pub fn begin(&self) -> anyhow::Result<()> {
+                self.place_ongoing_transaction(RUNTIME
+                    .block_on(self.pool.begin())
+                    .map_err(|err| anyhow!("{err}"))?);
+                Ok(())
+
+            }
+
+            pub fn savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                if !is_valid_ident(savepoint) {
+                    bail!("Invalid savepoint format");
+                }
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(sqlx::query(&format!("SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .map_err(|err| anyhow!("{err}"));
+                    self.place_ongoing_transaction(tx);
+                    val?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction"))
+                }
+            }
+
+            pub fn rollback_to_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                if !is_valid_ident(savepoint) {
+                    bail!("Invalid savepoint format");
+                }
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(sqlx::query(&format!("ROLLBACK TO SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .map_err(|err| anyhow!("{err}"));
+                    self.place_ongoing_transaction(tx);
+                    val?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction"))
+                }
+            }
+
+            pub fn release_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+                if !is_valid_ident(savepoint) {
+                    bail!("Invalid savepoint format");
+                }
+                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                    let val = RUNTIME
+                        .block_on(sqlx::query(&format!("RELEASE SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .map_err(|err| anyhow!("{err}"));
+                    self.place_ongoing_transaction(tx);
+                    val?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction"))
+                }
+            }
+
+            #[inline(always)]
+            pub fn retrieve_ongoing_transaction(&self) -> Option<Transaction<'static, $database>> {
+                self.tx_registry.write().unwrap().pop()
+            }
+
+            #[inline(always)]
+            pub fn place_ongoing_transaction(&self, tx: Transaction<'static, $database>) {
+                self.tx_registry.write().unwrap().push(tx);
+            }
         }
     };
     ( $( $t:tt )* ) => {
         compile_error!(
-            "php_sqlx_impl_driver_inner! accepts 1 argument: \
-             ($struct)"
+            "php_sqlx_impl_driver_inner! accepts 2 arguments: \
+             ($struct, $database)"
         );
     };
+
 }

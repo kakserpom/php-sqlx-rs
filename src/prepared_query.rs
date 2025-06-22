@@ -1,15 +1,25 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_prepared_query {
-    // Список типов, которым нужно вставить один и тот же impl
-    ( $driver:ident ) => {
+    ( $struct:ident, $class:literal, $driver_inner: ident ) => {
         use crate::paramvalue::ParameterValue;
         use crate::utils::ColumnArgument;
         use ext_php_rs::php_impl;
+        use ext_php_rs::prelude::*;
         use ext_php_rs::types::Zval;
         use std::collections::HashMap;
+        use std::sync::Arc;
+
+        /// A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
+        #[php_class]
+        #[php(name = $class)]
+        #[php(rename = "none")]
+        pub struct $struct {
+            pub(crate) query: String,
+            pub(crate) driver_inner: Arc<$driver_inner>,
+        }
 
         #[php_impl]
-        impl $driver {
+        impl $struct {
             /// Executes the prepared query and returns a dictionary mapping the first column to the second column.
             ///
             /// This method expects each result row to contain at least two columns. It converts the first column
@@ -492,11 +502,5 @@ macro_rules! php_sqlx_impl_prepared_query {
                     .query_all(&self.query, parameters, Some(false))
             }
         }
-    };
-    ( $( $t:tt )* ) => {
-        compile_error!(
-            "php_sqlx_impl_driver! accepts 3 arguments: \
-             (DriverType, InnerDriverType, PreparedQueryType)"
-        );
     };
 }

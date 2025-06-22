@@ -1,33 +1,11 @@
-pub mod ast;
-pub use crate::mysql::inner::MySqlDriverInner;
-use crate::utils::ColumnArgument;
-use dashmap::DashMap;
-use ext_php_rs::prelude::ModuleBuilder;
-use ext_php_rs::types::Zval;
-use ext_php_rs::{php_class, php_impl};
-use itertools::Itertools;
-use std::collections::HashMap;
-use std::sync::{Arc, LazyLock};
-mod conversion;
-pub mod inner;
-pub mod prepared_query;
-use crate::options::DriverOptionsArg;
-use crate::paramvalue::ParameterValue;
+#[cfg(test)]
+mod tests;
+
 use crate::php_sqlx_impl_driver;
-pub use prepared_query::*;
 
-static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
-    LazyLock::new(DashMap::new);
-
-#[php_class]
-#[php(name = "Sqlx\\MySqlDriver")]
-#[php(rename = "none")]
-pub struct MySqlDriver {
-    pub driver_inner: Arc<MySqlDriverInner>,
-}
-
-php_sqlx_impl_driver!(MySqlDriver, MySqlDriverInner, MySqlPreparedQuery);
-
-pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<MySqlPreparedQuery>().class::<MySqlDriver>()
-}
+php_sqlx_impl_driver!(
+    MySqlDriver,
+    "Sqlx\\MySqlDriver",
+    MySqlDriverInner,
+    MySqlPreparedQuery
+);

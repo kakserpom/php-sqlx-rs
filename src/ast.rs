@@ -1,16 +1,14 @@
-#![allow(clippy::inline_always)]
-#[cfg(test)]
-mod tests;
+use std::fmt::Debug;
+use anyhow::bail;
+use itertools::Itertools;
+use trim_in_place::TrimInPlace;
 use crate::byclause::ByClauseRenderedField;
 use crate::paramvalue::{ParameterValue, ParamsMap, Placeholder};
 use crate::selectclause::SelectClauseRenderedField;
 use crate::utils::StripPrefixWordIgnoreAsciiCase;
-use anyhow::bail;
-use itertools::Itertools;
-use std::fmt::{Debug, Write};
-use trim_in_place::TrimInPlace;
+use std::fmt::Write;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
     Nested(Vec<Ast>),
     /// Literal SQL text
@@ -39,35 +37,59 @@ pub enum Ast {
     },
 }
 
-/// Represents a placeholder identifier
+pub struct ParsingSettings {
+    pub collapsible_in_enabled: bool,
+    pub escaping_double_single_quotes: bool,
+    pub comment_hash: bool,
+}
+
+pub struct RenderingSettings {
+    pub column_backticks: bool,
+    pub dollar_sign_placeholders: bool,
+}
+
 impl Ast {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments.
     /// Returns an `AST::Nested` of top-level branches.
-    pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<Ast> {
+    pub fn parse(input: &str, parsing_settings: &ParsingSettings) -> anyhow::Result<Ast> {
         fn inner<'s>(
             mut rest: &'s str,
             placeholders_out: &mut Vec<String>,
             branches: &mut Vec<Ast>,
             positional_counter: &mut usize,
-            collapsible_in_enabled: bool,
+            parsing_settings: &ParsingSettings,
         ) -> anyhow::Result<&'s str> {
             let mut buf = String::new();
 
             while !rest.is_empty() {
-                // Handle SQL string literal '...' with '' escape
                 if rest.starts_with('\'') {
                     let mut idx = 1;
                     let mut iter = rest.char_indices().skip(1).peekable();
                     while let Some((i, c)) = iter.next() {
-                        if c == '\'' {
-                            // escaped ''? skip second '
-                            if let Some((_, '\'')) = iter.peek() {
-                                iter.next();
-                                continue;
+                        if parsing_settings.escaping_double_single_quotes {
+                            if c == '\'' {
+                                if let Some((_, '\'')) = iter.peek() {
+                                    iter.next();
+                                    continue;
+                                }
+                                idx = i + c.len_utf8();
+                                break;
                             }
-                            idx = i + c.len_utf8();
-                            break;
+                        } else {
+                            if c == '\\' {
+                                if let Some((j, _)) = iter.next() {
+                                    idx = j + 1;
+                                }
+                            } else if c == '\'' {
+                                if let Some((_, '\'')) = iter.peek().copied() {
+                                    iter.next();
+                                    idx = i + 2;
+                                    continue;
+                                }
+                                idx = i + 1;
+                                break;
+                            }
                         }
                     }
                     let literal = &rest[..idx];
@@ -84,11 +106,19 @@ impl Ast {
                     rest = &rest[2 + end..];
                     continue;
                 }
-                // Handle block comment /* ... */
+                if parsing_settings.comment_hash {
+                    // Line comment #
+                    if let Some(r) = rest.strip_prefix("#") {
+                        let end = r.find('\n').map_or(r.len(), |i| i + 1);
+                        buf.push_str(&rest[..=end]);
+                        rest = &rest[1 + end..];
+                        continue;
+                    }
+                }
+                // Block comment /* */
                 if let Some(r) = rest.strip_prefix("/*") {
                     if let Some(close) = r.find("*/") {
-                        let comment = &rest[..2 + close + 2];
-                        buf.push_str(comment);
+                        buf.push_str(&rest[..2 + close + 2]);
                         rest = &rest[2 + close + 2..];
                         continue;
                     }
@@ -101,17 +131,17 @@ impl Ast {
                         branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     let mut inner_branches = Vec::new();
-                    let mut inner_ph = Vec::new();
+                    let mut inner_placeholders = Vec::new();
                     rest = inner(
                         r,
-                        &mut inner_ph,
+                        &mut inner_placeholders,
                         &mut inner_branches,
                         positional_counter,
-                        collapsible_in_enabled,
+                        parsing_settings,
                     )?;
                     branches.push(Ast::ConditionalBlock {
                         branches: inner_branches,
-                        required_placeholders: inner_ph,
+                        required_placeholders: inner_placeholders,
                     });
                     continue;
                 }
@@ -158,7 +188,7 @@ impl Ast {
                     }
                 }
 
-                if collapsible_in_enabled {
+                if parsing_settings.collapsible_in_enabled {
                     // NOT IN support (with or without parentheses)
                     if let Some(suffix) = rest.strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]) {
                         let rest_after_in = suffix.trim_start();
@@ -184,19 +214,19 @@ impl Ast {
                         } else {
                             // non-parentheses form
                             if let Some(sfx) = rest_after_in.strip_prefix(':') {
-                                let name: String = sfx
+                                let ident: String = sfx
                                     .chars()
                                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                                     .collect();
-                                consumed_len = offset + 2 + name.len();
-                                name_opt = Some(name);
+                                consumed_len = offset + 2 + ident.len();
+                                name_opt = Some(ident);
                             } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
-                                let name: String = sfx
+                                let ident: String = sfx
                                     .chars()
                                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                                     .collect();
-                                consumed_len = offset + 2 + name.len();
-                                name_opt = Some(name);
+                                consumed_len = offset + 2 + ident.len();
+                                name_opt = Some(ident);
                             } else if rest_after_in.starts_with('?') {
                                 *positional_counter += 1;
                                 consumed_len = offset + 2;
@@ -240,12 +270,12 @@ impl Ast {
                             consumed_len = original_len - rest_after_in.len() + 1 + ident.len();
                             name_opt = Some(ident);
                         } else if let Some(sfx) = rest_after_in.strip_prefix('$') {
-                            consumed_len = original_len - rest_after_in.len();
-                            name_opt = Some(
-                                sfx.chars()
-                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
-                                    .collect(),
-                            );
+                            let ident: String = sfx
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            consumed_len = original_len - rest_after_in.len() + 1 + ident.len();
+                            name_opt = Some(ident);
                         } else if rest_after_in.starts_with('?') {
                             *positional_counter += 1;
                             consumed_len = original_len - rest_after_in.len() + 1;
@@ -368,7 +398,7 @@ impl Ast {
             &mut placeholders,
             &mut branches,
             &mut counter,
-            collapsible_in_enabled,
+            &parsing_settings,
         )?;
         if !rest.trim().is_empty() {
             bail!("Unmatched `{{` or extra trailing content");
@@ -388,7 +418,11 @@ impl Ast {
     ///
     /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
-    pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<ParameterValue>)>
+    pub fn render<I, K, V>(
+        &self,
+        values: I,
+        rendering_settings: &RenderingSettings,
+    ) -> anyhow::Result<(String, Vec<ParameterValue>)>
     where
         I: IntoIterator<Item = (K, V)> + Debug,
         K: Into<String>,
@@ -404,11 +438,12 @@ impl Ast {
             values: &ParamsMap,
             sql: &mut String,
             out_vals: &mut Vec<ParameterValue>,
+            rendering_settings: &RenderingSettings,
         ) -> anyhow::Result<()> {
             Ok(match node {
                 Ast::Root { branches, .. } | Ast::Nested(branches) => {
                     for n in branches {
-                        walk(n, values, sql, out_vals)?;
+                        walk(n, values, sql, out_vals, rendering_settings)?;
                     }
                 }
                 Ast::Sql(s) => sql.push_str(s),
@@ -421,21 +456,24 @@ impl Ast {
                     if let Some(val) = values.get(name) {
                         match val {
                             ParameterValue::SelectClauseRendered(fields) => {
-                                for (
-                                    i,
-                                    SelectClauseRenderedField {
-                                        field,
-                                        expression: expr,
-                                    },
-                                ) in fields.__inner.iter().enumerate()
+                                for (i, SelectClauseRenderedField { field, expression }) in
+                                    fields.__inner.iter().enumerate()
                                 {
                                     if i > 0 {
                                         sql.push_str(", ");
                                     }
-                                    if let Some(expr) = expr {
-                                        write!(sql, "{expr} AS \"{field}\"").unwrap();
+                                    if let Some(expression) = expression {
+                                        if rendering_settings.column_backticks {
+                                            write!(sql, "{expression} AS `{field}`")?;
+                                        } else {
+                                            write!(sql, "{expression} AS \"{field}\"")?;
+                                        }
                                     } else {
-                                        write!(sql, "\"{field}\"").unwrap();
+                                        if rendering_settings.column_backticks {
+                                            write!(sql, "`{field}`")?;
+                                        } else {
+                                            write!(sql, "\"{field}\"")?;
+                                        }
                                     }
                                 }
                             }
@@ -455,7 +493,11 @@ impl Ast {
                                     if *is_expression {
                                         sql.push_str(expression_or_identifier);
                                     } else {
-                                        write!(sql, "\"{expression_or_identifier}\"").unwrap();
+                                        if rendering_settings.column_backticks {
+                                            write!(sql, "`{expression_or_identifier}`")?;
+                                        } else {
+                                            write!(sql, "\"{expression_or_identifier}\"")?;
+                                        }
                                     }
                                     if *descending_order {
                                         sql.push_str(" DESC");
@@ -468,12 +510,20 @@ impl Ast {
                                         sql.push_str(", ");
                                     }
                                     out_vals.push(item.clone());
-                                    write!(sql, "${}", out_vals.len()).unwrap();
+                                    if rendering_settings.dollar_sign_placeholders {
+                                        write!(sql, "${}", out_vals.len())?;
+                                    } else {
+                                        sql.push('?');
+                                    }
                                 }
                             }
                             _ => {
                                 out_vals.push(val.clone());
-                                write!(sql, "${}", out_vals.len()).unwrap();
+                                if rendering_settings.dollar_sign_placeholders {
+                                    write!(sql, "${}", out_vals.len())?;
+                                } else {
+                                    sql.push('?');
+                                }
                             }
                         }
                     }
@@ -490,10 +540,11 @@ impl Ast {
                         }
                     }) {
                         for b in branches {
-                            walk(b, values, sql, out_vals)?;
+                            walk(b, values, sql, out_vals, rendering_settings)?;
                         }
                     }
                 }
+
                 Ast::InClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.push_str(expr);
@@ -503,7 +554,11 @@ impl Ast {
                                 sql.push_str(", ");
                             }
                             out_vals.push(item.clone());
-                            write!(sql, "${}", out_vals.len()).unwrap();
+                            if rendering_settings.dollar_sign_placeholders {
+                                write!(sql, "${}", out_vals.len())?;
+                            } else {
+                                sql.push('?');
+                            }
                         }
                         sql.push(')');
                     }
@@ -514,8 +569,7 @@ impl Ast {
                 Ast::NotInClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() * 2 + (arr.len() - 1) * 2);
-                        sql.push_str(expr);
-                        sql.push_str(" NOT IN (");
+                        write!(sql, "{expr} NOT IN (")?;
                         for (i, item) in arr.iter().enumerate() {
                             if i > 0 {
                                 sql.push_str(", ");
@@ -535,12 +589,16 @@ impl Ast {
                         Some(ParameterValue::PaginateClauseRendered(rendered)) => {
                             out_vals.push(ParameterValue::Int(rendered.limit));
                             out_vals.push(ParameterValue::Int(rendered.offset));
-                            write!(
-                                sql,
-                                "LIMIT ${} OFFSET ${}",
-                                out_vals.len() - 1,
-                                out_vals.len()
-                            )?;
+                            if rendering_settings.dollar_sign_placeholders {
+                                write!(
+                                    sql,
+                                    "LIMIT ${} OFFSET ${}",
+                                    out_vals.len() - 1,
+                                    out_vals.len()
+                                )?;
+                            } else {
+                                sql.push_str("LIMIT ? OFFSET ?");
+                            }
                         }
                         _ => {
                             bail!(
@@ -581,8 +639,9 @@ impl Ast {
                 bail!("Missing required placeholder `{missing_placeholder}`");
             }
         }
-        walk(self, &values, &mut sql, &mut out_vals)?;
+        walk(self, &values, &mut sql, &mut out_vals, rendering_settings)?;
         let sql = sql.split_whitespace().join(" ");
+
         #[cfg(test)]
         println!("SQL = {sql}");
         Ok((sql, out_vals))
