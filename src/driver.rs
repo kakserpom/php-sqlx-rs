@@ -1,6 +1,5 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
-    // Список типов, которым нужно вставить один и тот же impl
     ( $driver:ident, $inner:ident, $prepared:ident $(,)? ) => {
         #[php_impl]
         impl $driver {

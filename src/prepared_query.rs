@@ -1,6 +1,5 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_prepared_query {
-    // Список типов, которым нужно вставить один и тот же impl
     ( $driver:ident ) => {
         use crate::paramvalue::ParameterValue;
         use crate::utils::ColumnArgument;

@@ -1,6 +1,5 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
-    // Список типов, которым нужно вставить один и тот же impl
     ( $struct:ident, $database:ident ) => {
         use crate::conversion::Conversion;
         use crate::options::DriverInnerOptions;
