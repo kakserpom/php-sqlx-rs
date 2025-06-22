@@ -3,7 +3,6 @@ use crate::RUNTIME;
 use crate::conversion::Conversion;
 use crate::paramvalue::{ParameterValue, bind_values};
 use crate::postgres::ast::PgAst;
-use crate::postgres::options::PgDriverInnerOptions;
 use crate::utils::ZvalNull;
 use crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
 use anyhow::{anyhow, bail};
@@ -18,15 +17,16 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{Column, Postgres};
 use std::collections::HashMap;
 use threadsafe_lru::LruCache;
+use crate::options::DriverInnerOptions;
 
 pub struct PgDriverInner {
     pub pool: Pool<Postgres>,
     pub ast_cache: LruCache<String, PgAst>,
-    pub options: PgDriverInnerOptions,
+    pub options: DriverInnerOptions,
 }
 
 impl PgDriverInner {
-    pub fn new(options: PgDriverInnerOptions) -> anyhow::Result<Self> {
+    pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
         let pool = RUNTIME.block_on(
             PgPoolOptions::new()
                 .max_connections(options.max_connections.into())

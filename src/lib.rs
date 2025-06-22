@@ -10,17 +10,17 @@ mod lazy_row;
 #[cfg(feature = "mysql")]
 pub mod mysql;
 pub mod options;
+pub mod paginateclause;
+mod paramvalue;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 pub mod selectclause;
-pub mod paginateclause;
 mod tests;
 mod utils;
-mod paramvalue;
 
+use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
-use ext_php_rs::prelude::*;
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
@@ -37,7 +37,7 @@ const DEFAULT_COLLAPSIBLE_IN: bool = true;
 use crate::options::DriverOptions;
 
 #[cfg(feature = "mysql")]
-pub use mysql::{MySqlDriver, MySqlDriverOptions, MySqlPreparedQuery};
+pub use mysql::{MySqlDriver, MySqlPreparedQuery};
 
 #[php_module]
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {
@@ -47,10 +47,10 @@ pub fn module(module: ModuleBuilder) -> ModuleBuilder {
 
     #[cfg(feature = "mysql")]
     let module = mysql::build(module);
-    
+
     #[cfg(feature = "postgres")]
     let module = postgres::build(module);
-    
+
     #[cfg(feature = "lazy-row")]
     let module = lazy_row::build(module);
 

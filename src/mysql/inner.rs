@@ -2,7 +2,6 @@
 
 use crate::conversion::Conversion;
 use crate::mysql::ast::MySqlAst;
-use crate::mysql::options::MySqlDriverInnerOptions;
 use crate::paramvalue::{ParameterValue, bind_values};
 use crate::utils::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
 use crate::{
@@ -21,15 +20,16 @@ use sqlx::pool::Pool;
 use sqlx::{Column, MySql};
 use std::collections::HashMap;
 use threadsafe_lru::LruCache;
+use crate::options::DriverInnerOptions;
 
 pub struct MySqlDriverInner {
     pub pool: Pool<MySql>,
     pub ast_cache: LruCache<String, MySqlAst>,
-    pub options: MySqlDriverInnerOptions,
+    pub options: DriverInnerOptions,
 }
 
 impl MySqlDriverInner {
-    pub fn new(options: MySqlDriverInnerOptions) -> anyhow::Result<Self> {
+    pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
         let pool = RUNTIME.block_on(
             MySqlPoolOptions::new()
                 .max_connections(options.max_connections.into())

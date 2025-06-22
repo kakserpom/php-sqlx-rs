@@ -1,5 +1,5 @@
 pub mod ast;
-pub use crate::mysql::{inner::MySqlDriverInner, options::MySqlDriverOptions};
+pub use crate::mysql::inner::MySqlDriverInner;
 use crate::utils::ColumnArgument;
 use dashmap::DashMap;
 use ext_php_rs::prelude::ModuleBuilder;
@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 mod conversion;
 pub mod inner;
-pub mod options;
 pub mod prepared_query;
-pub use prepared_query::*;
+use crate::options::DriverOptionsArg;
 use crate::paramvalue::ParameterValue;
+pub use prepared_query::*;
 
 static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<MySqlDriverInner>>> =
     LazyLock::new(DashMap::new);
@@ -43,7 +43,7 @@ impl MySqlDriver {
     ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
     ///   - `persistent_name`: (string) name of persistent connection
     ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
-    pub fn __construct(options: MySqlDriverOptions) -> anyhow::Result<Self> {
+    pub fn __construct(options: DriverOptionsArg) -> anyhow::Result<Self> {
         let options = options.parse()?;
 
         if let Some(name) = options.persistent_name.as_ref() {
@@ -803,11 +803,7 @@ impl MySqlDriver {
     /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
     /// - parameters contain unsupported types or fail to bind correctly;
     /// - the runtime fails to execute the query (e.g., task panic or timeout).
-    pub fn insert(
-        &self,
-        table: &str,
-        row: HashMap<String, ParameterValue>,
-    ) -> anyhow::Result<u64> {
+    pub fn insert(&self, table: &str, row: HashMap<String, ParameterValue>) -> anyhow::Result<u64> {
         self.execute(
             &format!(
                 "INSERT INTO {table} ({}) VALUES ({})",

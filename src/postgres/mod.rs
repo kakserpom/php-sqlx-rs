@@ -1,10 +1,8 @@
 pub mod ast;
 mod conversion;
-pub mod options;
 pub mod prepared_query;
 
 use crate::postgres::inner::PgDriverInner;
-pub use crate::postgres::options::*;
 pub use crate::postgres::prepared_query::PgPreparedQuery;
 use crate::utils::ColumnArgument;
 
@@ -14,9 +12,9 @@ use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::types::Zval;
 use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
-pub use options::PgDriverOptions;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
+use crate::options::DriverOptionsArg;
 
 pub mod inner;
 
@@ -44,7 +42,7 @@ impl PgDriver {
     ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
     ///   - `persistent_name`: (string) name of persistent connection
     ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
-    pub fn __construct(options: PgDriverOptions) -> anyhow::Result<Self> {
+    pub fn __construct(options: DriverOptionsArg) -> anyhow::Result<Self> {
         let options = options.parse()?;
 
         if let Some(name) = options.persistent_name.as_ref() {
