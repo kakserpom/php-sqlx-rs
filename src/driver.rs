@@ -3,12 +3,12 @@ macro_rules! php_sqlx_impl_driver {
     ( $struct:ident, $className:literal, $inner:ident, $prepared:ident $(,)? ) => {
         mod conversion;
         pub mod prepared_query;
-        use crate::utils::ColumnArgument;
+        use $crate::utils::ColumnArgument;
         use inner::$inner;
         pub use prepared_query::$prepared;
 
-        use crate::options::DriverOptionsArg;
-        use crate::paramvalue::ParameterValue;
+        use $crate::options::DriverOptionsArg;
+        use $crate::paramvalue::ParameterValue;
         use anyhow::anyhow;
         use dashmap::DashMap;
         use ext_php_rs::builders::ModuleBuilder;
@@ -854,18 +854,18 @@ macro_rules! php_sqlx_impl_driver {
                 match callbable_ret {
                     Ok(value) => {
                         if value.is_false() {
-                            crate::RUNTIME
+                            $crate::RUNTIME
                                 .block_on(tx.rollback())
                                 .map_err(|err| anyhow!("{err:?}"))?;
                         } else {
-                            crate::RUNTIME
+                            $crate::RUNTIME
                                 .block_on(tx.commit())
                                 .map_err(|err| anyhow!("{err:?}"))?;
                         }
                         Ok(())
                     }
                     Err(err) => {
-                        crate::RUNTIME
+                        $crate::RUNTIME
                             .block_on(tx.rollback())
                             .map_err(|err| anyhow!("{err:?}"))?;
                         match err {

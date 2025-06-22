@@ -1,27 +1,27 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
-        use crate::ast::{Ast, RenderingSettings, ParsingSettings};
-        use crate::conversion::Conversion;
-        use crate::utils::is_valid_ident;
-        use crate::options::DriverInnerOptions;
-        use crate::paramvalue::{ParameterValue, bind_values};
-        use sqlx::$database;
-        use crate::utils::ZvalNull;
-        use crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
-        use crate::RUNTIME;
+        use $crate::ast::{Ast, RenderingSettings, ParsingSettings};
+        use $crate::conversion::Conversion;
+        use $crate::utils::is_valid_ident;
+        use $crate::options::DriverInnerOptions;
+        use $crate::paramvalue::{ParameterValue, bind_values};
+        use sqlx_oldapi::$database;
+        use $crate::utils::ZvalNull;
+        use $crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
+        use $crate::RUNTIME;
         use anyhow::{anyhow, bail};
         use ext_php_rs::convert::IntoZval;
         use ext_php_rs::ffi::zend_array;
         use ext_php_rs::types::Zval;
         use itertools::Itertools;
-        use sqlx::Error;
-        use sqlx::Row;
-        use sqlx::pool::Pool;
-        use sqlx::Column;
+        use sqlx_oldapi::Error;
+        use sqlx_oldapi::Row;
+        use sqlx_oldapi::pool::Pool;
+        use sqlx_oldapi::Column;
         use std::collections::HashMap;
         use threadsafe_lru::LruCache;
-        use sqlx::Transaction;
+        use sqlx_oldapi::Transaction;
         use std::sync::RwLock;
         pub struct $struct {
             pub pool: Pool<$database>,
@@ -59,7 +59,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                     },
                     rendering_settings: RenderingSettings {
                         column_backticks: COLUMN_BACKTICKS,
-                        dollar_sign_placeholders: DOLLAR_SIGN_PLACEHOLDERS,
+                        placeholder_dollar_sign: PLACEHOLDER_DOLLAR_SIGN,
+                        placeholder_at_sign: PLACEHOLDER_AT_SIGN,
                     },
                     options,
                 })
@@ -88,12 +89,12 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(bind_values(sqlx::query(&query), &values).execute(&mut *tx));
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).execute(&mut *tx));
                     self.place_ongoing_transaction(tx);
                     val
                 } else {
                     RUNTIME
-                        .block_on(bind_values(sqlx::query(&query), &values).execute(&self.pool))
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).execute(&self.pool))
                 }
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .rows_affected())
@@ -139,7 +140,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let row = RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?;
                 let column_idx: usize = match column {
                     Some(ColumnArgument::Index(i)) => i,
@@ -185,7 +186,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let mut it = RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .peekable();
@@ -244,7 +245,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))
                     .map(Some)
                     .or_else(|err: Error| match err {
                         Error::RowNotFound => Ok(None),
@@ -298,7 +299,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))?
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))?
                     .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
             }
 
@@ -326,7 +327,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_one(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))
                     .map(Some)
                     .or_else(|err: Error| match err {
                         Error::RowNotFound => Ok(None),
@@ -363,7 +364,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
+                    .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| row.into_zval(assoc))
                     .try_collect()
@@ -430,7 +432,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))?
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))?
                     .into_iter()
                     .map(|row| {
                         Ok((
@@ -492,12 +494,12 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&mut *tx));
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&mut *tx));
                     self.place_ongoing_transaction(tx);
                     val
                 } else {
                     RUNTIME
-                        .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
                 }
                 .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                 .into_iter()
@@ -556,7 +558,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| {
@@ -606,7 +608,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx::query(&query), &values).fetch_all(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| {
@@ -634,7 +636,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(sqlx::query(&format!("SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .block_on(sqlx_oldapi::query(&format!("SAVEPOINT {savepoint}")).execute(&mut *tx))
                         .map_err(|err| anyhow!("{err}"));
                     self.place_ongoing_transaction(tx);
                     val?;
@@ -650,7 +652,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(sqlx::query(&format!("ROLLBACK TO SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .block_on(sqlx_oldapi::query(&format!("ROLLBACK TO SAVEPOINT {savepoint}")).execute(&mut *tx))
                         .map_err(|err| anyhow!("{err}"));
                     self.place_ongoing_transaction(tx);
                     val?;
@@ -666,7 +668,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(sqlx::query(&format!("RELEASE SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .block_on(sqlx_oldapi::query(&format!("RELEASE SAVEPOINT {savepoint}")).execute(&mut *tx))
                         .map_err(|err| anyhow!("{err}"));
                     self.place_ongoing_transaction(tx);
                     val?;

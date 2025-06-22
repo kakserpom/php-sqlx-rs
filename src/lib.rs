@@ -3,10 +3,15 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::must_use_candidate)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
+pub mod ast;
 pub mod byclause;
 pub mod conversion;
+mod driver;
+mod inner_driver;
 #[cfg(feature = "lazy-row")]
 mod lazy_row;
+#[cfg(feature = "mssql")]
+pub mod mssql;
 #[cfg(feature = "mysql")]
 pub mod mysql;
 pub mod options;
@@ -14,13 +19,10 @@ pub mod paginateclause;
 mod paramvalue;
 #[cfg(feature = "postgres")]
 pub mod postgres;
+mod prepared_query;
 pub mod selectclause;
 mod tests;
 mod utils;
-mod driver;
-mod prepared_query;
-mod inner_driver;
-pub mod ast;
 
 use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]
@@ -54,6 +56,9 @@ pub fn module(module: ModuleBuilder) -> ModuleBuilder {
 
     #[cfg(feature = "postgres")]
     let module = postgres::build(module);
+
+    #[cfg(feature = "mssql")]
+    let module = mssql::build(module);
 
     #[cfg(feature = "lazy-row")]
     let module = lazy_row::build(module);

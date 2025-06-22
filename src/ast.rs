@@ -1,12 +1,12 @@
-use std::fmt::Debug;
-use anyhow::bail;
-use itertools::Itertools;
-use trim_in_place::TrimInPlace;
 use crate::byclause::ByClauseRenderedField;
 use crate::paramvalue::{ParameterValue, ParamsMap, Placeholder};
 use crate::selectclause::SelectClauseRenderedField;
 use crate::utils::StripPrefixWordIgnoreAsciiCase;
+use anyhow::bail;
+use itertools::Itertools;
+use std::fmt::Debug;
 use std::fmt::Write;
+use trim_in_place::TrimInPlace;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
@@ -45,7 +45,8 @@ pub struct ParsingSettings {
 
 pub struct RenderingSettings {
     pub column_backticks: bool,
-    pub dollar_sign_placeholders: bool,
+    pub placeholder_dollar_sign: bool,
+    pub placeholder_at_sign: bool,
 }
 
 impl Ast {
@@ -76,20 +77,18 @@ impl Ast {
                                 idx = i + c.len_utf8();
                                 break;
                             }
-                        } else {
-                            if c == '\\' {
-                                if let Some((j, _)) = iter.next() {
-                                    idx = j + 1;
-                                }
-                            } else if c == '\'' {
-                                if let Some((_, '\'')) = iter.peek().copied() {
-                                    iter.next();
-                                    idx = i + 2;
-                                    continue;
-                                }
-                                idx = i + 1;
-                                break;
+                        } else if c == '\\' {
+                            if let Some((j, _)) = iter.next() {
+                                idx = j + 1;
                             }
+                        } else if c == '\'' {
+                            if let Some((_, '\'')) = iter.peek().copied() {
+                                iter.next();
+                                idx = i + 2;
+                                continue;
+                            }
+                            idx = i + 1;
+                            break;
                         }
                     }
                     let literal = &rest[..idx];
@@ -398,7 +397,7 @@ impl Ast {
             &mut placeholders,
             &mut branches,
             &mut counter,
-            &parsing_settings,
+            parsing_settings,
         )?;
         if !rest.trim().is_empty() {
             bail!("Unmatched `{{` or extra trailing content");
@@ -440,7 +439,7 @@ impl Ast {
             out_vals: &mut Vec<ParameterValue>,
             rendering_settings: &RenderingSettings,
         ) -> anyhow::Result<()> {
-            Ok(match node {
+            match node {
                 Ast::Root { branches, .. } | Ast::Nested(branches) => {
                     for n in branches {
                         walk(n, values, sql, out_vals, rendering_settings)?;
@@ -468,12 +467,10 @@ impl Ast {
                                         } else {
                                             write!(sql, "{expression} AS \"{field}\"")?;
                                         }
+                                    } else if rendering_settings.column_backticks {
+                                        write!(sql, "`{field}`")?;
                                     } else {
-                                        if rendering_settings.column_backticks {
-                                            write!(sql, "`{field}`")?;
-                                        } else {
-                                            write!(sql, "\"{field}\"")?;
-                                        }
+                                        write!(sql, "\"{field}\"")?;
                                     }
                                 }
                             }
@@ -492,12 +489,10 @@ impl Ast {
                                     }
                                     if *is_expression {
                                         sql.push_str(expression_or_identifier);
+                                    } else if rendering_settings.column_backticks {
+                                        write!(sql, "`{expression_or_identifier}`")?;
                                     } else {
-                                        if rendering_settings.column_backticks {
-                                            write!(sql, "`{expression_or_identifier}`")?;
-                                        } else {
-                                            write!(sql, "\"{expression_or_identifier}\"")?;
-                                        }
+                                        write!(sql, "\"{expression_or_identifier}\"")?;
                                     }
                                     if *descending_order {
                                         sql.push_str(" DESC");
@@ -510,8 +505,10 @@ impl Ast {
                                         sql.push_str(", ");
                                     }
                                     out_vals.push(item.clone());
-                                    if rendering_settings.dollar_sign_placeholders {
+                                    if rendering_settings.placeholder_dollar_sign {
                                         write!(sql, "${}", out_vals.len())?;
+                                    } else if rendering_settings.placeholder_at_sign {
+                                        write!(sql, "@p{}", out_vals.len())?;
                                     } else {
                                         sql.push('?');
                                     }
@@ -519,8 +516,10 @@ impl Ast {
                             }
                             _ => {
                                 out_vals.push(val.clone());
-                                if rendering_settings.dollar_sign_placeholders {
+                                if rendering_settings.placeholder_dollar_sign {
                                     write!(sql, "${}", out_vals.len())?;
+                                } else if rendering_settings.placeholder_at_sign {
+                                    write!(sql, "@p{}", out_vals.len())?;
                                 } else {
                                     sql.push('?');
                                 }
@@ -554,8 +553,10 @@ impl Ast {
                                 sql.push_str(", ");
                             }
                             out_vals.push(item.clone());
-                            if rendering_settings.dollar_sign_placeholders {
+                            if rendering_settings.placeholder_dollar_sign {
                                 write!(sql, "${}", out_vals.len())?;
+                            } else if rendering_settings.placeholder_at_sign {
+                                write!(sql, "@p{}", out_vals.len())?;
                             } else {
                                 sql.push('?');
                             }
@@ -575,7 +576,13 @@ impl Ast {
                                 sql.push_str(", ");
                             }
                             out_vals.push(item.clone());
-                            write!(sql, "${}", out_vals.len())?;
+                            if rendering_settings.placeholder_dollar_sign {
+                                write!(sql, "${}", out_vals.len())?;
+                            } else if rendering_settings.placeholder_at_sign {
+                                write!(sql, "@p{}", out_vals.len())?;
+                            } else {
+                                sql.push('?');
+                            }
                         }
                         sql.push(')');
                     }
@@ -589,10 +596,17 @@ impl Ast {
                         Some(ParameterValue::PaginateClauseRendered(rendered)) => {
                             out_vals.push(ParameterValue::Int(rendered.limit));
                             out_vals.push(ParameterValue::Int(rendered.offset));
-                            if rendering_settings.dollar_sign_placeholders {
+                            if rendering_settings.placeholder_dollar_sign {
                                 write!(
                                     sql,
                                     "LIMIT ${} OFFSET ${}",
+                                    out_vals.len() - 1,
+                                    out_vals.len()
+                                )?;
+                            } else if rendering_settings.placeholder_at_sign {
+                                write!(
+                                    sql,
+                                    "LIMIT @{} OFFSET @{}",
                                     out_vals.len() - 1,
                                     out_vals.len()
                                 )?;
@@ -607,7 +621,8 @@ impl Ast {
                         }
                     }
                 }
-            })
+            }
+            Ok(())
         }
 
         let values: ParamsMap = values

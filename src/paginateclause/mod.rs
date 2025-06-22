@@ -4,22 +4,28 @@ use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 #[php_class]
 #[php(name = "Sqlx\\PaginateClause")]
 #[php(rename = "none")]
+#[allow(clippy::struct_field_names)]
 pub struct PaginateClause {
     pub(crate) min_per_page: i64,
     pub(crate) max_per_page: i64,
     pub(crate) default_per_page: i64,
 }
-impl PaginateClause {
-    pub fn new() -> Self {
+
+impl Default for PaginateClause {
+    fn default() -> Self {
         Self {
             min_per_page: 1,
             max_per_page: 20,
             default_per_page: 20,
         }
     }
+}
+impl PaginateClause {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     #[must_use]
-    #[inline(always)]
     fn internal_apply(
         &self,
         page_number: Option<i64>,
@@ -38,7 +44,7 @@ impl PaginateClause {
 #[php_impl]
 impl PaginateClause {
     pub fn __construct() -> Self {
-        Self::new()
+        Self::default()
     }
 
     /// __invoke magic for apply()

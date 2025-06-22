@@ -5,8 +5,9 @@ use ext_php_rs::convert::{FromZval, IntoZval};
 use ext_php_rs::flags::DataType;
 use ext_php_rs::types::{ZendClassObject, ZendHashTable, Zval};
 use itertools::Itertools;
-use sqlx::query::Query;
-use sqlx::{Database, Encode, Type};
+use sqlx_oldapi::database::HasArguments;
+use sqlx_oldapi::query::Query;
+use sqlx_oldapi::{Database, Encode, Type};
 use std::collections::{BTreeMap, HashMap};
 
 pub type Placeholder = String;
@@ -28,14 +29,17 @@ pub enum ParameterValue {
 
 impl ParameterValue {
     #[must_use]
-    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
             Self::ByClauseRendered(x) => x.is_empty(),
             Self::SelectClauseRendered(x) => x.is_empty(),
             Self::Array(array) => array.is_empty(),
-            Self::Str(_) | Self::Int(_) | Self::Float(_) | Self::Bool(_) | Self::Object(_) => false,
-            Self::PaginateClauseRendered(_) => false,
+            Self::Str(_)
+            | Self::Int(_)
+            | Self::Float(_)
+            | Self::Bool(_)
+            | Self::Object(_)
+            | Self::PaginateClauseRendered(_) => false,
             Self::Null => true,
         }
     }
@@ -102,9 +106,7 @@ impl FromZval<'_> for ParameterValue {
 
     fn from_zval(zval: &Zval) -> Option<Self> {
         match zval.get_type() {
-            DataType::Mixed => None,
-            DataType::Undef => Some(Self::Null),
-            DataType::Null => Some(Self::Null),
+            DataType::Undef | DataType::Null | DataType::Void => Some(Self::Null),
             DataType::False => Some(Self::Bool(false)),
             DataType::True => Some(Self::Bool(true)),
             DataType::Long => Some(Self::Int(zval.long()?)),
@@ -134,7 +136,6 @@ impl FromZval<'_> for ParameterValue {
                     ))
                 }
             }
-            DataType::Iterable => None,
             DataType::Object(_) => {
                 let obj = zval.object()?;
                 match obj.get_class_name().ok()?.as_str() {
@@ -168,23 +169,24 @@ impl FromZval<'_> for ParameterValue {
                     _ => None,
                 }
             }
-            DataType::Resource => None,
-            DataType::Reference => None,
-            DataType::Callable => None,
-            DataType::ConstantExpression => None,
-            DataType::Void => Some(Self::Null),
+            DataType::Iterable
+            | DataType::Mixed
+            | DataType::Resource
+            | DataType::Reference
+            | DataType::Callable
+            | DataType::ConstantExpression
+            | DataType::Ptr
+            | DataType::Indirect => None,
             DataType::Bool => Some(Self::Bool(zval.bool()?)),
-            DataType::Ptr => None,
-            DataType::Indirect => None,
         }
     }
 }
 
 /// Binds a list of `Value` arguments to an `SQLx` query.
 pub fn bind_values<'a, D: Database>(
-    query: Query<'a, D, <D>::Arguments<'a>>,
+    query: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
     values: &'a [ParameterValue],
-) -> Query<'a, D, <D>::Arguments<'a>>
+) -> Query<'a, D, <D as HasArguments<'a>>::Arguments>
 where
     f64: Type<D>,
     f64: Encode<'a, D>,
@@ -196,9 +198,9 @@ where
     String: Encode<'a, D>,
 {
     fn walker<'a, D: Database>(
-        q: Query<'a, D, <D>::Arguments<'a>>,
+        q: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
         value: &'a ParameterValue,
-    ) -> Query<'a, D, <D>::Arguments<'a>>
+    ) -> Query<'a, D, <D as HasArguments<'a>>::Arguments>
     where
         f64: Type<D>,
         f64: Encode<'a, D>,

@@ -36,7 +36,6 @@ impl SelectClause {
         })
     }
     #[must_use]
-    #[inline(always)]
     pub fn internal_apply(&self, fields: Vec<String>) -> SelectClauseRendered {
         SelectClauseRendered {
             __inner: fields

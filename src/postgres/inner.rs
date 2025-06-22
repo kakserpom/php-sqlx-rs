@@ -1,9 +1,9 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::php_sqlx_impl_driver_inner;
-use sqlx::postgres::PgPoolOptions as PoolOptions;
-const ESCAPING_DOUBLE_SINGLE_QUOTES: bool = false;
-const COMMENT_HASH: bool = false;
-const COLUMN_BACKTICKS: bool = false;
-const DOLLAR_SIGN_PLACEHOLDERS: bool = true;
-
+use sqlx_oldapi::postgres::PgPoolOptions as PoolOptions;
+pub const ESCAPING_DOUBLE_SINGLE_QUOTES: bool = false;
+pub const COMMENT_HASH: bool = false;
+pub const COLUMN_BACKTICKS: bool = false;
+pub const PLACEHOLDER_DOLLAR_SIGN: bool = true;
+pub const PLACEHOLDER_AT_SIGN: bool = false;
 php_sqlx_impl_driver_inner!(PgDriverInner, Postgres);
