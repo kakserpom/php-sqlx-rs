@@ -2,8 +2,7 @@
 use crate::conversion::Conversion;
 use crate::options::DriverInnerOptions;
 use crate::paramvalue::{ParameterValue, bind_values};
-use crate::postgres::ast::PgAst;
-use crate::postgres::ast::PgAst as Ast;
+use crate::postgres::ast::Ast;
 use crate::utils::ZvalNull;
 use crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
 use crate::{RUNTIME, php_sqlx_impl_driver_inner};
@@ -22,7 +21,7 @@ use threadsafe_lru::LruCache;
 
 pub struct PgDriverInner {
     pub pool: Pool<Postgres>,
-    pub ast_cache: LruCache<String, PgAst>,
+    pub ast_cache: LruCache<String, Ast>,
     pub options: DriverInnerOptions,
 }
 

@@ -10,19 +10,19 @@ use itertools::Itertools;
 use std::fmt::{Debug, Write};
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum MySqlAst {
-    Nested(Vec<MySqlAst>),
+pub enum Ast {
+    Nested(Vec<Ast>),
     /// Literal SQL text
     Sql(String),
     /// Placeholder like `$id`, `:param`, positional `?` replaced with ordinal number
     Placeholder(String),
     /// Optional segment with its own nested branches and collected placeholders
     ConditionalBlock {
-        branches: Vec<MySqlAst>,
+        branches: Vec<Ast>,
         required_placeholders: Vec<Placeholder>,
     },
     Root {
-        branches: Vec<MySqlAst>,
+        branches: Vec<Ast>,
         required_placeholders: Vec<Placeholder>,
     },
     InClause {
@@ -38,14 +38,14 @@ pub enum MySqlAst {
     },
 }
 
-impl MySqlAst {
+impl Ast {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments.
-    pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<MySqlAst> {
+    pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<Ast> {
         fn inner<'s>(
             mut rest: &'s str,
             placeholders_out: &mut Vec<String>,
-            branches: &mut Vec<MySqlAst>,
+            branches: &mut Vec<Ast>,
             positional_counter: &mut usize,
             collapsible_in_enabled: bool,
         ) -> anyhow::Result<&'s str> {
@@ -102,7 +102,7 @@ impl MySqlAst {
                 // Conditional block start
                 if let Some(r) = rest.strip_prefix("{{") {
                     if !buf.is_empty() {
-                        branches.push(MySqlAst::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     let mut inner_br = Vec::new();
                     let mut inner_ph = Vec::new();
@@ -113,7 +113,7 @@ impl MySqlAst {
                         positional_counter,
                         collapsible_in_enabled,
                     )?;
-                    branches.push(MySqlAst::ConditionalBlock {
+                    branches.push(Ast::ConditionalBlock {
                         branches: inner_br,
                         required_placeholders: inner_ph,
                     });
@@ -122,7 +122,7 @@ impl MySqlAst {
                 // }} conditional end
                 if let Some(r) = rest.strip_prefix("}}") {
                     if !buf.is_empty() {
-                        branches.push(MySqlAst::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     return Ok(r);
                 }
@@ -152,10 +152,10 @@ impl MySqlAst {
                         name_opt = Some(positional_counter.to_string());
                     }
                     if let Some(name) = name_opt {
-                        branches.push(MySqlAst::Sql(format!("{buf} ")));
+                        branches.push(Ast::Sql(format!("{buf} ")));
                         buf.clear();
                         placeholders_out.push(name.to_string());
-                        branches.push(MySqlAst::PaginateClause { placeholder: name });
+                        branches.push(Ast::PaginateClause { placeholder: name });
                         rest = &rest[consumed_len..];
                         continue;
                     }
@@ -214,9 +214,9 @@ impl MySqlAst {
                                 None => (String::new(), trimmed),
                             };
                             if !pre.is_empty() {
-                                branches.push(MySqlAst::Sql(pre));
+                                branches.push(Ast::Sql(pre));
                             }
-                            branches.push(MySqlAst::NotInClause {
+                            branches.push(Ast::NotInClause {
                                 expr: expr.to_string(),
                                 placeholder: name,
                             });
@@ -271,9 +271,9 @@ impl MySqlAst {
                                 None => (String::new(), trimmed),
                             };
                             if !pre.is_empty() {
-                                branches.push(MySqlAst::Sql(pre));
+                                branches.push(Ast::Sql(pre));
                             }
-                            branches.push(MySqlAst::InClause {
+                            branches.push(Ast::InClause {
                                 expr: expr.to_string(),
                                 placeholder: name,
                             });
@@ -293,9 +293,9 @@ impl MySqlAst {
                         .map(|i| a.split_at(i + 1))
                     {
                         if !buf.is_empty() {
-                            branches.push(MySqlAst::Sql(std::mem::take(&mut buf)));
+                            branches.push(Ast::Sql(std::mem::take(&mut buf)));
                         }
-                        branches.push(MySqlAst::Placeholder(nm.to_string()));
+                        branches.push(Ast::Placeholder(nm.to_string()));
                         placeholders_out.push(nm.to_string());
                         rest = rm;
                         continue;
@@ -311,9 +311,9 @@ impl MySqlAst {
                         .map(|i| a.split_at(i + 1))
                     {
                         if !buf.is_empty() {
-                            branches.push(MySqlAst::Sql(std::mem::take(&mut buf)));
+                            branches.push(Ast::Sql(std::mem::take(&mut buf)));
                         }
-                        branches.push(MySqlAst::Placeholder(nm.to_string()));
+                        branches.push(Ast::Placeholder(nm.to_string()));
                         placeholders_out.push(nm.to_string());
                         rest = rm;
                         continue;
@@ -322,11 +322,11 @@ impl MySqlAst {
                 // ? positional
                 if let Some(rp) = rest.strip_prefix("?") {
                     if !buf.is_empty() {
-                        branches.push(MySqlAst::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     *positional_counter += 1;
                     let nm = positional_counter.to_string();
-                    branches.push(MySqlAst::Placeholder(nm.clone()));
+                    branches.push(Ast::Placeholder(nm.clone()));
                     placeholders_out.push(nm);
                     rest = rp;
                     continue;
@@ -344,7 +344,7 @@ impl MySqlAst {
                 rest = &rest[l..];
             }
             if !buf.is_empty() {
-                branches.push(MySqlAst::Sql(buf));
+                branches.push(Ast::Sql(buf));
             }
             Ok(rest)
         }
@@ -361,14 +361,14 @@ impl MySqlAst {
         if !rest.trim().is_empty() {
             bail!("Unmatched `{{` or extra trailing content");
         }
-        Ok(MySqlAst::Root {
+        Ok(Ast::Root {
             branches,
             required_placeholders: placeholders,
         })
     }
 }
 
-impl MySqlAst {
+impl Ast {
     /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
     /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
     pub fn render<I, K, V>(&self, values: I) -> anyhow::Result<(String, Vec<ParameterValue>)>
@@ -383,19 +383,19 @@ impl MySqlAst {
             println!("VALUES = {:?}", values);
         }
         fn walk(
-            node: &MySqlAst,
+            node: &Ast,
             values: &ParamsMap,
             sql: &mut String,
             out_vals: &mut Vec<ParameterValue>,
         ) -> anyhow::Result<()> {
             Ok(match node {
-                MySqlAst::Root { branches, .. } | MySqlAst::Nested(branches) => {
+                Ast::Root { branches, .. } | Ast::Nested(branches) => {
                     for n in branches {
                         walk(n, values, sql, out_vals)?;
                     }
                 }
-                MySqlAst::Sql(s) => sql.push_str(s),
-                MySqlAst::Placeholder(name) => {
+                Ast::Sql(s) => sql.push_str(s),
+                Ast::Placeholder(name) => {
                     #[cfg(test)]
                     {
                         println!("values = {values:?}");
@@ -456,7 +456,7 @@ impl MySqlAst {
                         }
                     }
                 }
-                MySqlAst::ConditionalBlock {
+                Ast::ConditionalBlock {
                     branches,
                     required_placeholders,
                 } => {
@@ -473,7 +473,7 @@ impl MySqlAst {
                     }
                 }
 
-                MySqlAst::InClause { expr, placeholder } => match values.get(placeholder) {
+                Ast::InClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 5 + arr.len() + (arr.len() - 1) * 2);
                         sql.push_str(expr);
@@ -491,7 +491,7 @@ impl MySqlAst {
                         write!(sql, "FALSE /* {expr} IN :{placeholder} */").unwrap();
                     }
                 },
-                MySqlAst::NotInClause { expr, placeholder } => match values.get(placeholder) {
+                Ast::NotInClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() + (arr.len() - 1) * 2);
                         write!(sql, "{expr} NOT IN (").unwrap();
@@ -509,7 +509,7 @@ impl MySqlAst {
                         write!(sql, "TRUE /* {expr} IN :{placeholder} */").unwrap();
                     }
                 },
-                MySqlAst::PaginateClause { placeholder } => {
+                Ast::PaginateClause { placeholder } => {
                     let value = values.get(placeholder);
                     match value {
                         Some(ParameterValue::PaginateClauseRendered(rendered)) => {
@@ -540,7 +540,7 @@ impl MySqlAst {
 
         let mut sql = String::new();
         let mut out_vals = Vec::new();
-        if let MySqlAst::Root {
+        if let Ast::Root {
             required_placeholders,
             ..
         } = self

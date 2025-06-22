@@ -11,19 +11,19 @@ use std::fmt::{Debug, Write};
 use trim_in_place::TrimInPlace;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum PgAst {
-    Nested(Vec<PgAst>),
+pub enum Ast {
+    Nested(Vec<Ast>),
     /// Literal SQL text
     Sql(String),
     /// Placeholder like `$id`, `:param`, positional `?` replaced with ordinal number
     Placeholder(String),
     /// Optional segment with its own nested branches and collected placeholders
     ConditionalBlock {
-        branches: Vec<PgAst>,
+        branches: Vec<Ast>,
         required_placeholders: Vec<Placeholder>,
     },
     Root {
-        branches: Vec<PgAst>,
+        branches: Vec<Ast>,
         required_placeholders: Vec<Placeholder>,
     },
     InClause {
@@ -40,15 +40,15 @@ pub enum PgAst {
 }
 
 /// Represents a placeholder identifier
-impl PgAst {
+impl Ast {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments.
     /// Returns an `AST::Nested` of top-level branches.
-    pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<PgAst> {
+    pub fn parse(input: &str, collapsible_in_enabled: bool) -> anyhow::Result<Ast> {
         fn inner<'s>(
             mut rest: &'s str,
             placeholders_out: &mut Vec<String>,
-            branches: &mut Vec<PgAst>,
+            branches: &mut Vec<Ast>,
             positional_counter: &mut usize,
             collapsible_in_enabled: bool,
         ) -> anyhow::Result<&'s str> {
@@ -98,7 +98,7 @@ impl PgAst {
                 // Conditional block start
                 if let Some(r) = rest.strip_prefix("{{") {
                     if !buf.is_empty() {
-                        branches.push(PgAst::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     let mut inner_branches = Vec::new();
                     let mut inner_ph = Vec::new();
@@ -109,7 +109,7 @@ impl PgAst {
                         positional_counter,
                         collapsible_in_enabled,
                     )?;
-                    branches.push(PgAst::ConditionalBlock {
+                    branches.push(Ast::ConditionalBlock {
                         branches: inner_branches,
                         required_placeholders: inner_ph,
                     });
@@ -119,7 +119,7 @@ impl PgAst {
                 // Conditional block end
                 if let Some(r) = rest.strip_prefix("}}") {
                     if !buf.is_empty() {
-                        branches.push(PgAst::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     return Ok(r);
                 }
@@ -149,10 +149,10 @@ impl PgAst {
                         name_opt = Some(positional_counter.to_string());
                     }
                     if let Some(name) = name_opt {
-                        branches.push(PgAst::Sql(format!("{buf} ")));
+                        branches.push(Ast::Sql(format!("{buf} ")));
                         buf.clear();
                         placeholders_out.push(name.to_string());
-                        branches.push(PgAst::PaginateClause { placeholder: name });
+                        branches.push(Ast::PaginateClause { placeholder: name });
                         rest = &rest[consumed_len..];
                         continue;
                     }
@@ -207,14 +207,14 @@ impl PgAst {
                             buf.trim_end_in_place();
                             if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
                                 if !left.is_empty() {
-                                    branches.push(PgAst::Sql(format!("{left} ")));
+                                    branches.push(Ast::Sql(format!("{left} ")));
                                 }
-                                branches.push(PgAst::NotInClause {
+                                branches.push(Ast::NotInClause {
                                     expr: expr.to_string(),
                                     placeholder: name,
                                 });
                             } else {
-                                branches.push(PgAst::NotInClause {
+                                branches.push(Ast::NotInClause {
                                     expr: buf.clone(),
                                     placeholder: name,
                                 });
@@ -270,14 +270,14 @@ impl PgAst {
                             buf.trim_end_in_place();
                             if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
                                 if !left.is_empty() {
-                                    branches.push(PgAst::Sql(format!("{left} ")));
+                                    branches.push(Ast::Sql(format!("{left} ")));
                                 }
-                                branches.push(PgAst::InClause {
+                                branches.push(Ast::InClause {
                                     expr: expr.to_string(),
                                     placeholder: name,
                                 });
                             } else {
-                                branches.push(PgAst::InClause {
+                                branches.push(Ast::InClause {
                                     expr: buf.clone(),
                                     placeholder: name,
                                 });
@@ -299,9 +299,9 @@ impl PgAst {
                         .map(|i| after.split_at(i + 1))
                     {
                         if !buf.is_empty() {
-                            branches.push(PgAst::Sql(std::mem::take(&mut buf)));
+                            branches.push(Ast::Sql(std::mem::take(&mut buf)));
                         }
-                        branches.push(PgAst::Placeholder(name.to_string()));
+                        branches.push(Ast::Placeholder(name.to_string()));
                         placeholders_out.push(name.to_string());
                         rest = rem;
                         continue;
@@ -318,9 +318,9 @@ impl PgAst {
                         .map(|i| after.split_at(i + 1))
                     {
                         if !buf.is_empty() {
-                            branches.push(PgAst::Sql(std::mem::take(&mut buf)));
+                            branches.push(Ast::Sql(std::mem::take(&mut buf)));
                         }
-                        branches.push(PgAst::Placeholder(name.to_string()));
+                        branches.push(Ast::Placeholder(name.to_string()));
                         placeholders_out.push(name.to_string());
                         rest = rem;
                         continue;
@@ -330,11 +330,11 @@ impl PgAst {
                 // --- ? positional placeholder ---
                 if let Some(r) = rest.strip_prefix("?") {
                     if !buf.is_empty() {
-                        branches.push(PgAst::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
                     }
                     *positional_counter += 1;
                     let name = positional_counter.to_string();
-                    branches.push(PgAst::Placeholder(name.clone()));
+                    branches.push(Ast::Placeholder(name.clone()));
                     placeholders_out.push(name);
                     rest = r;
                     continue;
@@ -355,7 +355,7 @@ impl PgAst {
             }
 
             if !buf.is_empty() {
-                branches.push(PgAst::Sql(buf));
+                branches.push(Ast::Sql(buf));
             }
             Ok(rest)
         }
@@ -374,14 +374,14 @@ impl PgAst {
             bail!("Unmatched `{{` or extra trailing content");
         }
 
-        Ok(PgAst::Root {
+        Ok(Ast::Root {
             branches,
             required_placeholders: placeholders,
         })
     }
 }
 
-impl PgAst {
+impl Ast {
     /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
     /// but ignores them inside string literals and comments, with support for escaping via `\\`.
     /// Returns an `AST::Nested` of top-level branches.
@@ -400,19 +400,19 @@ impl PgAst {
             println!("VALUES = {:?}", values);
         }
         fn walk(
-            node: &PgAst,
+            node: &Ast,
             values: &ParamsMap,
             sql: &mut String,
             out_vals: &mut Vec<ParameterValue>,
         ) -> anyhow::Result<()> {
             Ok(match node {
-                PgAst::Root { branches, .. } | PgAst::Nested(branches) => {
+                Ast::Root { branches, .. } | Ast::Nested(branches) => {
                     for n in branches {
                         walk(n, values, sql, out_vals)?;
                     }
                 }
-                PgAst::Sql(s) => sql.push_str(s),
-                PgAst::Placeholder(name) => {
+                Ast::Sql(s) => sql.push_str(s),
+                Ast::Placeholder(name) => {
                     #[cfg(test)]
                     {
                         println!("values = {values:?}");
@@ -478,7 +478,7 @@ impl PgAst {
                         }
                     }
                 }
-                PgAst::ConditionalBlock {
+                Ast::ConditionalBlock {
                     branches,
                     required_placeholders,
                 } => {
@@ -494,7 +494,7 @@ impl PgAst {
                         }
                     }
                 }
-                PgAst::InClause { expr, placeholder } => match values.get(placeholder) {
+                Ast::InClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.push_str(expr);
                         sql.push_str(" IN (");
@@ -511,7 +511,7 @@ impl PgAst {
                         write!(sql, "FALSE /* {expr} IN :{placeholder} */").unwrap();
                     }
                 },
-                PgAst::NotInClause { expr, placeholder } => match values.get(placeholder) {
+                Ast::NotInClause { expr, placeholder } => match values.get(placeholder) {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() * 2 + (arr.len() - 1) * 2);
                         sql.push_str(expr);
@@ -529,7 +529,7 @@ impl PgAst {
                         write!(sql, "TRUE /* {expr} NOT IN :{placeholder} */")?;
                     }
                 },
-                PgAst::PaginateClause { placeholder } => {
+                Ast::PaginateClause { placeholder } => {
                     let value = values.get(placeholder);
                     match value {
                         Some(ParameterValue::PaginateClauseRendered(rendered)) => {
@@ -566,7 +566,7 @@ impl PgAst {
         let mut sql = String::new();
         let mut out_vals = Vec::new();
 
-        if let PgAst::Root {
+        if let Ast::Root {
             required_placeholders,
             ..
         } = self

@@ -2,12 +2,12 @@ use super::*;
 use crate::byclause::{ByClause, ByClauseFieldDefinition};
 use crate::paginateclause::PaginateClause;
 
-fn into_ast(sql: &str) -> MySqlAst {
-    MySqlAst::parse(sql, true).expect("failed to parse SQL statement")
+fn into_ast(sql: &str) -> Ast {
+    Ast::parse(sql, true).expect("failed to parse SQL statement")
 }
 #[test]
 fn test_named_and_positional() {
-    if let MySqlAst::Root {
+    if let Ast::Root {
         branches,
         required_placeholders,
     } = into_ast("SELECT :param, ?, ? FROM table WHERE {{ x = $x }}")
@@ -16,7 +16,7 @@ fn test_named_and_positional() {
         let names: Vec<&str> = branches
             .iter()
             .filter_map(|b| {
-                if let MySqlAst::Placeholder(n) = b {
+                if let Ast::Placeholder(n) = b {
                     Some(n.as_str())
                 } else {
                     None
@@ -142,22 +142,22 @@ fn test_parse_in_not_in_and_string() {
     let ast = into_ast(
         "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN (:statuses) AND age NOT IN (:ages)",
     );
-    let MySqlAst::Root {
+    let Ast::Root {
         branches,
         required_placeholders,
     } = ast
     else {
-        panic!("Expected Root variant for MySqlAst");
+        panic!("Expected Root variant for Ast");
     };
     assert!(required_placeholders.is_empty());
     // 0: Sql up to AND before IN
     match &branches[0] {
-        MySqlAst::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
+        Ast::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
         _ => panic!("Expected Sql at branch 0"),
     }
     // 1: InClause
     match &branches[1] {
-        MySqlAst::InClause { expr, placeholder } => {
+        Ast::InClause { expr, placeholder } => {
             assert_eq!(expr, "status");
             assert_eq!(placeholder, "statuses");
         }
@@ -165,12 +165,12 @@ fn test_parse_in_not_in_and_string() {
     }
     // 2: Sql between clauses
     match &branches[2] {
-        MySqlAst::Sql(s) => assert_eq!(s, " AND "),
+        Ast::Sql(s) => assert_eq!(s, " AND "),
         _ => panic!("Expected Sql at branch 2"),
     }
     // 3: NotInClause
     match &branches[3] {
-        MySqlAst::NotInClause { expr, placeholder } => {
+        Ast::NotInClause { expr, placeholder } => {
             assert_eq!(expr, "age");
             assert_eq!(placeholder, "ages");
         }
@@ -183,12 +183,12 @@ fn test_parse_in_not_in_and_string() {
 fn test_parse_multi_in() {
     let ast = into_ast("SELECT * FROM users age IN (?, ?)");
     println!("AST = {:#?}", ast);
-    let MySqlAst::Root {
+    let Ast::Root {
         required_placeholders,
         ..
     } = ast
     else {
-        panic!("Expected Root variant for MySqlAst");
+        panic!("Expected Root variant for Ast");
     };
     assert_eq!(required_placeholders.len(), 2);
 }
@@ -200,10 +200,10 @@ fn test_pagination() {
     println!("AST = {:#?}", ast);
     assert_eq!(
         ast,
-        MySqlAst::Root {
+        Ast::Root {
             branches: vec![
-                MySqlAst::Sql(String::from("SELECT * FROM users age ORDER BY id  "),),
-                MySqlAst::PaginateClause {
+                Ast::Sql(String::from("SELECT * FROM users age ORDER BY id  "),),
+                Ast::PaginateClause {
                     placeholder: String::from("pagination"),
                 },
             ],

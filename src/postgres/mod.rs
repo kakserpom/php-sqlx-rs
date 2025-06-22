@@ -8,6 +8,7 @@ use crate::utils::ColumnArgument;
 
 use crate::options::DriverOptionsArg;
 use crate::paramvalue::ParameterValue;
+use crate::php_sqlx_impl_driver;
 use dashmap::DashMap;
 use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::types::Zval;
@@ -15,7 +16,6 @@ use ext_php_rs::{php_class, php_impl};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
-use crate::php_sqlx_impl_driver;
 
 pub mod inner;
 
@@ -31,7 +31,6 @@ static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<PgDriverInner>>>
 pub struct PgDriver {
     pub driver_inner: Arc<PgDriverInner>,
 }
-
 
 php_sqlx_impl_driver!(PgDriver, PgDriverInner, PgPreparedQuery);
 

@@ -2,14 +2,14 @@ use super::*;
 use crate::byclause::{ByClause, ByClauseFieldDefinition};
 use crate::paginateclause::PaginateClause;
 
-fn into_ast(sql: &str) -> PgAst {
-    PgAst::parse(sql, true).expect("failed to parse SQL statement")
+fn into_ast(sql: &str) -> Ast {
+    Ast::parse(sql, true).expect("failed to parse SQL statement")
 }
 
 #[test]
 fn test_named_and_positional() {
     let sql = "SELECT :param, ?, ? FROM table WHERE {{ x = $x }}";
-    if let PgAst::Root {
+    if let Ast::Root {
         branches,
         required_placeholders,
     } = into_ast(sql)
@@ -18,7 +18,7 @@ fn test_named_and_positional() {
         let names: Vec<&str> = branches
             .iter()
             .filter_map(|b| {
-                if let PgAst::Placeholder(n) = b {
+                if let Ast::Placeholder(n) = b {
                     Some(n.as_str())
                 } else {
                     None
@@ -181,7 +181,7 @@ fn test_parse_in_not_in_and_string() {
     let sql = "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN (:statuses) AND age NOT IN (:ages)";
     let ast = into_ast(sql);
     println!("AST = {:#?}", ast);
-    let PgAst::Root {
+    let Ast::Root {
         branches,
         required_placeholders,
     } = ast
@@ -194,22 +194,22 @@ fn test_parse_in_not_in_and_string() {
     //assert_eq!(branches.len(), 5);
     // Check sequence of branches
     match &branches[0] {
-        PgAst::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
+        Ast::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
         _ => panic!("Expected Sql at branch 0"),
     }
     match &branches[1] {
-        PgAst::InClause { expr, placeholder } => {
+        Ast::InClause { expr, placeholder } => {
             assert_eq!(expr, "status");
             assert_eq!(placeholder, "statuses");
         }
         _ => panic!("Expected InClause at branch 1"),
     }
     match &branches[2] {
-        PgAst::Sql(s) => assert_eq!(s, " AND "),
+        Ast::Sql(s) => assert_eq!(s, " AND "),
         _ => panic!("Expected Sql at branch 2"),
     }
     match &branches[3] {
-        PgAst::NotInClause { expr, placeholder } => {
+        Ast::NotInClause { expr, placeholder } => {
             assert_eq!(expr, "age");
             assert_eq!(placeholder, "ages");
         }
@@ -223,7 +223,7 @@ fn test_parse_multi_in() {
     let sql = "SELECT * FROM users age IN (?, ?)";
     let ast = into_ast(sql);
     println!("AST = {:#?}", ast);
-    let PgAst::Root {
+    let Ast::Root {
         required_placeholders,
         ..
     } = ast
@@ -238,7 +238,7 @@ fn test_parse_required_in() {
     let sql = "SELECT * FROM users age IN (?/*required*/)";
     let ast = into_ast(sql);
     println!("AST = {:#?}", ast);
-    let PgAst::Root {
+    let Ast::Root {
         required_placeholders,
         ..
     } = ast
@@ -255,10 +255,10 @@ fn test_pagination() {
     println!("AST = {:#?}", ast);
     assert_eq!(
         ast,
-        PgAst::Root {
+        Ast::Root {
             branches: vec![
-                PgAst::Sql(String::from("SELECT * FROM users age ORDER BY id  "),),
-                PgAst::PaginateClause {
+                Ast::Sql(String::from("SELECT * FROM users age ORDER BY id  "),),
+                Ast::PaginateClause {
                     placeholder: String::from("pagination"),
                 },
             ],
