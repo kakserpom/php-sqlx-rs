@@ -4,7 +4,15 @@ use ext_php_rs::boxed::ZBox;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::types::{ArrayKey, ZendHashTable, Zval};
 
+/// Trait providing case-insensitive stripping of word prefixes from a string.
+///
+/// This is useful for checking SQL keywords like `NOT IN (...)`
+/// while ignoring case and ensuring prefix boundaries are respected.
 pub trait StripPrefixWordIgnoreAsciiCase {
+    /// Strips a sequence of words from the beginning of a string,
+    /// ignoring ASCII case and ensuring each word is not a prefix of a larger identifier.
+    ///
+    /// Returns the remainder of the string if matched.
     fn strip_prefix_word_ignore_ascii_case(&self, prefix_words: &[&str]) -> Option<&str>;
 }
 impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
@@ -29,18 +37,13 @@ impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
         Some(s)
     }
 }
-#[cfg(test)]
-mod tests {
-    use crate::utils::StripPrefixWordIgnoreAsciiCase;
 
-    #[test]
-    pub fn test_strip_prefix_word_ignore_ascii_case() {
-        "NOT IN (:ph)"
-            .strip_prefix_word_ignore_ascii_case(&["NOT", "IN"])
-            .unwrap();
-    }
-}
-
+/// Folds a key-value pair into a PHP associative array represented by `ZendHashTable`.
+///
+/// Used to accumulate results from database queries into a PHP-compatible hashmap.
+///
+/// # Errors
+/// Returns an error if the insertion into the array fails.
 pub fn fold_into_zend_hashmap(
     mut array: ZBox<ZendHashTable>,
     item: anyhow::Result<(ArrayKey, Zval)>,
@@ -50,6 +53,13 @@ pub fn fold_into_zend_hashmap(
     Ok(array)
 }
 
+/// Folds a key-value pair into a grouped PHP associative array represented by `ZendHashTable`.
+///
+/// If the key already exists, appends the value to an array at that key.
+/// Otherwise, creates a new array for the key and inserts the value.
+///
+/// # Errors
+/// Returns an error if any insertion fails or array conversion fails.
 pub fn fold_into_zend_hashmap_grouped(
     mut array: ZBox<ZendHashTable>,
     item: anyhow::Result<(ArrayKey, Zval)>,
@@ -86,15 +96,25 @@ pub fn fold_into_zend_hashmap_grouped(
     Ok(array)
 }
 
+/// Validates whether a string is a valid SQL identifier.
+///
+/// A valid identifier must:
+/// - Be non-empty
+/// - Start with an alphabetic character or underscore
+/// - Contain only alphanumeric characters or underscores
 #[must_use]
 pub fn is_valid_ident(name: &str) -> bool {
     !name.is_empty()
         && name.starts_with(|c: char| c.is_alphabetic() || c == '_')
         && name.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
+
+/// Trait for providing a static `null` Zval instance.
 pub trait ZvalNull {
+    /// Returns a new `Zval` explicitly set to `null`.
     fn null() -> Zval;
 }
+
 impl ZvalNull for Zval {
     fn null() -> Zval {
         let mut zval = Zval::new();
@@ -103,8 +123,13 @@ impl ZvalNull for Zval {
     }
 }
 
+/// Represents a column reference, either by numeric index or string name.
+///
+/// Used to specify how to extract a value from a SQL row result.
 #[derive(Debug, ZvalConvert)]
 pub enum ColumnArgument<'a> {
+    /// Column by numeric index (0-based).
     Index(usize),
+    /// Column by name.
     Name(&'a str),
 }

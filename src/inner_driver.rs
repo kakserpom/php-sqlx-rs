@@ -94,12 +94,12 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).execute(&mut *tx));
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *tx));
                     self.place_ongoing_transaction(tx);
                     val
                 } else {
                     RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).execute(&self.pool))
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.execute(&self.pool))
                 }
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .rows_affected())
@@ -145,7 +145,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let row = RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?;
                 let column_idx: usize = match column {
                     Some(ColumnArgument::Index(i)) => i,
@@ -191,7 +191,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let mut it = RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .peekable();
@@ -250,7 +250,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))
                     .map(Some)
                     .or_else(|err: Error| match err {
                         Error::RowNotFound => Ok(None),
@@ -304,7 +304,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))?
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))?
                     .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
             }
 
@@ -332,7 +332,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_one(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))
                     .map(Some)
                     .or_else(|err: Error| match err {
                         Error::RowNotFound => Ok(None),
@@ -369,7 +369,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| row.into_zval(assoc))
@@ -437,7 +437,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))?
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))?
                     .into_iter()
                     .map(|row| {
                         Ok((
@@ -499,12 +499,12 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&mut *tx));
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx));
                     self.place_ongoing_transaction(tx);
                     val
                 } else {
                     RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
+                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
                 }
                 .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                 .into_iter()
@@ -563,7 +563,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| {
@@ -613,7 +613,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values).fetch_all(&self.pool))
+                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| {
@@ -627,6 +627,11 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .map_err(|err| anyhow!("{err:?}"))
             }
 
+            /// Begins a new SQL transaction and places it into the transaction stack.
+            ///
+            /// This method must be called before executing transactional operations
+            /// such as savepoints or commit/rollback. If a transaction is already ongoing,
+            /// the behavior depends on the SQL backend (may error or allow nesting).
             pub fn begin(&self) -> anyhow::Result<()> {
                 self.place_ongoing_transaction(RUNTIME
                     .block_on(self.pool.begin())
@@ -635,6 +640,11 @@ macro_rules! php_sqlx_impl_driver_inner {
 
             }
 
+            /// Savepoints allow partial rollbacks without aborting the entire transaction.
+            /// The `savepoint` name must be a valid SQL identifier.
+            ///
+            /// # Errors
+            /// Returns an error if no transaction is active or the name is invalid.
             pub fn savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
                 if !is_valid_ident(savepoint) {
                     bail!("Invalid savepoint format");
@@ -651,6 +661,13 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
             }
 
+            /// Rolls back to a previously declared savepoint.
+            ///
+            /// This undoes all changes made after the given savepoint but does not terminate the transaction.
+            /// The `savepoint` name must be a valid SQL identifier.
+            ///
+            /// # Errors
+            /// Returns an error if no transaction is active or the name is invalid.
             pub fn rollback_to_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
                 if !is_valid_ident(savepoint) {
                     bail!("Invalid savepoint format");
@@ -667,6 +684,13 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
             }
 
+            /// Releases a previously declared savepoint.
+            ///
+            /// After releasing, the savepoint can no longer be rolled back to.
+            /// The `savepoint` name must be a valid SQL identifier.
+            ///
+            /// # Errors
+            /// Returns an error if no transaction is active or the name is invalid.
             pub fn release_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
                 if !is_valid_ident(savepoint) {
                     bail!("Invalid savepoint format");
@@ -683,14 +707,20 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
             }
 
+            /// Retrieves the ongoing transaction from the transaction stack, if any.
+            ///
+            /// This is used internally to manage nested transactional logic.
             #[inline(always)]
             pub fn retrieve_ongoing_transaction(&self) -> Option<Transaction<'static, $database>> {
-                self.tx_stack.write().unwrap().pop()
+                self.tx_stack.write().expect("Poisoned tx_stack").pop()
             }
 
+            /// Pushes a transaction onto the internal transaction stack.
+            ///
+            /// Used internally to persist ongoing transaction state across method calls.
             #[inline(always)]
             pub fn place_ongoing_transaction(&self, tx: Transaction<'static, $database>) {
-                self.tx_stack.write().unwrap().push(tx);
+                self.tx_stack.write().expect("Poisoned tx_stack").push(tx);
             }
         }
     };

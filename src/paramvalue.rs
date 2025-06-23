@@ -1,6 +1,7 @@
 use crate::byclause::ByClauseRendered;
 use crate::paginateclause::PaginateClauseRendered;
 use crate::selectclause::SelectClauseRendered;
+use anyhow::bail;
 use ext_php_rs::convert::{FromZval, IntoZval};
 use ext_php_rs::flags::DataType;
 use ext_php_rs::types::{ZendClassObject, ZendHashTable, Zval};
@@ -10,9 +11,17 @@ use sqlx_oldapi::query::Query;
 use sqlx_oldapi::{Database, Encode, Type};
 use std::collections::{BTreeMap, HashMap};
 
+/// A type alias representing the name of a placeholder in SQL templates.
 pub type Placeholder = String;
+
+/// A type alias for a parameter map used during query rendering and execution.
+/// Keys are placeholders (e.g., `id`), and values are user-supplied input.
 pub type ParamsMap = BTreeMap<Placeholder, ParameterValue>;
 
+/// Represents a parameter value for use in SQL queries, supporting both primitive and complex structures.
+///
+/// Includes built-in types (string, int, float, bool), composite values (arrays, objects),
+/// and pre-rendered clauses like `ORDER BY`, `SELECT`, and pagination fragments.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParameterValue {
     Null,
@@ -28,6 +37,11 @@ pub enum ParameterValue {
 }
 
 impl ParameterValue {
+    /// Checks whether the value is considered "empty".
+    ///
+    /// - For `ByClauseRendered`, `SelectClauseRendered`, and `Array`, returns true if empty.
+    /// - For `Null`, always returns true.
+    /// - Other variants return false.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         match self {
@@ -46,23 +60,27 @@ impl ParameterValue {
 }
 
 impl From<&str> for ParameterValue {
+    /// Converts a `&str` into a `ParameterValue::Str`.
     fn from(s: &str) -> Self {
         ParameterValue::Str(s.to_string())
     }
 }
 impl From<String> for ParameterValue {
+    /// Converts a `String` into a `ParameterValue::Str`.
     fn from(s: String) -> Self {
         ParameterValue::Str(s)
     }
 }
 
 impl From<i64> for ParameterValue {
+    /// Converts an `i64` into a `ParameterValue::Int`.
     fn from(s: i64) -> Self {
         ParameterValue::Int(s)
     }
 }
 
 impl From<bool> for ParameterValue {
+    /// Converts a `bool` into a `ParameterValue::Bool`.
     fn from(s: bool) -> Self {
         ParameterValue::Bool(s)
     }
@@ -72,6 +90,14 @@ impl IntoZval for ParameterValue {
     const TYPE: DataType = DataType::Mixed;
     const NULLABLE: bool = true;
 
+    /// Converts a `ParameterValue` into a PHP `Zval`.
+    ///
+    /// - `Str`, `Int`, `Float`, `Bool` map to PHP scalars.
+    /// - `Array` and `Object` become PHP arrays.
+    /// - `Null` and clause values render as `null`.
+    ///
+    /// # Errors
+    /// Returns an error if value insertion fails.
     fn set_zval(self, zv: &mut Zval, persistent: bool) -> ext_php_rs::error::Result<()> {
         match self {
             ParameterValue::Str(str) => zv.set_string(str.as_str(), persistent)?,
@@ -104,6 +130,11 @@ impl IntoZval for ParameterValue {
 impl FromZval<'_> for ParameterValue {
     const TYPE: DataType = DataType::Mixed;
 
+    /// Attempts to convert a PHP `Zval` into a `ParameterValue`.
+    ///
+    /// - Arrays are parsed into either `Array` or `Object` depending on their keys.
+    /// - `stdClass` maps to `Object`.
+    /// - Instances of known clause types are wrapped appropriately.
     fn from_zval(zval: &Zval) -> Option<Self> {
         match zval.get_type() {
             DataType::Undef | DataType::Null | DataType::Void => Some(Self::Null),
@@ -182,11 +213,34 @@ impl FromZval<'_> for ParameterValue {
     }
 }
 
-/// Binds a list of `Value` arguments to an `SQLx` query.
+/// Binds a list of `ParameterValue` items to an SQLx query.
+///
+/// This function recursively traverses and binds all primitive values from the input slice,
+/// supporting nested arrays and objects. Each primitive is passed to `query.bind()`, in left-to-right order.
+///
+/// # Supported types
+/// - `Str`, `Int`, `Float`, `Bool` — bound directly
+/// - `Array`, `Object` — recursively expanded and flattened into positional bindings
+///
+/// # Unsupported types
+/// - `ByClauseRendered`, `SelectClauseRendered`, `PaginateClauseRendered`, and `Null` are not bindable and will
+///   result in an error
+///
+/// # Errors
+/// Returns an `anyhow::Error` if an unsupported value is encountered or if recursive binding fails.
+///
+/// # Example
+/// ```rust
+///  use sqlx_oldapi::Postgres;
+///  use php_sqlx::paramvalue::{bind_values, ParameterValue};
+///  let query = sqlx_oldapi::query::<Postgres>("SELECT * FROM users WHERE id = $1 AND active = $2");
+///  let values = &[ParameterValue::Int(1), ParameterValue::Bool(true)];
+///  let query = bind_values(query, values).expect("Cannot bind values");
+/// ```
 pub fn bind_values<'a, D: Database>(
     query: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
     values: &'a [ParameterValue],
-) -> Query<'a, D, <D as HasArguments<'a>>::Arguments>
+) -> anyhow::Result<Query<'a, D, <D as HasArguments<'a>>::Arguments>>
 where
     f64: Type<D>,
     f64: Encode<'a, D>,
@@ -200,7 +254,7 @@ where
     fn walker<'a, D: Database>(
         q: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
         value: &'a ParameterValue,
-    ) -> Query<'a, D, <D as HasArguments<'a>>::Arguments>
+    ) -> anyhow::Result<Query<'a, D, <D as HasArguments<'a>>::Arguments>>
     where
         f64: Type<D>,
         f64: Encode<'a, D>,
@@ -211,20 +265,20 @@ where
         String: Type<D>,
         String: Encode<'a, D>,
     {
-        match value {
+        Ok(match value {
             ParameterValue::Str(s) => q.bind(s),
             ParameterValue::Int(s) => q.bind(s),
             ParameterValue::Bool(s) => q.bind(s),
             ParameterValue::Float(s) => q.bind(s),
-            ParameterValue::Array(s) => s.iter().fold(q, walker),
+            ParameterValue::Array(s) => s.iter().try_fold(q, walker)?,
             // @TODO: values()?
-            ParameterValue::Object(s) => s.values().fold(q, walker),
+            ParameterValue::Object(s) => s.values().try_fold(q, walker)?,
             ParameterValue::ByClauseRendered(_)
             | ParameterValue::SelectClauseRendered(_)
             | ParameterValue::PaginateClauseRendered(_)
-            | ParameterValue::Null => unimplemented!(),
-        }
+            | ParameterValue::Null => bail!("Internal error: cannot bind parameter of this type"),
+        })
     }
 
-    values.iter().fold(query, walker)
+    values.iter().try_fold(query, walker)
 }

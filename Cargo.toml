@@ -2,7 +2,7 @@
 name = "php-sqlx"
 version = "0.1.0"
 edition = "2024"
-description = "A modern and feature-rich SQL driver for PHP."
+description = "A modern feature-rich SQL driver for PHP."
 
 [dependencies]
 anyhow = "1.0.98"

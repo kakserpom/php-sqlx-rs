@@ -16,7 +16,7 @@ pub mod mssql;
 pub mod mysql;
 pub mod options;
 pub mod paginateclause;
-mod paramvalue;
+pub mod paramvalue;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 mod prepared_query;

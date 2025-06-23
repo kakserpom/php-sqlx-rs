@@ -847,6 +847,23 @@ macro_rules! php_sqlx_impl_driver {
                 self.driver_inner.dry(query, parameters)
             }
 
+
+            /// Begins a new transaction, yields control to the provided callable,
+            /// and commits or rolls back based on the callable's return value or error.
+            ///
+            /// # Parameters
+            /// - `callable`: A PHP callable receiving this Driver instance.
+            ///
+            /// # Behavior
+            /// - Starts a transaction.
+            /// - Invokes `callable($this)`.
+            /// - If the callable returns false, rolls back, and commits otherwise.
+            /// - On exception or callable error, rolls back and rethrows.
+            ///
+            /// # Exceptions
+            /// Throws an exception if transaction commit, rollback,
+            /// or callable invocation fails.
+            ///
             pub fn begin(&self, callable: ZendCallable) -> PhpResult<()> {
                 self.driver_inner.begin()?;
                 let callbable_ret = callable.try_call(vec![self]);
@@ -882,14 +899,35 @@ macro_rules! php_sqlx_impl_driver {
                 }
             }
 
+            /// Creates a transaction savepoint with the given name.
+            ///
+            /// # Parameters
+            /// - `savepoint`: Name of the savepoint to create.
+            ///
+            /// # Exceptions
+            /// Throws an exception if the driver fails to create the savepoint.
             pub fn savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
                 self.driver_inner.savepoint(savepoint)
             }
 
+            /// Rolls back the current transaction to a previously created savepoint.
+            ///
+            /// # Parameters
+            /// - `savepoint`: Name of the savepoint to rollback to.
+            ///
+            /// # Exceptions
+            /// Throws an exception if rollback to the savepoint fails.
             pub fn rollback_to_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
                 self.driver_inner.rollback_to_savepoint(savepoint)
             }
 
+            /// Releases a previously created savepoint, making it no longer available.
+            ///
+            /// # Parameters
+            /// - `savepoint`: Name of the savepoint to release.
+            ///
+            /// # Exceptions
+            /// Throws an exception if releasing the savepoint fails.
             pub fn release_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
                 self.driver_inner.release_savepoint(savepoint)
             }

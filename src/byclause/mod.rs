@@ -5,6 +5,16 @@ use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
 use trim_in_place::TrimInPlace;
 
+/// Represents a dynamic ORDER BY / GROUP BY clause generator.
+///
+/// This struct allows validating and mapping user input (e.g. from HTTP parameters)
+/// to a known set of allowed sortable fields or SQL expressions.
+///
+/// It supports two modes:
+/// - `"name"` (auto-mapped to `"name"`)
+/// - `"posts" => "COUNT(posts.*)"` (maps user field to custom SQL)
+///
+/// Use with `ByClauseRendered` to safely inject into a query as a single placeholder.
 #[php_class]
 #[php(name = "Sqlx\\ByClause")]
 #[php(rename = "none")]
@@ -12,11 +22,15 @@ pub struct ByClause {
     pub(crate) defined_columns: HashMap<String, Option<String>>,
 }
 
+/// A user-defined ORDER BY column configuration.
 #[derive(ZvalConvert, Debug)]
 pub enum ByClauseColumnDefinition {
+    /// Single field (implied ascending order)
     Full(Vec<String>),
+    /// Explicit [field, order] pair
     Short(String),
 }
+
 impl ByClause {
     /// Ascending order (A to Z)
     pub const _ASC: &'static str = "ASC";
@@ -25,6 +39,15 @@ impl ByClause {
 }
 
 impl ByClause {
+    /// Constructs a new `ByClause` from a list of valid columns.
+    ///
+    /// # Arguments
+    /// - A key-value pair list:
+    ///   - Key as column alias or numeric index
+    ///   - Value as SQL identifier or expression
+    ///
+    /// # Errors
+    /// Returns an error if a numeric key maps to an invalid SQL identifier.
     pub fn new<K, V>(defined_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
@@ -50,6 +73,15 @@ impl ByClause {
         })
     }
 
+    /// Internal method that transforms user-specified ordering into SQL-safe representations.
+    ///
+    /// # Arguments
+    /// - A list of `ByClauseColumnDefinition`, which may be simple names or `[name, direction]` arrays.
+    ///
+    /// # Returns
+    /// A `ByClauseRendered` containing a validated list of SQL clauses.
+    ///
+    /// Unknown or disallowed fields are ignored silently.
     #[must_use]
     pub fn internal_apply(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
         ByClauseRendered {
@@ -93,7 +125,7 @@ impl ByClause {
     /// Descending order (Z to A)
     const DESC: &'static str = "DESC";
 
-    /// Constructs an ByClause helper with allowed sortable columns.
+    /// Constructs a `ByClause` helper with allowed sortable columns.
     ///
     /// # Arguments
     /// - `defined_columns`: Map of allowed sort columns (key = user input, value = SQL expression)
@@ -110,7 +142,7 @@ impl ByClause {
         Self::new(defined_columns)
     }
 
-    /// __invoke magic for apply()
+    /// `__invoke` magic for apply().
     #[must_use]
     pub fn __invoke(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
         self.internal_apply(columns)
@@ -122,27 +154,27 @@ impl ByClause {
     /// - `columns`: List of columns (as strings or [field, direction] arrays)
     ///
     /// # Returns
-    /// A `RenderedByClause` object containing validated SQL ORDER BY clauses
-    /// The returning value is to be used as a placeholder value
+    /// A `ByClauseRendered` object containing validated SQL ORDER BY clauses.
+    /// The resulting value is to be used as a placeholder in query bindings.
     ///
-    /// # Exceptions
-    /// This method does not return an error but silently ignores unknown columns.
-    /// Use validation separately if strict input is required.
+    /// # Notes
+    /// Unknown or disallowed fields are silently ignored.
     #[must_use]
     pub fn apply(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
         self.internal_apply(columns)
     }
 }
-/// A rendered ORDER BY clause result for use in query generation.
+
+/// A rendered ORDER BY / GROUP BY clause result for use in query generation.
 #[derive(Clone, PartialEq, Debug)]
 #[php_class]
 #[php(name = "Sqlx\\ByClauseRendered")]
 #[php(rename = "none")]
 pub struct ByClauseRendered {
-    // @TODO: make it impossible to alter RenderedByClause from PHP side
     pub(crate) __inner: Vec<ByClauseRenderedField>,
 }
 
+/// A single ORDER BY / GROUP BY element, either an identifier or SQL expression.
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
 pub struct ByClauseRenderedField {
     pub(crate) expression_or_identifier: String,
@@ -151,14 +183,15 @@ pub struct ByClauseRenderedField {
 }
 
 impl ByClauseRendered {
+    /// Returns whether the rendered clause is empty.
     #[must_use]
-    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()
     }
 }
 
+/// Registers `ByClause` and `ByClauseRendered` with the PHP module.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module.class::<ByClause>().class::<ByClauseRendered>()
 }
