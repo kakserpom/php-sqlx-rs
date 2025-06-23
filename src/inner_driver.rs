@@ -7,6 +7,7 @@ macro_rules! php_sqlx_impl_driver_inner {
         use $crate::options::DriverInnerOptions;
         use $crate::paramvalue::{ParameterValue, bind_values};
         use sqlx_oldapi::$database;
+        use sqlx_oldapi::pool::PoolOptions;
         use $crate::utils::ZvalNull;
         use $crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
         use $crate::RUNTIME;
@@ -35,7 +36,7 @@ macro_rules! php_sqlx_impl_driver_inner {
         impl $struct {
             pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
                 let pool = RUNTIME.block_on(
-                    PoolOptions::new()
+                    PoolOptions::<$database>::new()
                         .max_connections(options.max_connections.into())
                         .connect(
                             options

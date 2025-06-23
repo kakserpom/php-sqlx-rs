@@ -1,6 +1,5 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::php_sqlx_impl_driver_inner;
-use sqlx_oldapi::mysql::MySqlPoolOptions as PoolOptions;
 pub const ESCAPING_DOUBLE_SINGLE_QUOTES: bool = true;
 pub const COMMENT_HASH: bool = true;
 pub const COLUMN_BACKTICKS: bool = true;
