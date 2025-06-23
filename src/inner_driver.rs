@@ -38,6 +38,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let pool = RUNTIME.block_on(
                     PoolOptions::<$database>::new()
                         .max_connections(options.max_connections.into())
+                        .min_connections(options.min_connections)
+                        .max_lifetime(options.max_lifetime)
+                        .idle_timeout(options.idle_timeout)
+                        .test_before_acquire(options.test_before_acquire)
                         .connect(
                             options
                                 .url

@@ -10,6 +10,7 @@ dashmap = "6.1.0"
 ext-php-rs = { git = "https://github.com/kakserpom/ext-php-rs.git", branch = "master", features = ["anyhow"] }
 #ext-php-rs = {path = "ext-php-rs", features = ["anyhow"] }
 itertools = "0.14.0"
+parse_duration = "2.1.1"
 serde_json = "1.0.140"
 simd-json = { optional = true, version = "0.15.1" }
 #sqlx-oldapi = { path = "sqlx-oldapi", features = ["json", "runtime-tokio-rustls"] }

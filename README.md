@@ -90,7 +90,7 @@ var_dump($driver->dry(
   'SELECT * FROM people WHERE name IN :names', [
     'names' => []
   ]
-));/
+));
 ```
 
 ```
@@ -352,6 +352,10 @@ $driver = new Sqlx\PgDriver([
     Sqlx\DriverOptions::OPT_URL => 'postgres://user:pass@localhost/db',
     Sqlx\DriverOptions::OPT_ASSOC_ARRAYS => true,   // return arrays instead of objects
     Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'main_db'
+    Sqlx\DriverOptions::OPT_MAX_CONNECTIONS => 5,
+    Sqlx\DriverOptions::OPT_MIN_CONNECTIONS => 0,
+    //Sqlx\DriverOptions::OPT_MAX_LIFETIME => "30 min",
+    Sqlx\DriverOptions::OPT_IDLE_TIMEOUT => 120,
 ]);
 ```
 
