@@ -3,25 +3,27 @@
 // Stubs for php-sqlx
 
 namespace Sqlx {
+    /**
+     * The `Sqlx\\SelectClause` class manages a set of allowed
+     * columns for SQL SELECT operations and provides methods
+     * to render validated column clauses from user input.
+     */
     class SelectClause {
         /**
-         * __invoke magic for apply()
+         * Magic `__invoke` method allowing the object to be
+         * used as a callable for rendering select clauses.
          */
-        public function __invoke(array $order_by): \Sqlx\SelectClauseRendered {}
+        public function __invoke(array $columns): \Sqlx\SelectClauseRendered {}
 
         /**
-         * Applies rules to a user-defined input.
+         * Renders validated SELECT clause columns from user input.
          *
          * # Arguments
-         * - `columns`: List of columns
+         * - `columns`: List of column identifiers provided by user.
          *
          * # Returns
-         * A `RenderedSelectClause` object containing validated SQL SELECT clauses
-         * The returning value is to be used as a placeholder value
-         *
-         * # Exceptions
-         * This method does not return an error but silently ignores unknown columns.
-         * Use validation separately if strict input is required.
+         * A `SelectClauseRendered` containing only allowed columns.
+         * Unknown columns are silently ignored.
          */
         public function apply(array $columns): \Sqlx\SelectClauseRendered {}
 
@@ -29,12 +31,25 @@ namespace Sqlx {
     }
 
     /**
-     * A rendered ORDER BY clause result for use in query generation.
+     * The `SelectClauseRendered` struct holds validated
+     * column clauses for SQL SELECT statements.
      */
     class SelectClauseRendered {
         public function __construct() {}
     }
 
+    /**
+     * Represents a dynamic ORDER BY / GROUP BY clause generator.
+     *
+     * This struct allows validating and mapping user input (e.g. from HTTP parameters)
+     * to a known set of allowed sortable fields or SQL expressions.
+     *
+     * It supports two modes:
+     * - `"name"` (auto-mapped to `"name"`)
+     * - `"posts" => "COUNT(posts.*)"` (maps user field to custom SQL)
+     *
+     * Use with `ByClauseRendered` to safely inject into a query as a single placeholder.
+     */
     class ByClause {
         /**
          * Ascending order (A to Z)
@@ -47,7 +62,7 @@ namespace Sqlx {
         const DESC = null;
 
         /**
-         * __invoke magic for apply()
+         * `__invoke` magic for apply().
          */
         public function __invoke(array $columns): \Sqlx\ByClauseRendered {}
 
@@ -58,12 +73,11 @@ namespace Sqlx {
          * - `columns`: List of columns (as strings or [field, direction] arrays)
          *
          * # Returns
-         * A `RenderedByClause` object containing validated SQL ORDER BY clauses
-         * The returning value is to be used as a placeholder value
+         * A `ByClauseRendered` object containing validated SQL ORDER BY clauses.
+         * The resulting value is to be used as a placeholder in query bindings.
          *
-         * # Exceptions
-         * This method does not return an error but silently ignores unknown columns.
-         * Use validation separately if strict input is required.
+         * # Notes
+         * Unknown or disallowed fields are silently ignored.
          */
         public function apply(array $columns): \Sqlx\ByClauseRendered {}
 
@@ -71,29 +85,79 @@ namespace Sqlx {
     }
 
     /**
-     * A rendered ORDER BY clause result for use in query generation.
+     * A rendered ORDER BY / GROUP BY clause result for use in query generation.
      */
     class ByClauseRendered {
         public function __construct() {}
     }
 
+    /**
+     * The `Sqlx\PaginateClause` class represents pagination settings
+     * and provides methods to compute the appropriate SQL `LIMIT` and `OFFSET`
+     * based on a given page number and items-per-page values.
+     */
     class PaginateClause {
         /**
-         * __invoke magic for apply()
+         * Magic `__invoke` method allowing the object to be used as a callable
+         * for applying pagination.
+         *
+         * # Parameters
+         * - `page_number`: Optional page index.
+         * - `per_page`: Optional items per page.
+         *
+         * # Returns
+         * A `PaginateClauseRendered` with calculated `limit` and `offset`.
          */
         public function __invoke(?int $page_number, ?int $per_page): \Sqlx\PaginateClauseRendered {}
 
+        /**
+         * Sets a fixed number of items per page.
+         *
+         * Updates `min_per_page`, `max_per_page`, and `default_per_page`
+         * to the provided value.
+         *
+         * # Errors
+         * Returns an error if `per_page < 1`.
+         */
         public function perPage(int $per_page): mixed {}
 
+        /**
+         * Sets the minimum number of items per page.
+         *
+         * Ensures `max_per_page` and `default_per_page` are at least
+         * the new minimum value.
+         *
+         * # Errors
+         * Returns an error if `min_per_page < 1`.
+         */
         public function minPerPage(int $min_per_page): mixed {}
 
+        /**
+         * Sets the maximum number of items per page.
+         *
+         * Ensures `min_per_page` and `default_per_page` do not exceed
+         * the new maximum value.
+         *
+         * # Errors
+         * Returns an error if `max_per_page < 1`.
+         */
         public function maxPerPage(int $max_per_page): mixed {}
 
+        /**
+         * Applies pagination settings and returns a `PaginateClauseRendered`.
+         *
+         * # Parameters and behavior are identical to `internal_apply`.
+         */
         public function apply(?int $page_number, ?int $per_page): \Sqlx\PaginateClauseRendered {}
 
         public function __construct() {}
     }
 
+    /**
+     * The `PaginateClauseRendered` struct holds the result of pagination:
+     * - `limit`: Number of items to return (`LIMIT`).
+     * - `offset`: Number of items to skip (`OFFSET`).
+     */
     class PaginateClauseRendered {
         public function __construct() {}
     }
@@ -706,12 +770,57 @@ namespace Sqlx {
          */
         public function dry(string $query, ?array $parameters): array {}
 
+        /**
+         * Begins a new transaction, yields control to the provided callable,
+         * and commits or rolls back based on the callable's return value or error.
+         *
+         * # Parameters
+         * - `callable`: A PHP callable receiving this Driver instance.
+         *
+         * # Behavior
+         * - Starts a transaction.
+         * - Invokes `callable($this)`.
+         * - If the callable returns false, rolls back, and commits otherwise.
+         * - On exception or callable error, rolls back and rethrows.
+         *
+         * # Exceptions
+         * Throws an exception if transaction commit, rollback,
+         * or callable invocation fails.
+         *
+         */
         public function begin(callable $callable): mixed {}
 
+        /**
+         * Creates a transaction savepoint with the given name.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to create.
+         *
+         * # Exceptions
+         * Throws an exception if the driver fails to create the savepoint.
+         */
         public function savepoint(string $savepoint): mixed {}
 
+        /**
+         * Rolls back the current transaction to a previously created savepoint.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to rollback to.
+         *
+         * # Exceptions
+         * Throws an exception if rollback to the savepoint fails.
+         */
         public function rollbackToSavepoint(string $savepoint): mixed {}
 
+        /**
+         * Releases a previously created savepoint, making it no longer available.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to release.
+         *
+         * # Exceptions
+         * Throws an exception if releasing the savepoint fails.
+         */
         public function releaseSavepoint(string $savepoint): mixed {}
 
         public function __construct(mixed $options) {}
@@ -1708,12 +1817,57 @@ namespace Sqlx {
          */
         public function dry(string $query, ?array $parameters): array {}
 
+        /**
+         * Begins a new transaction, yields control to the provided callable,
+         * and commits or rolls back based on the callable's return value or error.
+         *
+         * # Parameters
+         * - `callable`: A PHP callable receiving this Driver instance.
+         *
+         * # Behavior
+         * - Starts a transaction.
+         * - Invokes `callable($this)`.
+         * - If the callable returns false, rolls back, and commits otherwise.
+         * - On exception or callable error, rolls back and rethrows.
+         *
+         * # Exceptions
+         * Throws an exception if transaction commit, rollback,
+         * or callable invocation fails.
+         *
+         */
         public function begin(callable $callable): mixed {}
 
+        /**
+         * Creates a transaction savepoint with the given name.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to create.
+         *
+         * # Exceptions
+         * Throws an exception if the driver fails to create the savepoint.
+         */
         public function savepoint(string $savepoint): mixed {}
 
+        /**
+         * Rolls back the current transaction to a previously created savepoint.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to rollback to.
+         *
+         * # Exceptions
+         * Throws an exception if rollback to the savepoint fails.
+         */
         public function rollbackToSavepoint(string $savepoint): mixed {}
 
+        /**
+         * Releases a previously created savepoint, making it no longer available.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to release.
+         *
+         * # Exceptions
+         * Throws an exception if releasing the savepoint fails.
+         */
         public function releaseSavepoint(string $savepoint): mixed {}
 
         public function __construct(mixed $options) {}
@@ -2710,12 +2864,57 @@ namespace Sqlx {
          */
         public function dry(string $query, ?array $parameters): array {}
 
+        /**
+         * Begins a new transaction, yields control to the provided callable,
+         * and commits or rolls back based on the callable's return value or error.
+         *
+         * # Parameters
+         * - `callable`: A PHP callable receiving this Driver instance.
+         *
+         * # Behavior
+         * - Starts a transaction.
+         * - Invokes `callable($this)`.
+         * - If the callable returns false, rolls back, and commits otherwise.
+         * - On exception or callable error, rolls back and rethrows.
+         *
+         * # Exceptions
+         * Throws an exception if transaction commit, rollback,
+         * or callable invocation fails.
+         *
+         */
         public function begin(callable $callable): mixed {}
 
+        /**
+         * Creates a transaction savepoint with the given name.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to create.
+         *
+         * # Exceptions
+         * Throws an exception if the driver fails to create the savepoint.
+         */
         public function savepoint(string $savepoint): mixed {}
 
+        /**
+         * Rolls back the current transaction to a previously created savepoint.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to rollback to.
+         *
+         * # Exceptions
+         * Throws an exception if rollback to the savepoint fails.
+         */
         public function rollbackToSavepoint(string $savepoint): mixed {}
 
+        /**
+         * Releases a previously created savepoint, making it no longer available.
+         *
+         * # Parameters
+         * - `savepoint`: Name of the savepoint to release.
+         *
+         * # Exceptions
+         * Throws an exception if releasing the savepoint fails.
+         */
         public function releaseSavepoint(string $savepoint): mixed {}
 
         public function __construct(mixed $options) {}
@@ -3104,21 +3303,84 @@ namespace Sqlx {
         public function __construct() {}
     }
 
+    /**
+     * A PHP-accessible wrapper around a `zend_array` that lazily decodes JSON values.
+     *
+     * Implements `ArrayAccess` so that columns can be accessed as array entries.
+     */
     class LazyRow implements \ArrayAccess {
+        /**
+         * Checks whether a column exists in the row.
+         *
+         * # Arguments
+         *
+         * * `offset` – The column name as a `Zval` (expected to be a string).
+         *
+         * # Returns
+         *
+         * `Ok(true)` if the column exists, `Ok(false)` otherwise, or an error if the offset isn't a string.
+         */
         public function offsetExists(mixed $offset): bool {}
 
+        /**
+         * Magic getter for property access in PHP (`$row->column`).
+         *
+         * Lazily decodes JSON-wrapped values if needed and replaces the placeholder object
+         * with the actual decoded `Zval`.
+         *
+         * # Arguments
+         *
+         * * `name` – The column name.
+         *
+         * # Errors
+         *
+         * Returns a `PhpException` if the column is not found or offset is not a string.
+         */
         public function __get(string $name): mixed {}
 
+        /**
+         * ArrayAccess getter (`$row[$column]`).
+         *
+         * Performs the same lazy JSON decoding logic as `__get`.
+         */
         public function offsetGet(mixed $offset): mixed {}
 
+        /**
+         * ArrayAccess setter (`$row[$key] = $value`).
+         *
+         * Inserts or updates the given key with the provided `Zval`.
+         *
+         * # Exceptions
+         *
+         * Throws an exception if insertion fails or if the offset isn't a string.
+         */
         public function offsetSet(mixed $offset, mixed $value): mixed {}
 
+        /**
+         * ArrayAccess unsetter (`unset($row[$key])`).
+         *
+         * Unsetting values is not supported and always returns an error.
+         */
         public function offsetUnset(mixed $_offset): mixed {}
 
         public function __construct() {}
     }
 
+    /**
+     * A helper PHP class that holds raw JSON bytes for lazy decoding.
+     *
+     * When accessed, it will be parsed into a PHP value on demand.
+     */
     class LazyRowJson {
+        /**
+         * Decode the stored JSON into a PHP `Zval`.
+         *
+         * Uses either `simd-json` or `serde_json` depending on build features.
+         *
+         * # Errors
+         *
+         * Propagates JSON parsing exceptions.
+         */
         public function takeZval(): mixed {}
 
         public function __construct() {}
@@ -3137,7 +3399,15 @@ namespace Sqlx {
 
         const OPT_MAX_CONNECTIONS = null;
 
+        const OPT_MIN_CONNECTIONS = null;
+
         const OPT_COLLAPSIBLE_IN = null;
+
+        const OPT_MAX_LIFETIME = null;
+
+        const OPT_IDLE_TIMEOUT = null;
+
+        const OPT_TEST_BEFORE_ACQUIRE = null;
 
         public function __construct() {}
     }
