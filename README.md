@@ -339,7 +339,7 @@ cargo php install --release --yes
 
 ## API
 
-### `Sqlx\PgDriver` \| `Sqlx\MySqlDriver`
+### `Sqlx\PgDriver` \| `Sqlx\MySqlDriver` \| `Sqlx\MssqlDriver`
 
 ```php
 $driver = new Sqlx\PgDriver("postgres://user:pass@localhost/db");
