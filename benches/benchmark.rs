@@ -13,6 +13,7 @@ const PARSING_SETTINGS: LazyLock<ParsingSettings> = LazyLock::new(|| ParsingSett
 const RENDERING_SETTINGS: LazyLock<RenderingSettings> = LazyLock::new(|| RenderingSettings {
     column_backticks: false,
     placeholder_dollar_sign: true,
+    placeholder_at_sign: false,
 });
 
 const QUERY_SMALL: &str = "SELECT id, name, meta

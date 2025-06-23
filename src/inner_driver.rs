@@ -28,7 +28,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub pool: Pool<$database>,
             pub ast_cache: LruCache<String, Ast>,
             pub options: DriverInnerOptions,
-            pub tx_registry: RwLock<Vec<Transaction<'static, $database>>>,
+            pub tx_stack: RwLock<Vec<Transaction<'static, $database>>>,
             pub parsing_settings: ParsingSettings,
             pub rendering_settings: RenderingSettings,
         }
@@ -47,7 +47,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         ),
                 )?;
                 Ok(Self {
-                    tx_registry: RwLock::new(Vec::new()),
+                    tx_stack: RwLock::new(Vec::new()),
                     pool,
                     ast_cache: LruCache::new(
                         options.ast_cache_shard_count,
@@ -681,12 +681,12 @@ macro_rules! php_sqlx_impl_driver_inner {
 
             #[inline(always)]
             pub fn retrieve_ongoing_transaction(&self) -> Option<Transaction<'static, $database>> {
-                self.tx_registry.write().unwrap().pop()
+                self.tx_stack.write().unwrap().pop()
             }
 
             #[inline(always)]
             pub fn place_ongoing_transaction(&self, tx: Transaction<'static, $database>) {
-                self.tx_registry.write().unwrap().push(tx);
+                self.tx_stack.write().unwrap().push(tx);
             }
         }
     };
