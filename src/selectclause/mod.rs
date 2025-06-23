@@ -8,16 +8,16 @@ use trim_in_place::TrimInPlace;
 #[php(name = "Sqlx\\SelectClause")]
 #[php(rename = "none")]
 pub struct SelectClause {
-    pub(crate) defined_fields: HashMap<String, Option<String>>,
+    pub(crate) defined_columns: HashMap<String, Option<String>>,
 }
 impl SelectClause {
-    pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
+    pub fn new<K, V>(defined_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
     {
         Ok(Self {
-            defined_fields: defined_fields.into_iter().try_fold(
+            defined_columns: defined_columns.into_iter().try_fold(
                 HashMap::<String, Option<String>>::new(),
                 |mut map, (key, value)| -> anyhow::Result<_> {
                     let key: String = key.into();
@@ -36,14 +36,14 @@ impl SelectClause {
         })
     }
     #[must_use]
-    pub fn internal_apply(&self, fields: Vec<String>) -> SelectClauseRendered {
+    pub fn internal_apply(&self, columns: Vec<String>) -> SelectClauseRendered {
         SelectClauseRendered {
-            __inner: fields
+            __inner: columns
                 .into_iter()
                 .filter_map(|mut field| {
-                    self.defined_fields.get(field.trim_in_place()).map(|expr| {
-                        SelectClauseRenderedField {
-                            field,
+                    self.defined_columns.get(field.trim_in_place()).map(|expr| {
+                        SelectClauseRenderedColumn {
+                            column: field,
                             expression: expr.clone(),
                         }
                     })
@@ -55,10 +55,10 @@ impl SelectClause {
 
 #[php_impl]
 impl SelectClause {
-    /// Constructs an SelectClause helper with allowed sortable fields.
+    /// Constructs an SelectClause helper with allowed sortable columns.
     ///
     /// # Arguments
-    /// - `defined_fields`: Map of allowed SELECT fields
+    /// - `defined_columns`: Map of allowed SELECT columns
     ///
     /// # Example
     /// ```php
@@ -68,8 +68,8 @@ impl SelectClause {
     ///     "department_name" => "dp.name"
     /// ]);
     /// ```
-    pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        Self::new(defined_fields)
+    pub fn __construct(defined_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+        Self::new(defined_columns)
     }
 
     /// __invoke magic for apply()
@@ -81,18 +81,18 @@ impl SelectClause {
     /// Applies rules to a user-defined input.
     ///
     /// # Arguments
-    /// - `fields`: List of fields
+    /// - `columns`: List of columns
     ///
     /// # Returns
     /// A `RenderedSelectClause` object containing validated SQL SELECT clauses
     /// The returning value is to be used as a placeholder value
     ///
     /// # Exceptions
-    /// This method does not return an error but silently ignores unknown fields.
+    /// This method does not return an error but silently ignores unknown columns.
     /// Use validation separately if strict input is required.
     #[must_use]
-    pub fn apply(&self, fields: Vec<String>) -> SelectClauseRendered {
-        self.internal_apply(fields)
+    pub fn apply(&self, columns: Vec<String>) -> SelectClauseRendered {
+        self.internal_apply(columns)
     }
 }
 /// A rendered ORDER BY clause result for use in query generation.
@@ -102,11 +102,11 @@ impl SelectClause {
 #[php(rename = "none")]
 pub struct SelectClauseRendered {
     // @TODO: make it impossible to alter RenderedSelectClause from PHP side
-    pub(crate) __inner: Vec<SelectClauseRenderedField>,
+    pub(crate) __inner: Vec<SelectClauseRenderedColumn>,
 }
 #[derive(Clone, PartialEq, Debug, ZvalConvert)]
-pub struct SelectClauseRenderedField {
-    pub(crate) field: String,
+pub struct SelectClauseRenderedColumn {
+    pub(crate) column: String,
     pub(crate) expression: Option<String>,
 }
 impl SelectClauseRendered {

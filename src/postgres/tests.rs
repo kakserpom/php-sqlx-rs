@@ -1,6 +1,6 @@
 use super::*;
 use crate::ast::{Ast, ParsingSettings, RenderingSettings};
-use crate::byclause::{ByClause, ByClauseFieldDefinition};
+use crate::byclause::{ByClause, ByClauseColumnDefinition};
 use crate::paginateclause::PaginateClause;
 use crate::paramvalue::ParamsMap;
 use crate::postgres::inner::{COLUMN_BACKTICKS, COMMENT_HASH, PLACEHOLDER_DOLLAR_SIGN, ESCAPING_DOUBLE_SINGLE_QUOTES, PLACEHOLDER_AT_SIGN};
@@ -115,8 +115,8 @@ fn test_render_order_by_apply() {
     .unwrap();
 
     let rendered = ob.internal_apply(vec![
-        ByClauseFieldDefinition::Short("name".into()),
-        ByClauseFieldDefinition::Full(vec!["posts".into(), ByClause::_DESC.into()]),
+        ByClauseColumnDefinition::Short("name".into()),
+        ByClauseColumnDefinition::Full(vec!["posts".into(), ByClause::_DESC.into()]),
     ]);
 
     let sql = "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY $order_by";

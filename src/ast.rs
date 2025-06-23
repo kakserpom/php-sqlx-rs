@@ -1,6 +1,6 @@
 use crate::byclause::ByClauseRenderedField;
 use crate::paramvalue::{ParameterValue, ParamsMap, Placeholder};
-use crate::selectclause::SelectClauseRenderedField;
+use crate::selectclause::SelectClauseRenderedColumn;
 use crate::utils::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use itertools::Itertools;
@@ -454,9 +454,9 @@ impl Ast {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            ParameterValue::SelectClauseRendered(fields) => {
-                                for (i, SelectClauseRenderedField { field, expression }) in
-                                    fields.__inner.iter().enumerate()
+                            ParameterValue::SelectClauseRendered(columns) => {
+                                for (i, SelectClauseRenderedColumn { column: field, expression }) in
+                                    columns.__inner.iter().enumerate()
                                 {
                                     if i > 0 {
                                         sql.push_str(", ");

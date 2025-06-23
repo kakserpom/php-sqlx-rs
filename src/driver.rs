@@ -795,7 +795,7 @@ macro_rules! php_sqlx_impl_driver {
                 self.driver_inner.execute(query, parameters)
             }
 
-            /// Inserts a row into the given table using a map of fields.
+            /// Inserts a row into the given table using a map of columns.
             ///
             /// # Arguments
             /// - `table`: Table name

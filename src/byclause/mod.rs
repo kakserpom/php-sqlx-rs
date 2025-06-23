@@ -9,11 +9,11 @@ use trim_in_place::TrimInPlace;
 #[php(name = "Sqlx\\ByClause")]
 #[php(rename = "none")]
 pub struct ByClause {
-    pub(crate) defined_fields: HashMap<String, Option<String>>,
+    pub(crate) defined_columns: HashMap<String, Option<String>>,
 }
 
 #[derive(ZvalConvert, Debug)]
-pub enum ByClauseFieldDefinition {
+pub enum ByClauseColumnDefinition {
     Full(Vec<String>),
     Short(String),
 }
@@ -25,13 +25,13 @@ impl ByClause {
 }
 
 impl ByClause {
-    pub fn new<K, V>(defined_fields: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
+    pub fn new<K, V>(defined_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
     {
         Ok(Self {
-            defined_fields: defined_fields.into_iter().try_fold(
+            defined_columns: defined_columns.into_iter().try_fold(
                 HashMap::<String, Option<String>>::new(),
                 |mut map, (key, value)| -> anyhow::Result<_> {
                     let key: String = key.into();
@@ -51,19 +51,19 @@ impl ByClause {
     }
 
     #[must_use]
-    pub fn internal_apply(&self, fields: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
+    pub fn internal_apply(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
         ByClauseRendered {
-            __inner: fields
+            __inner: columns
                 .into_iter()
                 .filter_map(|definition| {
                     let (mut field, descending_order) = match definition {
-                        ByClauseFieldDefinition::Short(name) => (name, false),
-                        ByClauseFieldDefinition::Full(vec) => (
+                        ByClauseColumnDefinition::Short(name) => (name, false),
+                        ByClauseColumnDefinition::Full(vec) => (
                             vec.first()?.clone(),
                             matches!(vec.get(1), Some(str) if str.trim().eq_ignore_ascii_case(Self::_DESC))
                         ),
                     };
-                    self.defined_fields
+                    self.defined_columns
                         .get(field.trim_in_place())
                         .map(|definition| {
                             if let Some(expression) = definition {
@@ -93,10 +93,10 @@ impl ByClause {
     /// Descending order (Z to A)
     const DESC: &'static str = "DESC";
 
-    /// Constructs an ByClause helper with allowed sortable fields.
+    /// Constructs an ByClause helper with allowed sortable columns.
     ///
     /// # Arguments
-    /// - `defined_fields`: Map of allowed sort fields (key = user input, value = SQL expression)
+    /// - `defined_columns`: Map of allowed sort columns (key = user input, value = SQL expression)
     ///
     /// # Example
     /// ```php
@@ -106,31 +106,31 @@ impl ByClause {
     ///     "total_posts" => "COUNT(posts.*)"
     /// ]);
     /// ```
-    pub fn __construct(defined_fields: HashMap<String, String>) -> anyhow::Result<Self> {
-        Self::new(defined_fields)
+    pub fn __construct(defined_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+        Self::new(defined_columns)
     }
 
     /// __invoke magic for apply()
     #[must_use]
-    pub fn __invoke(&self, fields: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
-        self.internal_apply(fields)
+    pub fn __invoke(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
+        self.internal_apply(columns)
     }
 
     /// Applies ordering rules to a user-defined input.
     ///
     /// # Arguments
-    /// - `fields`: List of fields (as strings or [field, direction] arrays)
+    /// - `columns`: List of columns (as strings or [field, direction] arrays)
     ///
     /// # Returns
     /// A `RenderedByClause` object containing validated SQL ORDER BY clauses
     /// The returning value is to be used as a placeholder value
     ///
     /// # Exceptions
-    /// This method does not return an error but silently ignores unknown fields.
+    /// This method does not return an error but silently ignores unknown columns.
     /// Use validation separately if strict input is required.
     #[must_use]
-    pub fn apply(&self, fields: Vec<ByClauseFieldDefinition>) -> ByClauseRendered {
-        self.internal_apply(fields)
+    pub fn apply(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
+        self.internal_apply(columns)
     }
 }
 /// A rendered ORDER BY clause result for use in query generation.

@@ -145,7 +145,7 @@ Keep in mind that you can not only use it in `WHERE`, but also in `ON` clauses w
 **Examples**:
 
 ```php
-// Let's define allowed fields
+// Let's define allowed columns
 $orderBy = new Sqlx\ByClause([
     'name',
     'created_at',
@@ -258,7 +258,7 @@ $rows = $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
  ]);
 ```
 
-Note that field names are case-sensitive.
+Note that column names are case-sensitive.
 
 
 --- 
