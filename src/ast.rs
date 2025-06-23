@@ -8,51 +8,97 @@ use std::fmt::Debug;
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
 
+/// An Abstract Syntax Tree representation of a parameterized SQL query,
+/// allowing for nested conditional blocks, placeholders, and special clauses.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
+    /// A sequence of AST nodes, used for nesting and grouping.
     Nested(Vec<Ast>),
-    /// Literal SQL text
+
+    /// A literal fragment of SQL text.
     Sql(String),
-    /// Placeholder like `$id`, `:param`, positional `?` replaced with ordinal number
+
+    /// A placeholder such as `$id`, `:param`, or `?` (converted to an ordinal).
     Placeholder(String),
-    /// Optional segment with its own nested branches and collected placeholders
+
+    /// A conditional segment (`{{ ... }}`) which only renders if its
+    /// `required_placeholders` are all provided and non-empty.
     ConditionalBlock {
+        /// The possible AST branches inside the block.
         branches: Vec<Ast>,
+        /// Placeholders that must be present to render this block.
         required_placeholders: Vec<Placeholder>,
     },
+
+    /// The root of the AST, containing top-level branches and the
+    /// placeholders required for the entire query.
     Root {
+        /// Top-level AST branches.
         branches: Vec<Ast>,
+        /// Placeholders that must be provided for rendering.
         required_placeholders: Vec<Placeholder>,
     },
+
+    /// An `expr IN (...)` clause with a single placeholder for the list.
     InClause {
+        /// The left-hand expression (e.g. a column name).
         expr: String,
+        /// The placeholder name holding the list values.
         placeholder: String,
     },
+
+    /// An `expr NOT IN (...)` clause with a single placeholder for the list.
     NotInClause {
+        /// The left-hand expression (e.g. a column name).
         expr: String,
+        /// The placeholder name holding the list values.
         placeholder: String,
     },
+
+    /// A pagination helper that expands into `LIMIT`/`OFFSET`.
     PaginateClause {
+        /// The placeholder name carrying limit/offset info.
         placeholder: String,
     },
 }
 
+/// Settings that control how the SQL parser handles comments, escaping, and
+/// optional features like collapsible `IN` clauses.
 pub struct ParsingSettings {
+    /// Enable special parsing for `IN` and `NOT IN` clauses.
     pub collapsible_in_enabled: bool,
+    /// Treat `''` inside single-quoted strings as an escaped quote.
     pub escaping_double_single_quotes: bool,
+    /// Recognize `#` as the start of a line comment.
     pub comment_hash: bool,
 }
 
+/// Settings that determine how placeholders and identifiers are rendered:
+/// whether to use backticks, dollar-sign placeholders, `@`-style, etc.
 pub struct RenderingSettings {
+    /// Wrap column names in backticks instead of double quotes.
     pub column_backticks: bool,
+    /// Render placeholders as `$1`, `$2`, ...
     pub placeholder_dollar_sign: bool,
+    /// Render placeholders as `@p1`, `@p2`, ...
     pub placeholder_at_sign: bool,
 }
 
+
 impl Ast {
-    /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
-    /// but ignores them inside string literals and comments.
-    /// Returns an `AST::Nested` of top-level branches.
+    /// Parse an SQL string with embedded optional blocks `{{ ... }}`, named
+    /// placeholders (`$name`, `:name`), and positional `?` markers. Ignores
+    /// matches inside string literals and comments.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` – The raw SQL text to parse.
+    /// * `parsing_settings` – Controls comment syntax, escaping, and `IN` support.
+    ///
+    /// # Returns
+    ///
+    /// An `Ast::Root` containing the parsed branches and the list of
+    /// placeholders required to render the final SQL.
     pub fn parse(input: &str, parsing_settings: &ParsingSettings) -> anyhow::Result<Ast> {
         fn inner<'s>(
             mut rest: &'s str,
@@ -408,15 +454,32 @@ impl Ast {
             required_placeholders: placeholders,
         })
     }
-}
 
-impl Ast {
-    /// Parses an input SQL query containing optional blocks `{{ ... }}`, placeholders `$...`, `:param`, `?`,
-    /// but ignores them inside string literals and comments, with support for escaping via `\\`.
-    /// Returns an `AST::Nested` of top-level branches.
+    /// Render the AST into a finalized SQL string with positional or named
+    /// placeholders, expanding arrays for `IN`/`NOT IN` clauses and
+    /// injecting `LIMIT/OFFSET` for pagination.
     ///
-    /// Renders the AST into an SQL string with numbered placeholders like `$1`, `$2`, ...
-    /// `values` can be any iterable of (key, value) pairs. Keys convertible to String; values convertible to Value.
+    /// # Type Parameters
+    ///
+    /// * `I` – An iterable of key/value pairs supplying placeholder values.
+    /// * `K` – Key type, convertible to `String` (placeholder name or index).
+    /// * `V` – Value type, convertible to `ParameterValue`.
+    ///
+    /// # Arguments
+    ///
+    /// * `values` – An iterator of `(key, value)` pairs for all placeholders.
+    /// * `rendering_settings` – Controls identifier quoting and placeholder style.
+    ///
+    /// # Returns
+    ///
+    /// A tuple `(sql, params)` where:
+    /// - `sql` is the whitespace-normalized SQL string with `?`, `$n`, or `@pn`.
+    /// - `params` is the vector of `ParameterValue` in order of appearance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a required placeholder is missing, or if a
+    /// `PaginateClause` is provided with an incorrect value type.
     pub fn render<I, K, V>(
         &self,
         values: I,
