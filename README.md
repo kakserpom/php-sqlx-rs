@@ -8,7 +8,7 @@ the [ext-php-rs](https://github.com/davidcole1340/ext-php-rs) crate.
 
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBM systems
 without any compromise on performance. The author's not big on PHP, but as a security researcher he understood the
-necessity of modernizing the toolkit of the great many PHP developers. The idea came up, and bish bash bosh, a couple of
+necessity of modernizing the toolkit of great many PHP developers. The idea came up, and bish bash bosh, a couple of
 weekends later the project was all but done. More to come.
 
 The project is still kind of experimental, so any feedback/ideas will be greatly appreciated!
@@ -221,45 +221,16 @@ $select = new Sqlx\SelectClause([
     'id',
     'created_at',
     'name' => ,
-    '' => 'COUNT(posts.*)'
+    'num_posts' => 'COUNT(posts.*)'
 ]);
 
-// Equivalent to: SELECT `id`, FROM users
+// Equivalent to: SELECT `id`, `name`, COUNT(posts.*) AS `num_posts` FROM users
 $rows = $driver->queryAll('SELECT :select FROM users', [
-  'select' => $select(['id','name'])
-]);
-
-// This will throw an exception: Missing required placeholder `order_by`
-$rows = $driver->queryAll('SELECT * FROM users ORDER BY :order_by', [
-  'order_by' => $orderBy([
-    ['zzzz', Sqlx\ByClause::ASC],
-  ])
-]);
-
-// Equivalent to: SELECT * FROM users
-$rows = $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
-  'order_by' => $orderBy([
-    ['zzzz', Sqlx\ByClause::ASC],
-  ])
+  'select' => $select(['id','name', 'num_posts])
 ]);
 ```
 
-Note that the direction constants (`ByClause::ASC` and `ByClause::DESC`) are just strings (`'ASC'` and `'DESC'`) and
-you can pass strings from user input (case-insensitively); incorrect strings silently default to `ASC`.
-
-So this code works:
-
-```php
-// Equivalent to: SELECT * FROM users ORDER BY `name` DESC
-$rows = $driver->queryAll('SELECT * FROM users {{ ORDER BY :order_by }}', [
-  'order_by' => $orderBy([
-    ['  name  ', ' DeSc  '],
-   ])
- ]);
-```
-
-Note that column names are case-sensitive.
-
+Note that column names are case-sensitive, but they get trimmed.
 
 --- 
 
@@ -280,7 +251,7 @@ $driver->begin(function($driver) {
 A `ROLLBACK` happens if the closure returns `false` or throws an exception.
 Otherwise, a `COMMIT` gets sent when functions finishes normally.
 
-Additional supported methods:
+Additional supported methods to be called from inside a closure:
 
 - `savepoint(name: String)`
 - `rollbackToSavepoint(name: String)`
@@ -499,15 +470,23 @@ var_dump($driver->queryGroupedDictionary(
     [['IT', 'HR']]
 ));
 /* Output:
-array(2) {
+array(1) {
   ["IT"]=>
   array(2) {
-    [0]=> array("department" => "IT", "name" => "Alice")
-    [1]=> array("department" => "IT", "name" => "Bob")
-  },
-  ["HR"]=>
-  array(1) {
-    [0]=> array("department" => "HR", "name" => "Eve")
+    [0]=>
+    object(stdClass)#2 (2) {
+      ["department"]=>
+      string(2) "IT"
+      ["name"]=>
+      string(5) "Alice"
+    }
+    [1]=>
+    object(stdClass)#3 (2) {
+      ["department"]=>
+      string(2) "IT"
+      ["name"]=>
+      string(3) "Bob"
+    }
   }
 }
 */
