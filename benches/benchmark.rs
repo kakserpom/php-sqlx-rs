@@ -2,19 +2,18 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use php_sqlx::ast::{Ast, ParsingSettings, RenderingSettings};
 use std::collections::HashMap;
 use std::hint::black_box;
-use std::sync::LazyLock;
 
 // Postgres settings
-const PARSING_SETTINGS: LazyLock<ParsingSettings> = LazyLock::new(|| ParsingSettings {
+const PARSING_SETTINGS: ParsingSettings = ParsingSettings {
     collapsible_in_enabled: true,
     escaping_double_single_quotes: false,
     comment_hash: false,
-});
-const RENDERING_SETTINGS: LazyLock<RenderingSettings> = LazyLock::new(|| RenderingSettings {
+};
+const RENDERING_SETTINGS: RenderingSettings = RenderingSettings {
     column_backticks: false,
     placeholder_dollar_sign: true,
     placeholder_at_sign: false,
-});
+};
 
 const QUERY_SMALL: &str = "SELECT id, name, meta
 FROM users

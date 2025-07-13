@@ -8,17 +8,18 @@ use crate::mysql::inner::{
 use crate::paginateclause::PaginateClause;
 use crate::paramvalue::ParamsMap;
 
-const PARSING_SETTINGS: LazyLock<ParsingSettings> = LazyLock::new(|| ParsingSettings {
+const PARSING_SETTINGS: ParsingSettings = ParsingSettings {
     collapsible_in_enabled: true,
     escaping_double_single_quotes: ESCAPING_DOUBLE_SINGLE_QUOTES,
     comment_hash: COMMENT_HASH,
-});
+};
 
-const RENDERING_SETTINGS: LazyLock<RenderingSettings> = LazyLock::new(|| RenderingSettings {
+const RENDERING_SETTINGS: RenderingSettings = RenderingSettings {
     column_backticks: COLUMN_BACKTICKS,
     placeholder_dollar_sign: PLACEHOLDER_DOLLAR_SIGN,
+  
     placeholder_at_sign: PLACEHOLDER_AT_SIGN,
-});
+};
 
 fn into_ast(sql: &str) -> Ast {
     Ast::parse(sql, &PARSING_SETTINGS).expect("failed to parse SQL statement")
@@ -30,7 +31,7 @@ fn test_named_and_positional() {
         required_placeholders,
     } = into_ast("SELECT :param, ?, ? FROM table WHERE {{ x = $x }}")
     {
-        println!("{:#?}", required_placeholders);
+        println!("{required_placeholders:#?}");
         let names: Vec<&str> = branches
             .iter()
             .filter_map(|b| {
@@ -78,7 +79,7 @@ fn test_render_var_types() {
     let sql =
         "SELECT * FROM table WHERE id = $id AND active = :flag AND scores IN (?) AND data = $data";
     let ast = into_ast(sql);
-    println!("{:#?}", ast);
+    println!("{ast:#?}");
     let mut vals = ParamsMap::new();
     vals.insert("id".into(), ParameterValue::Int(7));
     vals.insert("flag".into(), ParameterValue::Bool(true));
@@ -209,7 +210,7 @@ fn test_parse_in_not_in_and_string() {
 #[test]
 fn test_parse_multi_in() {
     let ast = into_ast("SELECT * FROM users age IN (?, ?)");
-    println!("AST = {:#?}", ast);
+    println!("AST = {ast:#?}");
     let Ast::Root {
         required_placeholders,
         ..
@@ -224,7 +225,7 @@ fn test_parse_multi_in() {
 fn test_pagination() {
     let sql = "SELECT * FROM users age ORDER BY id PAGINATE :pagination";
     let ast = into_ast(sql);
-    println!("AST = {:#?}", ast);
+    println!("AST = {ast:#?}");
     assert_eq!(
         ast,
         Ast::Root {
@@ -250,7 +251,7 @@ fn test_pagination() {
         ParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
     );
     let (sql, values) = ast.render(vals, &RENDERING_SETTINGS).unwrap();
-    println!("sql = {:#?}", sql);
+    println!("sql = {sql:#?}");
     assert_eq!(sql, "SELECT * FROM users age ORDER BY id LIMIT ? OFFSET ?");
     assert_eq!(
         values,

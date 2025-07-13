@@ -213,7 +213,7 @@ impl FromZval<'_> for ParameterValue {
     }
 }
 
-/// Binds a list of `ParameterValue` items to an SQLx query.
+/// Binds a list of `ParameterValue` items to an `SQLx` query.
 ///
 /// This function recursively traverses and binds all primitive values from the input slice,
 /// supporting nested arrays and objects. Each primitive is passed to `query.bind()`, in left-to-right order.

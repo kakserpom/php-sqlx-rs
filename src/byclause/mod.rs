@@ -185,7 +185,7 @@ pub struct ByClauseRenderedField {
 impl ByClauseRendered {
     /// Returns whether the rendered clause is empty.
     #[must_use]
-    #[inline(always)]
+    #[inline]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()
     }

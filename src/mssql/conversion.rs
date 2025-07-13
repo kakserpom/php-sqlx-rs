@@ -80,9 +80,9 @@ impl Conversion for MssqlRow {
                 ArrayKey::Long(i64::from(v))
             }
 
-            "TINYINT" => ArrayKey::Long(self.try_get::<u8, _>(column_ordinal)? as i64),
-            "SMALLINT" => ArrayKey::Long(self.try_get::<i16, _>(column_ordinal)? as i64),
-            "INT" | "INTEGER" => ArrayKey::Long(self.try_get::<i32, _>(column_ordinal)? as i64),
+            "TINYINT" => ArrayKey::Long(i64::from(self.try_get::<u8, _>(column_ordinal)?)),
+            "SMALLINT" => ArrayKey::Long(i64::from(self.try_get::<i16, _>(column_ordinal)?)),
+            "INT" | "INTEGER" => ArrayKey::Long(i64::from(self.try_get::<i32, _>(column_ordinal)?)),
             "BIGINT" => ArrayKey::Long(self.try_get::<i64, _>(column_ordinal)?),
 
             "DECIMAL" | "NUMERIC" | "MONEY" | "SMALLMONEY" => {

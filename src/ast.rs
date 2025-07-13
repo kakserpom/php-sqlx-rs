@@ -84,7 +84,6 @@ pub struct RenderingSettings {
     pub placeholder_at_sign: bool,
 }
 
-
 impl Ast {
     /// Parse an SQL string with embedded optional blocks `{{ ... }}`, named
     /// placeholders (`$name`, `:name`), and positional `?` markers. Ignores
@@ -490,11 +489,6 @@ impl Ast {
         K: Into<String>,
         V: Into<ParameterValue>,
     {
-        #[cfg(test)]
-        {
-            println!("AST = {:?}", self);
-            println!("VALUES = {:?}", values);
-        }
         fn walk(
             node: &Ast,
             values: &ParamsMap,
@@ -518,8 +512,13 @@ impl Ast {
                     if let Some(val) = values.get(name) {
                         match val {
                             ParameterValue::SelectClauseRendered(columns) => {
-                                for (i, SelectClauseRenderedColumn { column: field, expression }) in
-                                    columns.__inner.iter().enumerate()
+                                for (
+                                    i,
+                                    SelectClauseRenderedColumn {
+                                        column: field,
+                                        expression,
+                                    },
+                                ) in columns.__inner.iter().enumerate()
                                 {
                                     if i > 0 {
                                         sql.push_str(", ");
@@ -687,7 +686,11 @@ impl Ast {
             }
             Ok(())
         }
-
+        #[cfg(test)]
+        {
+            println!("AST = {self:?}");
+            println!("VALUES = {values:?}");
+        }
         let values: ParamsMap = values
             .into_iter()
             .map(|(k, v)| {

@@ -3,19 +3,22 @@ use crate::ast::{Ast, ParsingSettings, RenderingSettings};
 use crate::byclause::{ByClause, ByClauseColumnDefinition};
 use crate::paginateclause::PaginateClause;
 use crate::paramvalue::ParamsMap;
-use crate::postgres::inner::{COLUMN_BACKTICKS, COMMENT_HASH, PLACEHOLDER_DOLLAR_SIGN, ESCAPING_DOUBLE_SINGLE_QUOTES, PLACEHOLDER_AT_SIGN};
+use crate::postgres::inner::{
+    COLUMN_BACKTICKS, COMMENT_HASH, ESCAPING_DOUBLE_SINGLE_QUOTES, PLACEHOLDER_AT_SIGN,
+    PLACEHOLDER_DOLLAR_SIGN,
+};
 
-const PARSING_SETTINGS: LazyLock<ParsingSettings> = LazyLock::new(|| ParsingSettings {
+const PARSING_SETTINGS: ParsingSettings = ParsingSettings {
     collapsible_in_enabled: true,
     escaping_double_single_quotes: ESCAPING_DOUBLE_SINGLE_QUOTES,
     comment_hash: COMMENT_HASH,
-});
+};
 
-const RENDERING_SETTINGS: LazyLock<RenderingSettings> = LazyLock::new(|| RenderingSettings {
+const RENDERING_SETTINGS: RenderingSettings = RenderingSettings {
     column_backticks: COLUMN_BACKTICKS,
     placeholder_dollar_sign: PLACEHOLDER_DOLLAR_SIGN,
     placeholder_at_sign: PLACEHOLDER_AT_SIGN,
-});
+};
 
 fn into_ast(sql: &str) -> Ast {
     Ast::parse(sql, &PARSING_SETTINGS).expect("failed to parse SQL statement")
@@ -29,7 +32,7 @@ fn test_named_and_positional() {
         required_placeholders,
     } = into_ast(sql)
     {
-        println!("{:#?}", required_placeholders);
+        println!("{required_placeholders:#?}");
         let names: Vec<&str> = branches
             .iter()
             .filter_map(|b| {
@@ -169,7 +172,7 @@ fn test_render_order_by_apply_empty() {
 fn test_in_clause_parsing() {
     let sql = "SELECT * FROM users WHERE status IN :statuses AND age NOT IN (:ages)";
     let ast = into_ast(sql);
-    println!("AST = {:#?}", ast);
+    println!("AST = {ast:#?}");
     let (q, p) = ast
         .render(
             [
@@ -210,7 +213,7 @@ fn test_in_clause_parsing() {
 fn test_parse_in_not_in_and_string() {
     let sql = "SELECT * FROM users WHERE name = 'O''Reilly' AND status IN (:statuses) AND age NOT IN (:ages)";
     let ast = into_ast(sql);
-    println!("AST = {:#?}", ast);
+    println!("AST = {ast:#?}");
     let Ast::Root {
         branches,
         required_placeholders,
@@ -252,7 +255,7 @@ fn test_parse_in_not_in_and_string() {
 fn test_parse_multi_in() {
     let sql = "SELECT * FROM users age IN (?, ?)";
     let ast = into_ast(sql);
-    println!("AST = {:#?}", ast);
+    println!("AST = {ast:#?}");
     let Ast::Root {
         required_placeholders,
         ..
@@ -267,7 +270,7 @@ fn test_parse_multi_in() {
 fn test_parse_required_in() {
     let sql = "SELECT * FROM users age IN (?/*required*/)";
     let ast = into_ast(sql);
-    println!("AST = {:#?}", ast);
+    println!("AST = {ast:#?}");
     let Ast::Root {
         required_placeholders,
         ..
@@ -282,7 +285,7 @@ fn test_parse_required_in() {
 fn test_pagination() {
     let sql = "SELECT * FROM users age ORDER BY id PAGINATE :pagination";
     let ast = into_ast(sql);
-    println!("AST = {:#?}", ast);
+    println!("AST = {ast:#?}");
     assert_eq!(
         ast,
         Ast::Root {
@@ -308,7 +311,7 @@ fn test_pagination() {
         ParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
     );
     let (sql, values) = ast.render(vals, &RENDERING_SETTINGS).unwrap();
-    println!("sql = {:#?}", sql);
+    println!("sql = {sql:#?}");
     assert_eq!(
         sql,
         "SELECT * FROM users age ORDER BY id LIMIT $1 OFFSET $2"

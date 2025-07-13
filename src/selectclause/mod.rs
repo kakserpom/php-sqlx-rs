@@ -56,7 +56,7 @@ impl SelectClause {
     }
 
     /// Internal helper that filters and maps provided column names
-    /// into a `SelectClauseRendered` structure based on defined_columns.
+    /// into a `SelectClauseRendered` structure based on `defined_columns`.
     #[must_use]
     pub fn internal_apply(&self, columns: Vec<String>) -> SelectClauseRendered {
         let rendered = columns
