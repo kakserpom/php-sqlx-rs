@@ -866,9 +866,9 @@ macro_rules! php_sqlx_impl_driver {
             ///
             pub fn begin(&self, callable: ZendCallable) -> PhpResult<()> {
                 self.driver_inner.begin()?;
-                let callbable_ret = callable.try_call(vec![self]);
+                let callable_ret = callable.try_call(vec![self]);
                 let tx = self.driver_inner.retrieve_ongoing_transaction().unwrap();
-                match callbable_ret {
+                match callable_ret {
                     Ok(value) => {
                         if value.is_false() {
                             $crate::RUNTIME
