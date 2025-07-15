@@ -17,7 +17,6 @@ use trim_in_place::TrimInPlace;
 /// Use with `ByClauseRendered` to safely inject into a query as a single placeholder.
 #[php_class]
 #[php(name = "Sqlx\\ByClause")]
-#[php(rename = "none")]
 pub struct ByClause {
     pub(crate) defined_columns: HashMap<String, Option<String>>,
 }
@@ -169,7 +168,6 @@ impl ByClause {
 #[derive(Clone, PartialEq, Debug)]
 #[php_class]
 #[php(name = "Sqlx\\ByClauseRendered")]
-#[php(rename = "none")]
 pub struct ByClauseRendered {
     pub(crate) __inner: Vec<ByClauseRenderedField>,
 }

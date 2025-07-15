@@ -9,7 +9,6 @@ use trim_in_place::TrimInPlace;
 /// to render validated column clauses from user input.
 #[php_class]
 #[php(name = "Sqlx\\SelectClause")]
-#[php(rename = "none")]
 pub struct SelectClause {
     /// Mapping of allowed column names to optional SQL expressions.
     pub(crate) defined_columns: HashMap<String, Option<String>>,
@@ -131,7 +130,6 @@ impl SelectClause {
 #[derive(Clone, PartialEq, Debug)]
 #[php_class]
 #[php(name = "Sqlx\\SelectClauseRendered")]
-#[php(rename = "none")]
 pub struct SelectClauseRendered {
     /// Inner list of rendered columns and optional expressions.
     pub(crate) __inner: Vec<SelectClauseRenderedColumn>,

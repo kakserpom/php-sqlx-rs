@@ -6,7 +6,6 @@ use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 /// based on a given page number and items-per-page values.
 #[php_class]
 #[php(name = "Sqlx\\PaginateClause")]
-#[php(rename = "none")]
 #[allow(clippy::struct_field_names)]
 pub struct PaginateClause {
     /// Minimum number of items allowed per page.
@@ -153,7 +152,6 @@ impl PaginateClause {
 #[derive(Clone, PartialEq, Debug)]
 #[php_class]
 #[php(name = "Sqlx\\PaginateClauseRendered")]
-#[php(rename = "none")]
 pub struct PaginateClauseRendered {
     /// Number of items to return (LIMIT).
     pub(crate) limit: i64,

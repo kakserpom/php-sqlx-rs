@@ -13,7 +13,6 @@ pub const LAZY_ROW_JSON_SIZE_THRESHOLD: usize = 4096;
 
 #[php_class]
 #[php(name = "Sqlx\\LazyRow")]
-#[php(rename = "none")]
 #[php(implements(ce = ce::arrayaccess, stub = "\\ArrayAccess"))]
 /// A PHP-accessible wrapper around a `zend_array` that lazily decodes JSON values.
 ///
@@ -136,7 +135,6 @@ impl LazyRow {
 
 #[php_class]
 #[php(name = "Sqlx\\LazyRowJson")]
-#[php(rename = "none")]
 /// A helper PHP class that holds raw JSON bytes for lazy decoding.
 ///
 /// When accessed, it will be parsed into a PHP value on demand.

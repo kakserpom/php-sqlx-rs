@@ -524,7 +524,7 @@ var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
 ## Notes
 
 - The AST cache reduces repeated parsing overhead and speeds up query rendering.
-- Supports both positional `?`, `$1`, `:1` and named `$param`, `:param` placeholders automatically.
+- Supports both positional `?`, `$1`, `:1` and named `$param`, `:param` placeholders interchangeably.
 
 ---
 

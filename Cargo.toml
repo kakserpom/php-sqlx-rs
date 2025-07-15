@@ -13,8 +13,8 @@ itertools = "0.14.0"
 parse_duration = "2.1.1"
 serde_json = "1.0.140"
 simd-json = { optional = true, version = "0.15.1" }
-#sqlx-oldapi = { path = "sqlx-oldapi", features = ["json", "runtime-tokio-rustls"] }
-sqlx-oldapi = { git = "https://github.com/kakserpom/sqlx-oldapi", branch = "mysqlvalueref_visibility", features = ["json", "runtime-tokio-rustls"] }
+#sqlx-oldapi = { path = "sqlx-oldapi", features = ["json", "runtime-tokio-rustls"] }`
+sqlx-oldapi = { git = "https://github.com/sqlpage/sqlx-oldapi", branch = "main", features = ["json", "runtime-tokio-rustls"] }
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"

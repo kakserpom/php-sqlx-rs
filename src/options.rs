@@ -43,7 +43,6 @@ impl Default for DriverInnerOptions {
 
 #[php_class]
 #[php(name = "Sqlx\\DriverOptions")]
-#[php(rename = "none")]
 pub struct DriverOptions {}
 #[php_impl]
 impl DriverOptions {

@@ -12,7 +12,6 @@ macro_rules! php_sqlx_impl_prepared_query {
         /// A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
         #[php_class]
         #[php(name = $class)]
-        #[php(rename = "none")]
         pub struct $struct {
             pub(crate) query: String,
             pub(crate) driver_inner: Arc<$driver_inner>,

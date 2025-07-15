@@ -27,7 +27,6 @@ macro_rules! php_sqlx_impl_driver {
         /// This class supports prepared queries, persistent connections, and augmented SQL.
         #[php_class]
         #[php(name = $className)]
-        #[php(rename = "none")]
         #[derive(Clone)]
         pub struct $struct {
             pub driver_inner: Arc<$inner>,
