@@ -1,6 +1,4 @@
-use crate::byclause::ByClauseRenderedField;
-use crate::paramvalue::{ParameterValue, ParamsMap, Placeholder};
-use crate::selectclause::SelectClauseRenderedColumn;
+use crate::paramvalue::{ParamVecWriteSqlTo, ParameterValue, ParamsMap, Placeholder};
 use crate::utils::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use itertools::Itertools;
@@ -511,55 +509,11 @@ impl Ast {
                     }
                     if let Some(val) = values.get(name) {
                         match val {
-                            ParameterValue::SelectClauseRendered(columns) => {
-                                for (
-                                    i,
-                                    SelectClauseRenderedColumn {
-                                        column: field,
-                                        expression,
-                                    },
-                                ) in columns.__inner.iter().enumerate()
-                                {
-                                    if i > 0 {
-                                        sql.push_str(", ");
-                                    }
-                                    if let Some(expression) = expression {
-                                        if rendering_settings.column_backticks {
-                                            write!(sql, "{expression} AS `{field}`")?;
-                                        } else {
-                                            write!(sql, "{expression} AS \"{field}\"")?;
-                                        }
-                                    } else if rendering_settings.column_backticks {
-                                        write!(sql, "`{field}`")?;
-                                    } else {
-                                        write!(sql, "\"{field}\"")?;
-                                    }
-                                }
+                            ParameterValue::SelectClauseRendered(scr) => {
+                                scr.write_sql_to(sql, &rendering_settings)?;
                             }
                             ParameterValue::ByClauseRendered(by) => {
-                                for (
-                                    i,
-                                    ByClauseRenderedField {
-                                        expression_or_identifier,
-                                        is_expression,
-                                        descending_order,
-                                    },
-                                ) in by.__inner.iter().enumerate()
-                                {
-                                    if i > 0 {
-                                        sql.push_str(", ");
-                                    }
-                                    if *is_expression {
-                                        sql.push_str(expression_or_identifier);
-                                    } else if rendering_settings.column_backticks {
-                                        write!(sql, "`{expression_or_identifier}`")?;
-                                    } else {
-                                        write!(sql, "\"{expression_or_identifier}\"")?;
-                                    }
-                                    if *descending_order {
-                                        sql.push_str(" DESC");
-                                    }
-                                }
+                                by.write_sql_to(sql, &rendering_settings)?;
                             }
                             ParameterValue::Array(arr) => {
                                 for (i, item) in arr.iter().enumerate() {
@@ -610,19 +564,7 @@ impl Ast {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.push_str(expr);
                         sql.push_str(" IN (");
-                        for (i, item) in arr.iter().enumerate() {
-                            if i > 0 {
-                                sql.push_str(", ");
-                            }
-                            out_vals.push(item.clone());
-                            if rendering_settings.placeholder_dollar_sign {
-                                write!(sql, "${}", out_vals.len())?;
-                            } else if rendering_settings.placeholder_at_sign {
-                                write!(sql, "@p{}", out_vals.len())?;
-                            } else {
-                                sql.push('?');
-                            }
-                        }
+                        arr.write_sql_to(sql, out_vals, rendering_settings)?;
                         sql.push(')');
                     }
                     _ => {
@@ -633,19 +575,7 @@ impl Ast {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() * 2 + (arr.len() - 1) * 2);
                         write!(sql, "{expr} NOT IN (")?;
-                        for (i, item) in arr.iter().enumerate() {
-                            if i > 0 {
-                                sql.push_str(", ");
-                            }
-                            out_vals.push(item.clone());
-                            if rendering_settings.placeholder_dollar_sign {
-                                write!(sql, "${}", out_vals.len())?;
-                            } else if rendering_settings.placeholder_at_sign {
-                                write!(sql, "@p{}", out_vals.len())?;
-                            } else {
-                                sql.push('?');
-                            }
-                        }
+                        arr.write_sql_to(sql, out_vals, rendering_settings)?;
                         sql.push(')');
                     }
                     _ => {

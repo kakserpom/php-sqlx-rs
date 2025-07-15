@@ -1,9 +1,11 @@
+use crate::ast::RenderingSettings;
 use crate::utils::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
 use trim_in_place::TrimInPlace;
+use std::fmt::Write;
 
 /// Represents a dynamic ORDER BY / GROUP BY clause generator.
 ///
@@ -186,6 +188,38 @@ impl ByClauseRendered {
     #[inline]
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()
+    }
+    
+    #[inline]
+    pub(crate) fn write_sql_to(
+        &self,
+        sql: &mut String,
+        rendering_settings: &RenderingSettings,
+    ) -> anyhow::Result<()> {
+        for (
+            i,
+            ByClauseRenderedField {
+                expression_or_identifier,
+                is_expression,
+                descending_order,
+            },
+        ) in self.__inner.iter().enumerate()
+        {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+            if *is_expression {
+                sql.push_str(expression_or_identifier);
+            } else if rendering_settings.column_backticks {
+                write!(sql, "`{expression_or_identifier}`")?;
+            } else {
+                write!(sql, "\"{expression_or_identifier}\"")?;
+            }
+            if *descending_order {
+                sql.push_str(" DESC");
+            }
+        }
+        Ok(())
     }
 }
 

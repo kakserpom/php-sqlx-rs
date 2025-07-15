@@ -1,3 +1,4 @@
+use crate::ast::RenderingSettings;
 use crate::byclause::ByClauseRendered;
 use crate::paginateclause::PaginateClauseRendered;
 use crate::selectclause::SelectClauseRendered;
@@ -10,6 +11,7 @@ use sqlx_oldapi::database::HasArguments;
 use sqlx_oldapi::query::Query;
 use sqlx_oldapi::{Database, Encode, Type};
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write;
 
 /// A type alias representing the name of a placeholder in SQL templates.
 pub type Placeholder = String;
@@ -56,6 +58,41 @@ impl ParameterValue {
             | Self::PaginateClauseRendered(_) => false,
             Self::Null => true,
         }
+    }
+}
+
+pub trait ParamVecWriteSqlTo {
+    fn write_sql_to(
+        &self,
+        sql: &mut String,
+        out_vals: &mut Vec<ParameterValue>,
+        rendering_settings: &RenderingSettings,
+    ) -> anyhow::Result<()>;
+}
+
+impl ParamVecWriteSqlTo for Vec<ParameterValue> {
+    #[inline]
+    fn write_sql_to(
+        &self,
+        sql: &mut String,
+        out_vals: &mut Vec<ParameterValue>,
+        rendering_settings: &RenderingSettings,
+    ) -> anyhow::Result<()> {
+        out_vals.reserve_exact(self.len());
+        for (i, item) in self.iter().enumerate() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+            out_vals.push(item.clone());
+            if rendering_settings.placeholder_dollar_sign {
+                write!(sql, "${}", out_vals.len())?;
+            } else if rendering_settings.placeholder_at_sign {
+                write!(sql, "@p{}", out_vals.len())?;
+            } else {
+                sql.push('?');
+            }
+        }
+        Ok(())
     }
 }
 

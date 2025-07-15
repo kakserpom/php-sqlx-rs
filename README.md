@@ -220,13 +220,13 @@ A helper class for safe `SELECT` clauses from user input.
 $select = new Sqlx\SelectClause([
     'id',
     'created_at',
-    'name' => ,
+    'name',
     'num_posts' => 'COUNT(posts.*)'
 ]);
 
 // Equivalent to: SELECT `id`, `name`, COUNT(posts.*) AS `num_posts` FROM users
 $rows = $driver->queryAll('SELECT :select FROM users', [
-  'select' => $select(['id','name', 'num_posts])
+  'select' => $select(['id','name', 'num_posts'])
 ]);
 ```
 

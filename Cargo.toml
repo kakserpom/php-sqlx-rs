@@ -10,6 +10,7 @@ dashmap = "6.1.0"
 ext-php-rs = { git = "https://github.com/davidcole1340/ext-php-rs", branch = "master", features = ["anyhow"] }
 #ext-php-rs = {path = "ext-php-rs", features = ["anyhow"] }
 itertools = "0.14.0"
+mimalloc = { version = "0.1.47", optional = true }
 parse_duration = "2.1.1"
 serde_json = "1.0.140"
 simd-json = { optional = true, version = "0.15.1" }
@@ -20,20 +21,22 @@ tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
 
 [features]
-experimental = []
 default = [
     "postgres",
-    "mysql",
-    "mssql",
+    #"mysql",
+    #"mssql",
     "lazy-row",
     "experimental",
-    "simd-json"
+    "simd-json",
+    "mimalloc"
 ]
 postgres = ["sqlx-oldapi/postgres"]
 mysql = ["sqlx-oldapi/mysql"]
 mssql = ["sqlx-oldapi/mssql"]
 simd-json = ["simd-json/default"]
 lazy-row = []
+experimental = []
+mimalloc = ["dep:mimalloc"]
 
 [dev-dependencies]
 criterion = "0.6.0"

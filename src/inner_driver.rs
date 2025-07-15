@@ -123,6 +123,16 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
             }
 
+            pub fn parse_query(&self, query: &str) -> anyhow::Result<Ast> {
+                if let Some(ast) = self.ast_cache.get(query) {
+                    Ok(ast)
+                } else {
+                    let ast = Ast::parse(query, &self.parsing_settings)?;
+                    self.ast_cache.insert(query.to_owned(), ast.clone());
+                    Ok(ast)
+                }
+            }
+
             /// Executes an SQL query and returns a single column from the first row.
             ///
             /// # Arguments
