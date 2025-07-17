@@ -67,7 +67,6 @@ macro_rules! php_sqlx_impl_query_builder {
         use std::collections::BTreeMap;
         use std::collections::BTreeSet;
         use std::collections::HashMap;
-        use std::fmt::Debug;
         use std::fmt::Write;
         use std::sync::Arc;
         use $crate::paramvalue::ParameterValue;
@@ -88,11 +87,8 @@ macro_rules! php_sqlx_impl_query_builder {
             pub(crate) parameters: BTreeMap<String, ParameterValue>,
         }
 
-        enum ParameterValueOrBuilder<'a> {
-            ParameterValue(ParameterValue),
-            Builder((String, BTreeMap<String, ParameterValue>)),
-        }
-        impl FromZval<'_> for ParameterValueOrBuilder<'_> {
+        struct ParameterValueWrapper(ParameterValue);
+        impl FromZval<'_> for ParameterValueWrapper {
             const TYPE: DataType = DataType::Mixed;
             fn from_zval(zval: &Zval) -> Option<Self> {
                 if let Some(builder) = zval
@@ -100,20 +96,17 @@ macro_rules! php_sqlx_impl_query_builder {
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
                     .and_then(|x| x.obj.as_ref())
                 {
-                    Some(Self::Builder((builder.query, builder.parameters.clone())))
+                    Some(Self(ParameterValue::Builder((builder.query.clone(), builder.parameters.clone()))))
                 } else if let Some(pv) = ParameterValue::from_zval(zval) {
-                    Some(Self::ParameterValue(pv))
+                    Some(Self(pv))
                 } else {
                     None
                 }
             }
         }
-        impl Into<ParameterValue> for ParameterValueOrBuilder<'_> {
+        impl Into<ParameterValue> for ParameterValueWrapper {
             fn into(self) -> ParameterValue {
-                match self {
-                    ParameterValueOrBuilder::ParameterValue(value) => value,
-                    ParameterValueOrBuilder::Builder(builder) => builder,
-                }
+                self.0
             }
         }
 
@@ -243,7 +236,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 prefix: &str,
             ) -> anyhow::Result<()>
             where
-                I: IntoIterator<Item = (K, V)> + Debug,
+                I: IntoIterator<Item = (K, V)>,
                 K: Into<String>,
                 V: Into<ParameterValue>,
             {
@@ -261,11 +254,12 @@ macro_rules! php_sqlx_impl_query_builder {
                 prefix: &str,
             ) -> anyhow::Result<()>
             where
-                I: IntoIterator<Item = (K, V)> + Debug,
+                I: IntoIterator<Item = (K, V)>,
                 K: Into<String>,
                 V: Into<ParameterValue>,
             {
                 fn walk(
+                    driver_inner: &Arc<$driver_inner>,
                     node: &Ast,
                     sql: &mut String,
                     placeholders: &mut BTreeSet<String>,
@@ -278,6 +272,7 @@ macro_rules! php_sqlx_impl_query_builder {
                         Ast::Root { branches, .. } | Ast::Nested(branches) => {
                             for b in branches {
                                 walk(
+                                    driver_inner,
                                     b,
                                     sql,
                                     placeholders,
@@ -290,21 +285,37 @@ macro_rules! php_sqlx_impl_query_builder {
                         }
                         Ast::Sql(s) => sql.push_str(s),
                         Ast::Placeholder(name) => {
-                            let new_name = resolve_placeholder_name(
-                                name,
-                                placeholders,
-                                positional_index,
-                                prefix,
-                            );
-                            parameters_bucket.insert(
-                                new_name.clone(),
-                                param_map.remove(name).unwrap_or(ParameterValue::Null),
-                            );
-                            write!(sql, ":{new_name}")?;
+                            let param = param_map.remove(name);
+                            if let Some(ParameterValue::Builder((part, mut params))) = param {
+                                 sql.push('(');
+                                 walk(
+                                    driver_inner,
+                                    &driver_inner.parse_query(&part)?,
+                                    sql,
+                                    placeholders,
+                                    &mut params,
+                                    parameters_bucket,
+                                    positional_index,
+                                    prefix,
+                                )?;
+                                sql.push(')');
+                            } else {
+                                let new_name = resolve_placeholder_name(
+                                    name,
+                                    placeholders,
+                                    positional_index,
+                                    prefix,
+                                );
+                                if let Some(value) = param {
+                                    parameters_bucket.insert(new_name.clone(), value);
+                                }
+                                write!(sql, ":{new_name}")?;
+                            }
                         }
                         Ast::ConditionalBlock { branches, .. } => {
                             for b in branches {
                                 walk(
+                                    driver_inner,
                                     b,
                                     sql,
                                     placeholders,
@@ -323,12 +334,9 @@ macro_rules! php_sqlx_impl_query_builder {
                                 positional_index,
                                 prefix,
                             );
-                            parameters_bucket.insert(
-                                new_name.clone(),
-                                param_map
-                                    .remove(placeholder)
-                                    .unwrap_or(ParameterValue::Null),
-                            );
+                            if let Some(value) = param_map.remove(placeholder) {
+                                parameters_bucket.insert(new_name.clone(), value);
+                            }
                             let keyword = if matches!(node, Ast::InClause { .. }) {
                                 "IN"
                             } else {
@@ -343,12 +351,9 @@ macro_rules! php_sqlx_impl_query_builder {
                                 positional_index,
                                 prefix,
                             );
-                            parameters_bucket.insert(
-                                new_name.clone(),
-                                param_map
-                                    .remove(placeholder)
-                                    .unwrap_or(ParameterValue::Null),
-                            );
+                            if let Some(value) = param_map.remove(placeholder) {
+                                parameters_bucket.insert(new_name.clone(), value);
+                            }
                             write!(sql, "PAGINATE :{}", new_name)?;
                         }
                     }
@@ -403,6 +408,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     .unwrap_or_default();
 
                 walk(
+                    &self.driver_inner,
                     &ast,
                     &mut self.query,
                     &mut self.placeholders,
@@ -735,7 +741,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn _where<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 r#where: &Zval,
-                parameters: Option<HashMap<String, ParameterValueOrBuilder>>,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if let Some(part) = r#where.str() {
                     self_.query.push_str("\nWHERE ");

@@ -506,10 +506,9 @@ impl Ast {
                 Ast::Sql(s) => sql.push_str(s),
                 Ast::Placeholder(name) => {
                     let new_name = resolve_placeholder_name(name, placeholders, index);
-                    parameters_bucket.insert(
-                        new_name.clone(),
-                        param_map.remove(name).unwrap_or(ParameterValue::Null),
-                    );
+                    if let Some(value) = param_map.remove(name) {
+                        parameters_bucket.insert(new_name.clone(), value);
+                    }
                     write!(sql, ":{new_name}")?;
                 }
                 Ast::ConditionalBlock { branches, .. } => {
@@ -519,12 +518,9 @@ impl Ast {
                 }
                 Ast::InClause { expr, placeholder } | Ast::NotInClause { expr, placeholder } => {
                     let new_name = resolve_placeholder_name(placeholder, placeholders, index);
-                    parameters_bucket.insert(
-                        new_name.clone(),
-                        param_map
-                            .remove(placeholder)
-                            .unwrap_or(ParameterValue::Null),
-                    );
+                    if let Some(value) = param_map.remove(placeholder) {
+                        parameters_bucket.insert(new_name.clone(), value);
+                    }
                     let keyword = if matches!(node, Ast::InClause { .. }) {
                         "IN"
                     } else {
@@ -534,12 +530,9 @@ impl Ast {
                 }
                 Ast::PaginateClause { placeholder } => {
                     let new_name = resolve_placeholder_name(placeholder, placeholders, index);
-                    parameters_bucket.insert(
-                        new_name.clone(),
-                        param_map
-                            .remove(placeholder)
-                            .unwrap_or(ParameterValue::Null),
-                    );
+                    if let Some(value) = param_map.remove(placeholder) {
+                        parameters_bucket.insert(new_name.clone(), value);
+                    }
                     write!(sql, "PAGINATE :{new_name}")?; // placeholder logic
                 }
             }
