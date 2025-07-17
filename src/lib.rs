@@ -59,6 +59,7 @@ pub fn module(module: ModuleBuilder) -> ModuleBuilder {
     let module = selectclause::build(module);
     let module = byclause::build(module);
     let module = paginateclause::build(module);
+    let module = query_builder::build(module);
 
     #[cfg(feature = "mysql")]
     let module = mysql::build(module);

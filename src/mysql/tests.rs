@@ -1,28 +1,10 @@
-use super::*;
-use crate::ast::{Ast, ParsingSettings, RenderingSettings};
+use crate::ast::Ast;
 use crate::byclause::{ByClause, ByClauseColumnDefinition};
-use crate::mysql::inner::{
-    COLUMN_BACKTICKS, COMMENT_HASH, ESCAPING_DOUBLE_SINGLE_QUOTES, PLACEHOLDER_AT_SIGN,
-    PLACEHOLDER_DOLLAR_SIGN,
-};
+use crate::mysql::inner::SETTINGS;
 use crate::paginateclause::PaginateClause;
-use crate::paramvalue::ParamsMap;
-
-const PARSING_SETTINGS: ParsingSettings = ParsingSettings {
-    collapsible_in_enabled: true,
-    escaping_double_single_quotes: ESCAPING_DOUBLE_SINGLE_QUOTES,
-    comment_hash: COMMENT_HASH,
-};
-
-const RENDERING_SETTINGS: RenderingSettings = RenderingSettings {
-    column_backticks: COLUMN_BACKTICKS,
-    placeholder_dollar_sign: PLACEHOLDER_DOLLAR_SIGN,
-  
-    placeholder_at_sign: PLACEHOLDER_AT_SIGN,
-};
-
+use crate::paramvalue::{ParameterValue, ParamsMap};
 fn into_ast(sql: &str) -> Ast {
-    Ast::parse(sql, &PARSING_SETTINGS).expect("failed to parse SQL statement")
+    Ast::parse(sql, &SETTINGS).expect("failed to parse SQL statement")
 }
 #[test]
 fn test_named_and_positional() {
@@ -56,9 +38,7 @@ fn test_render_basic() {
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), "active".into());
     vals.insert("id".into(), "42".into());
-    let (query, params) = ast
-        .render(vals, &RENDERING_SETTINGS)
-        .expect("Rendering failed");
+    let (query, params) = ast.render(vals, &SETTINGS).expect("Rendering failed");
     assert_eq!(query, "SELECT * FROM users WHERE status = ? AND id = ?");
     assert_eq!(params, vec!["active".into(), "42".into()]);
 }
@@ -68,7 +48,7 @@ fn test_render_optional_skip() {
     let sql = "SELECT * FROM users WHERE {{status = $status AND}} id = $id";
     let ast = into_ast(sql);
     let (query, params) = ast
-        .render([("id", 100)], &RENDERING_SETTINGS)
+        .render([("id", 100)], &SETTINGS)
         .expect("Rendering failed");
     assert_eq!(query, "SELECT * FROM users WHERE id = ?");
     assert_eq!(params, vec![100.into()]);
@@ -88,9 +68,7 @@ fn test_render_var_types() {
         ParameterValue::Array(vec![ParameterValue::Int(1), ParameterValue::Int(2)]),
     );
     vals.insert("data".into(), ParameterValue::Str("xyz".into()));
-    let (q, params) = ast
-        .render(vals, &RENDERING_SETTINGS)
-        .expect("Rendering failed");
+    let (q, params) = ast.render(vals, &SETTINGS).expect("Rendering failed");
     assert_eq!(
         q,
         "SELECT * FROM table WHERE id = ? AND active = ? AND scores IN (?, ?) AND data = ?"
@@ -109,14 +87,14 @@ fn test_render_var_types() {
 
 #[test]
 fn test_render_order_by_apply() {
-    let ob = ByClause::new([
+    let ob = ByClause::allowed([
         ("name", "users.name"),
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
     ])
     .unwrap();
 
-    let rendered = ob.internal_apply(vec![
+    let rendered = ob.render(vec![
         ByClauseColumnDefinition::Short("name".into()),
         ByClauseColumnDefinition::Full(vec!["posts".into(), ByClause::_DESC.into()]),
     ]);
@@ -126,7 +104,7 @@ fn test_render_order_by_apply() {
     let (query, params) = ast
         .render(
             [("order_by", ParameterValue::ByClauseRendered(rendered))],
-            &RENDERING_SETTINGS,
+            &SETTINGS,
         )
         .expect("Rendering failed");
 
@@ -139,14 +117,14 @@ fn test_render_order_by_apply() {
 
 #[test]
 fn test_render_order_by_apply_empty() {
-    let ob = ByClause::new([
+    let ob = ByClause::allowed([
         ("name", "users.name"),
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
     ])
     .unwrap();
 
-    let rendered = ob.internal_apply(vec![]);
+    let rendered = ob.render(vec![]);
 
     let sql =
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id {{ ORDER BY $order_by }}";
@@ -154,7 +132,7 @@ fn test_render_order_by_apply_empty() {
     let (query, params) = ast
         .render(
             [("order_by", ParameterValue::ByClauseRendered(rendered))],
-            &RENDERING_SETTINGS,
+            &SETTINGS,
         )
         .expect("Rendering failed");
 
@@ -250,7 +228,7 @@ fn test_pagination() {
         "pagination".into(),
         ParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
     );
-    let (sql, values) = ast.render(vals, &RENDERING_SETTINGS).unwrap();
+    let (sql, values) = ast.render(vals, &SETTINGS).unwrap();
     println!("sql = {sql:#?}");
     assert_eq!(sql, "SELECT * FROM users age ORDER BY id LIMIT ? OFFSET ?");
     assert_eq!(

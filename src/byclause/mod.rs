@@ -1,11 +1,11 @@
-use crate::ast::RenderingSettings;
 use crate::utils::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
-use trim_in_place::TrimInPlace;
 use std::fmt::Write;
+use trim_in_place::TrimInPlace;
+use crate::ast::Settings;
 
 /// Represents a dynamic ORDER BY / GROUP BY clause generator.
 ///
@@ -20,7 +20,7 @@ use std::fmt::Write;
 #[php_class]
 #[php(name = "Sqlx\\ByClause")]
 pub struct ByClause {
-    pub(crate) defined_columns: HashMap<String, Option<String>>,
+    pub(crate) allowed_columns: HashMap<String, Option<String>>,
 }
 
 /// A user-defined ORDER BY column configuration.
@@ -49,13 +49,13 @@ impl ByClause {
     ///
     /// # Errors
     /// Returns an error if a numeric key maps to an invalid SQL identifier.
-    pub fn new<K, V>(defined_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
+    pub fn allowed<K, V>(allowed_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
     {
         Ok(Self {
-            defined_columns: defined_columns.into_iter().try_fold(
+            allowed_columns: allowed_columns.into_iter().try_fold(
                 HashMap::<String, Option<String>>::new(),
                 |mut map, (key, value)| -> anyhow::Result<_> {
                     let key: String = key.into();
@@ -84,7 +84,7 @@ impl ByClause {
     ///
     /// Unknown or disallowed fields are ignored silently.
     #[must_use]
-    pub fn internal_apply(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
+    pub fn render(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
         ByClauseRendered {
             __inner: columns
                 .into_iter()
@@ -96,7 +96,7 @@ impl ByClause {
                             matches!(vec.get(1), Some(str) if str.trim().eq_ignore_ascii_case(Self::_DESC))
                         ),
                     };
-                    self.defined_columns
+                    self.allowed_columns
                         .get(field.trim_in_place())
                         .map(|definition| {
                             if let Some(expression) = definition {
@@ -129,7 +129,7 @@ impl ByClause {
     /// Constructs a `ByClause` helper with allowed sortable columns.
     ///
     /// # Arguments
-    /// - `defined_columns`: Map of allowed sort columns (key = user input, value = SQL expression)
+    /// - `allowed_columns`: Map of allowed sort columns (key = user input, value = SQL expression)
     ///
     /// # Example
     /// ```php
@@ -139,14 +139,14 @@ impl ByClause {
     ///     "total_posts" => "COUNT(posts.*)"
     /// ]);
     /// ```
-    pub fn __construct(defined_columns: HashMap<String, String>) -> anyhow::Result<Self> {
-        Self::new(defined_columns)
+    pub fn __construct(allowed_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+        Self::allowed(allowed_columns)
     }
 
     /// `__invoke` magic for apply().
     #[must_use]
     pub fn __invoke(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
-        self.internal_apply(columns)
+        self.render(columns)
     }
 
     /// Applies ordering rules to a user-defined input.
@@ -161,8 +161,8 @@ impl ByClause {
     /// # Notes
     /// Unknown or disallowed fields are silently ignored.
     #[must_use]
-    pub fn apply(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
-        self.internal_apply(columns)
+    pub fn input(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
+        self.render(columns)
     }
 }
 
@@ -189,12 +189,12 @@ impl ByClauseRendered {
     pub(crate) fn is_empty(&self) -> bool {
         self.__inner.is_empty()
     }
-    
+
     #[inline]
     pub(crate) fn write_sql_to(
         &self,
         sql: &mut String,
-        rendering_settings: &RenderingSettings,
+        settings: &Settings,
     ) -> anyhow::Result<()> {
         for (
             i,
@@ -210,7 +210,7 @@ impl ByClauseRendered {
             }
             if *is_expression {
                 sql.push_str(expression_or_identifier);
-            } else if rendering_settings.column_backticks {
+            } else if settings.column_backticks {
                 write!(sql, "`{expression_or_identifier}`")?;
             } else {
                 write!(sql, "\"{expression_or_identifier}\"")?;

@@ -7,8 +7,8 @@ description = "A modern feature-rich SQL driver for PHP."
 [dependencies]
 anyhow = "1.0.98"
 dashmap = "6.1.0"
-ext-php-rs = { git = "https://github.com/davidcole1340/ext-php-rs", branch = "master", features = ["anyhow"] }
-#ext-php-rs = {path = "ext-php-rs", features = ["anyhow"] }
+#ext-php-rs = { git = "https://github.com/davidcole1340/ext-php-rs", branch = "master", features = ["anyhow"] }
+ext-php-rs = {path = "ext-php-rs", features = ["anyhow"] }
 itertools = "0.14.0"
 mimalloc = { version = "0.1.47", optional = true }
 parse_duration = "2.1.1"
@@ -19,12 +19,13 @@ sqlx-oldapi = { git = "https://github.com/sqlpage/sqlx-oldapi", branch = "main",
 threadsafe-lru = "0.1.2"
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
+serde = { version = "1.0.219", features = ["derive"] }
 
 [features]
 default = [
     "postgres",
-    #"mysql",
-    #"mssql",
+    "mysql",
+    "mssql",
     "lazy-row",
     "experimental",
     "simd-json",

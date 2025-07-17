@@ -1,10 +1,10 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use php_sqlx::ast::{Ast, ParsingSettings, RenderingSettings};
+use php_sqlx::ast::{Ast, Settings, RenderingSettings};
 use std::collections::HashMap;
 use std::hint::black_box;
 
 // Postgres settings
-const PARSING_SETTINGS: ParsingSettings = ParsingSettings {
+const PARSING_SETTINGS: Settings = Settings {
     collapsible_in_enabled: true,
     escaping_double_single_quotes: false,
     comment_hash: false,
@@ -13,6 +13,7 @@ const RENDERING_SETTINGS: RenderingSettings = RenderingSettings {
     column_backticks: false,
     placeholder_dollar_sign: true,
     placeholder_at_sign: false,
+    max_placeholders: u16::MAX as usize,
 };
 
 const QUERY_SMALL: &str = "SELECT id, name, meta

@@ -1,4 +1,4 @@
-use crate::ast::RenderingSettings;
+use crate::ast::Settings;
 use crate::byclause::ByClauseRendered;
 use crate::paginateclause::PaginateClauseRendered;
 use crate::selectclause::SelectClauseRendered;
@@ -7,6 +7,7 @@ use ext_php_rs::convert::{FromZval, IntoZval};
 use ext_php_rs::flags::DataType;
 use ext_php_rs::types::{ZendClassObject, ZendHashTable, Zval};
 use itertools::Itertools;
+use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
 use sqlx_oldapi::database::HasArguments;
 use sqlx_oldapi::query::Query;
 use sqlx_oldapi::{Database, Encode, Type};
@@ -38,6 +39,47 @@ pub enum ParameterValue {
     PaginateClauseRendered(PaginateClauseRendered),
 }
 
+impl Serialize for ParameterValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ParameterValue::Null => serializer.serialize_none(),
+            ParameterValue::Str(s) => serializer.serialize_str(s),
+            ParameterValue::Int(i) => serializer.serialize_i64(*i),
+            ParameterValue::Float(f) => serializer.serialize_f64(*f),
+            ParameterValue::Bool(b) => serializer.serialize_bool(*b),
+
+            ParameterValue::Array(arr) => {
+                let mut seq = serializer.serialize_seq(Some(arr.len()))?;
+                for elem in arr {
+                    seq.serialize_element(elem)?;
+                }
+                seq.end()
+            }
+
+            ParameterValue::Object(map) => {
+                let mut m = serializer.serialize_map(Some(map.len()))?;
+                for (k, v) in map {
+                    m.serialize_entry(k, v)?;
+                }
+                m.end()
+            }
+
+            ParameterValue::ByClauseRendered(val) => serializer.serialize_str(&format!("{val:?}")),
+
+            ParameterValue::SelectClauseRendered(val) => {
+                serializer.serialize_str(&format!("{val:?}"))
+            }
+
+            ParameterValue::PaginateClauseRendered(val) => {
+                serializer.serialize_str(&format!("{val:?}"))
+            }
+        }
+    }
+}
+
 impl ParameterValue {
     /// Checks whether the value is considered "empty".
     ///
@@ -59,6 +101,79 @@ impl ParameterValue {
             Self::Null => true,
         }
     }
+
+    /// Quotes the value as a SQL literal string, number, or boolean,
+    /// escaping special characters where appropriate, based on the given `Settings`.
+    ///
+    /// This is used for generating safe inline SQL expressions (e.g. for debugging or logging),
+    /// but **should not** be used for query execution — always use placeholders and bind values instead.
+    ///
+    /// # Errors
+    /// Return Err if the value is a structured clause or an unsupported type.
+    pub fn quote(&self, settings: &Settings) -> anyhow::Result<String> {
+        fn escape_sql_string(input: &str, settings: &Settings) -> String {
+            let mut out = String::with_capacity(input.len() + 8);
+            for c in input.chars() {
+                match c {
+                    '\'' => out.push_str("''"),
+                    '\\' if settings.escape_backslash => out.push_str("\\\\"),
+                    '\0' => out.push_str("\\0"),
+                    '\n' => out.push_str("\\n"),
+                    '\r' => out.push_str("\\r"),
+                    '\x1A' => out.push_str("\\x1A"), // Ctrl+Z
+                    _ => out.push(c),
+                }
+            }
+            out
+        }
+        Ok(match self {
+            ParameterValue::Null => "NULL".to_string(),
+
+            ParameterValue::Int(i) => i.to_string(),
+            ParameterValue::Float(f) => f.to_string(),
+
+            ParameterValue::Bool(b) => {
+                if settings.booleans_as_literals {
+                    if *b { "TRUE" } else { "FALSE" }.to_string()
+                } else {
+                    if *b { "1" } else { "0" }.to_string()
+                }
+            }
+
+            ParameterValue::Str(s) => {
+                let escaped = escape_sql_string(s, settings);
+                if settings.strings_as_ntext {
+                    format!("N'{escaped}'")
+                } else {
+                    format!("'{escaped}'")
+                }
+            }
+
+            ParameterValue::Array(values) => {
+                let elements = values
+                    .iter()
+                    .map(|v| v.quote(settings))
+                    .collect::<anyhow::Result<Vec<_>>>()?
+                    .join(", ");
+                format!("({elements})")
+            }
+
+            ParameterValue::Object(obj) => {
+                let json = serde_json::to_string(obj).unwrap_or_else(|_| "{}".to_string());
+                let quoted = escape_sql_string(&json, settings);
+                match settings.cast_json {
+                    Some(suffix) => format!("'{}' {}", quoted, suffix),
+                    None => format!("'{}'", quoted),
+                }
+            }
+
+            ParameterValue::ByClauseRendered(_)
+            | ParameterValue::SelectClauseRendered(_)
+            | ParameterValue::PaginateClauseRendered(_) => {
+                bail!("Cannot quote a clause as a value")
+            }
+        })
+    }
 }
 
 pub trait ParamVecWriteSqlTo {
@@ -66,8 +181,61 @@ pub trait ParamVecWriteSqlTo {
         &self,
         sql: &mut String,
         out_vals: &mut Vec<ParameterValue>,
-        rendering_settings: &RenderingSettings,
+        settings: &Settings,
     ) -> anyhow::Result<()>;
+}
+
+impl ParameterValue {
+    #[inline]
+    fn write_placeholder_to(
+        &self,
+        sql: &mut String,
+        out_vals: &mut Vec<ParameterValue>,
+        settings: &Settings,
+    ) -> anyhow::Result<()> {
+        if out_vals.len() < settings.max_placeholders {
+            out_vals.push(self.clone());
+            if settings.placeholder_dollar_sign {
+                write!(sql, "${}", out_vals.len())?;
+            } else if settings.placeholder_at_sign {
+                write!(sql, "@p{}", out_vals.len())?;
+            } else {
+                sql.push('?');
+            }
+        } else {
+            sql.push_str(self.quote(settings)?.as_str());
+        }
+        Ok(())
+    }
+    #[inline]
+    pub(crate) fn write_sql_to(
+        &self,
+        sql: &mut String,
+        out_vals: &mut Vec<ParameterValue>,
+        settings: &Settings,
+    ) -> anyhow::Result<()> {
+        match self {
+            ParameterValue::SelectClauseRendered(scr) => {
+                scr.write_sql_to(sql, settings)?;
+            }
+            ParameterValue::ByClauseRendered(by) => {
+                by.write_sql_to(sql, settings)?;
+            }
+            ParameterValue::Array(arr) => {
+                out_vals.reserve_exact(arr.len());
+                for (i, item) in arr.iter().enumerate() {
+                    if i > 0 {
+                        sql.push_str(", ");
+                    }
+                    item.write_placeholder_to(sql, out_vals, settings)?;
+                }
+            }
+            _ => {
+                self.write_placeholder_to(sql, out_vals, settings)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl ParamVecWriteSqlTo for Vec<ParameterValue> {
@@ -76,21 +244,14 @@ impl ParamVecWriteSqlTo for Vec<ParameterValue> {
         &self,
         sql: &mut String,
         out_vals: &mut Vec<ParameterValue>,
-        rendering_settings: &RenderingSettings,
+        settings: &Settings,
     ) -> anyhow::Result<()> {
         out_vals.reserve_exact(self.len());
         for (i, item) in self.iter().enumerate() {
             if i > 0 {
                 sql.push_str(", ");
             }
-            out_vals.push(item.clone());
-            if rendering_settings.placeholder_dollar_sign {
-                write!(sql, "${}", out_vals.len())?;
-            } else if rendering_settings.placeholder_at_sign {
-                write!(sql, "@p{}", out_vals.len())?;
-            } else {
-                sql.push('?');
-            }
+            item.write_placeholder_to(sql, out_vals, settings)?;
         }
         Ok(())
     }

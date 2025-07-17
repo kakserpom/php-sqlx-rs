@@ -2,6 +2,7 @@ use crate::paramvalue::{ParamVecWriteSqlTo, ParameterValue, ParamsMap, Placehold
 use crate::utils::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use itertools::Itertools;
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
@@ -62,27 +63,45 @@ pub enum Ast {
 
 /// Settings that control how the SQL parser handles comments, escaping, and
 /// optional features like collapsible `IN` clauses.
-pub struct ParsingSettings {
+/// Settings that determine how placeholders and identifiers are rendered:
+/// whether to use backticks, dollar-sign placeholders, `@`-style, etc.
+pub struct Settings {
     /// Enable special parsing for `IN` and `NOT IN` clauses.
     pub collapsible_in_enabled: bool,
     /// Treat `''` inside single-quoted strings as an escaped quote.
     pub escaping_double_single_quotes: bool,
     /// Recognize `#` as the start of a line comment.
     pub comment_hash: bool,
-}
-
-/// Settings that determine how placeholders and identifiers are rendered:
-/// whether to use backticks, dollar-sign placeholders, `@`-style, etc.
-pub struct RenderingSettings {
     /// Wrap column names in backticks instead of double quotes.
     pub column_backticks: bool,
     /// Render placeholders as `$1`, `$2`, ...
     pub placeholder_dollar_sign: bool,
     /// Render placeholders as `@p1`, `@p2`, ...
     pub placeholder_at_sign: bool,
+    /// Maximum number of placeholders
+    pub max_placeholders: usize,
+
+    /// Emit `true`/`false` instead of `1`/`0`
+    pub booleans_as_literals: bool,
+    /// Wrap string literals using MSSQL-style N'...' Unicode prefix
+    pub strings_as_ntext: bool,
+    /// JSON objects should be cast (e.g. `::jsonb` or `AS JSON`)
+    pub cast_json: Option<&'static str>, // e.g. Some("::jsonb") or Some("AS JSON")
+    /// Escape `\` in strings (MySQL legacy)
+    pub escape_backslash: bool,
 }
 
 impl Ast {
+    pub fn has_placeholders(&self) -> bool {
+        match self {
+            Ast::Root { branches, .. } => {
+                branches.len() != 1 || !matches!(branches.first(), Some(Ast::Sql(_)))
+            }
+            Ast::Nested(vec) => vec.len() == 1 && matches!(vec.first(), Some(Ast::Sql(_))),
+            _ => true,
+        }
+    }
+
     /// Parse an SQL string with embedded optional blocks `{{ ... }}`, named
     /// placeholders (`$name`, `:name`), and positional `?` markers. Ignores
     /// matches inside string literals and comments.
@@ -96,13 +115,13 @@ impl Ast {
     ///
     /// An `Ast::Root` containing the parsed branches and the list of
     /// placeholders required to render the final SQL.
-    pub fn parse(input: &str, parsing_settings: &ParsingSettings) -> anyhow::Result<Ast> {
+    pub fn parse(input: &str, settings: &Settings) -> anyhow::Result<Ast> {
         fn inner<'s>(
             mut rest: &'s str,
             placeholders_out: &mut Vec<String>,
             branches: &mut Vec<Ast>,
             positional_counter: &mut usize,
-            parsing_settings: &ParsingSettings,
+            parsing_settings: &Settings,
         ) -> anyhow::Result<&'s str> {
             let mut buf = String::new();
 
@@ -440,7 +459,7 @@ impl Ast {
             &mut placeholders,
             &mut branches,
             &mut counter,
-            parsing_settings,
+            settings,
         )?;
         if !rest.trim().is_empty() {
             bail!("Unmatched `{{` or extra trailing content");
@@ -450,6 +469,124 @@ impl Ast {
             branches,
             required_placeholders: placeholders,
         })
+    }
+
+    /// Transforms the AST into a SQL string using only named placeholders, replacing all positional
+    /// placeholders (`?`, `:1`, `$1`) with unique names if they conflict with existing `placeholders`.
+    ///
+    /// Named placeholders that do not conflict will be preserved.
+    /// Also extends the `parameters_bucket` with values from `parameters`, accounting for
+    /// renaming of positional or conflicting placeholders.
+    pub fn merge_into<I, K, V>(
+        &self,
+        placeholders: &mut BTreeSet<String>,
+        parameters: I,
+        parameters_bucket: &mut ParamsMap,
+    ) -> anyhow::Result<String>
+    where
+        I: IntoIterator<Item = (K, V)> + Debug,
+        K: Into<String>,
+        V: Into<ParameterValue>,
+    {
+        fn walk(
+            node: &Ast,
+            sql: &mut String,
+            placeholders: &mut BTreeSet<String>,
+            param_map: &mut ParamsMap,
+            parameters_bucket: &mut ParamsMap,
+            index: &mut usize,
+        ) -> anyhow::Result<()> {
+            match node {
+                Ast::Root { branches, .. } | Ast::Nested(branches) => {
+                    for b in branches {
+                        walk(b, sql, placeholders, param_map, parameters_bucket, index)?;
+                    }
+                }
+                Ast::Sql(s) => sql.push_str(s),
+                Ast::Placeholder(name) => {
+                    let new_name = resolve_placeholder_name(name, placeholders, index);
+                    parameters_bucket.insert(
+                        new_name.clone(),
+                        param_map.remove(name).unwrap_or(ParameterValue::Null),
+                    );
+                    write!(sql, ":{new_name}")?;
+                }
+                Ast::ConditionalBlock { branches, .. } => {
+                    for b in branches {
+                        walk(b, sql, placeholders, param_map, parameters_bucket, index)?;
+                    }
+                }
+                Ast::InClause { expr, placeholder } | Ast::NotInClause { expr, placeholder } => {
+                    let new_name = resolve_placeholder_name(placeholder, placeholders, index);
+                    parameters_bucket.insert(
+                        new_name.clone(),
+                        param_map
+                            .remove(placeholder)
+                            .unwrap_or(ParameterValue::Null),
+                    );
+                    let keyword = if matches!(node, Ast::InClause { .. }) {
+                        "IN"
+                    } else {
+                        "NOT IN"
+                    };
+                    write!(sql, "{expr} {keyword} (:{new_name})")?;
+                }
+                Ast::PaginateClause { placeholder } => {
+                    let new_name = resolve_placeholder_name(placeholder, placeholders, index);
+                    parameters_bucket.insert(
+                        new_name.clone(),
+                        param_map
+                            .remove(placeholder)
+                            .unwrap_or(ParameterValue::Null),
+                    );
+                    write!(sql, "PAGINATE :{new_name}")?; // placeholder logic
+                }
+            }
+            Ok(())
+        }
+
+        fn resolve_placeholder_name(
+            original: &str,
+            placeholders: &mut BTreeSet<String>,
+            index: &mut usize,
+        ) -> String {
+            if placeholders.contains(original) {
+                loop {
+                    let candidate = format!("{original}_auto_{index}");
+                    *index += 1;
+                    if placeholders.insert(candidate.clone()) {
+                        break candidate;
+                    }
+                }
+            } else {
+                placeholders.insert(original.to_string());
+                original.to_string()
+            }
+        }
+
+        let mut sql = String::new();
+        let mut index = 1;
+        let mut param_map: ParamsMap = parameters
+            .into_iter()
+            .map(|(k, v)| {
+                let mut k = k.into();
+                if let Ok(n) = k.parse::<u32>() {
+                    k = (n + 1).to_string();
+                }
+                (k, v.into())
+            })
+            .collect();
+
+        walk(
+            self,
+            &mut sql,
+            placeholders,
+            &mut param_map,
+            parameters_bucket,
+            &mut index,
+        )?;
+
+        Ok(sql)
     }
 
     /// Render the AST into a finalized SQL string with positional or named
@@ -479,8 +616,8 @@ impl Ast {
     /// `PaginateClause` is provided with an incorrect value type.
     pub fn render<I, K, V>(
         &self,
-        values: I,
-        rendering_settings: &RenderingSettings,
+        parameters: I,
+        settings: &Settings,
     ) -> anyhow::Result<(String, Vec<ParameterValue>)>
     where
         I: IntoIterator<Item = (K, V)> + Debug,
@@ -492,12 +629,12 @@ impl Ast {
             values: &ParamsMap,
             sql: &mut String,
             out_vals: &mut Vec<ParameterValue>,
-            rendering_settings: &RenderingSettings,
+            settings: &Settings,
         ) -> anyhow::Result<()> {
             match node {
                 Ast::Root { branches, .. } | Ast::Nested(branches) => {
                     for n in branches {
-                        walk(n, values, sql, out_vals, rendering_settings)?;
+                        walk(n, values, sql, out_vals, settings)?;
                     }
                 }
                 Ast::Sql(s) => sql.push_str(s),
@@ -508,39 +645,7 @@ impl Ast {
                         println!("{name:?} ==> {:?}", values.get(name));
                     }
                     if let Some(val) = values.get(name) {
-                        match val {
-                            ParameterValue::SelectClauseRendered(scr) => {
-                                scr.write_sql_to(sql, &rendering_settings)?;
-                            }
-                            ParameterValue::ByClauseRendered(by) => {
-                                by.write_sql_to(sql, &rendering_settings)?;
-                            }
-                            ParameterValue::Array(arr) => {
-                                for (i, item) in arr.iter().enumerate() {
-                                    if i > 0 {
-                                        sql.push_str(", ");
-                                    }
-                                    out_vals.push(item.clone());
-                                    if rendering_settings.placeholder_dollar_sign {
-                                        write!(sql, "${}", out_vals.len())?;
-                                    } else if rendering_settings.placeholder_at_sign {
-                                        write!(sql, "@p{}", out_vals.len())?;
-                                    } else {
-                                        sql.push('?');
-                                    }
-                                }
-                            }
-                            _ => {
-                                out_vals.push(val.clone());
-                                if rendering_settings.placeholder_dollar_sign {
-                                    write!(sql, "${}", out_vals.len())?;
-                                } else if rendering_settings.placeholder_at_sign {
-                                    write!(sql, "@p{}", out_vals.len())?;
-                                } else {
-                                    sql.push('?');
-                                }
-                            }
-                        }
+                        val.write_sql_to(sql, out_vals, settings)?;
                     }
                 }
                 Ast::ConditionalBlock {
@@ -555,7 +660,7 @@ impl Ast {
                         }
                     }) {
                         for b in branches {
-                            walk(b, values, sql, out_vals, rendering_settings)?;
+                            walk(b, values, sql, out_vals, settings)?;
                         }
                     }
                 }
@@ -564,7 +669,7 @@ impl Ast {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.push_str(expr);
                         sql.push_str(" IN (");
-                        arr.write_sql_to(sql, out_vals, rendering_settings)?;
+                        arr.write_sql_to(sql, out_vals, settings)?;
                         sql.push(')');
                     }
                     _ => {
@@ -575,7 +680,7 @@ impl Ast {
                     Some(ParameterValue::Array(arr)) if !arr.is_empty() => {
                         sql.reserve(expr.len() + 9 + arr.len() * 2 + (arr.len() - 1) * 2);
                         write!(sql, "{expr} NOT IN (")?;
-                        arr.write_sql_to(sql, out_vals, rendering_settings)?;
+                        arr.write_sql_to(sql, out_vals, settings)?;
                         sql.push(')');
                     }
                     _ => {
@@ -586,25 +691,7 @@ impl Ast {
                     let value = values.get(placeholder);
                     match value {
                         Some(ParameterValue::PaginateClauseRendered(rendered)) => {
-                            out_vals.push(ParameterValue::Int(rendered.limit));
-                            out_vals.push(ParameterValue::Int(rendered.offset));
-                            if rendering_settings.placeholder_dollar_sign {
-                                write!(
-                                    sql,
-                                    "LIMIT ${} OFFSET ${}",
-                                    out_vals.len() - 1,
-                                    out_vals.len()
-                                )?;
-                            } else if rendering_settings.placeholder_at_sign {
-                                write!(
-                                    sql,
-                                    "LIMIT @p{} OFFSET @p{}",
-                                    out_vals.len() - 1,
-                                    out_vals.len()
-                                )?;
-                            } else {
-                                sql.push_str("LIMIT ? OFFSET ?");
-                            }
+                            rendered.write_sql_to(sql, out_vals, settings)?;
                         }
                         _ => {
                             bail!(
@@ -619,9 +706,9 @@ impl Ast {
         #[cfg(test)]
         {
             println!("AST = {self:?}");
-            println!("VALUES = {values:?}");
+            println!("VALUES = {parameters:?}");
         }
-        let values: ParamsMap = values
+        let values: ParamsMap = parameters
             .into_iter()
             .map(|(k, v)| {
                 let mut k = k.into();
@@ -650,7 +737,7 @@ impl Ast {
                 bail!("Missing required placeholder `{missing_placeholder}`");
             }
         }
-        walk(self, &values, &mut sql, &mut out_vals, rendering_settings)?;
+        walk(self, &values, &mut sql, &mut out_vals, settings)?;
         let sql = sql.split_whitespace().join(" ");
 
         #[cfg(test)]

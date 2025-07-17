@@ -109,20 +109,6 @@ pub fn is_valid_ident(name: &str) -> bool {
         && name.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
-/// Trait for providing a static `null` Zval instance.
-pub trait ZvalNull {
-    /// Returns a new `Zval` explicitly set to `null`.
-    fn null() -> Zval;
-}
-
-impl ZvalNull for Zval {
-    fn null() -> Zval {
-        let mut zval = Zval::new();
-        zval.set_null();
-        zval
-    }
-}
-
 /// Represents a column reference, either by numeric index or string name.
 ///
 /// Used to specify how to extract a value from a SQL row result.

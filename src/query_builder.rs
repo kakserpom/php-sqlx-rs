@@ -1,18 +1,78 @@
+use crate::paramvalue::ParamsMap;
+use anyhow::{anyhow, bail};
+use ext_php_rs::prelude::*;
+use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable};
+
+/// Registers the `PaginateClause` and `PaginateClauseRendered` classes
+/// with the provided PHP module builder.
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<OrClause>().function(wrap_function!(any))
+}
+
+#[php_class]
+#[php(name = "Sqlx\\OrClause")]
+#[derive(Debug, Clone)]
+pub struct OrClause {
+    pub(crate) inner: Vec<OrClauseItem>,
+}
+#[derive(Debug, Clone)]
+pub enum OrClauseItem {
+    Nested(OrClause),
+    Item((String, Option<ParamsMap>)),
+}
+
+#[php_function]
+#[php(name = "Sqlx\\any")]
+pub fn any(or: &ZendHashTable) -> anyhow::Result<OrClause> {
+    let mut inner = Vec::with_capacity(or.len());
+    for (key, value) in or {
+        if let ArrayKey::Long(_) = key {
+            if let Some(value) = value.string() {
+                inner.push(OrClauseItem::Item((value, None)));
+            } else if let Some(or) = value
+                .object()
+                .and_then(ZendClassObject::<OrClause>::from_zend_obj)
+                .and_then(|x| x.obj.clone())
+            {
+                inner.push(OrClauseItem::Nested(or));
+            } else {
+                bail!("element must be string or OrClause");
+            }
+        } else {
+            let Some(parameters) = value.array() else {
+                bail!("keyed element's value must be array");
+            };
+            let parameters: ParamsMap = parameters.try_into().map_err(|err| anyhow!("{err}"))?;
+            inner.push(OrClauseItem::Item((key.to_string(), Some(parameters))));
+        }
+    }
+
+    Ok(OrClause { inner })
+}
+
 #[macro_export]
 macro_rules! php_sqlx_impl_query_builder {
     ( $struct:ident, $class:literal, $driver_inner: ident ) => {
-        use crate::selectclause::SelectClauseRendered;
+        use $crate::ast::Ast;
+        use $crate::paramvalue::ParamsMap;
+        use $crate::query_builder::{OrClause, OrClauseItem};
+        use $crate::selectclause::SelectClauseRendered;
+        use anyhow::anyhow;
         use anyhow::bail;
         use ext_php_rs::php_impl;
         use ext_php_rs::prelude::*;
+        use ext_php_rs::types::ArrayKey;
         use ext_php_rs::types::ZendClassObject;
         use ext_php_rs::types::Zval;
+        use std::collections::BTreeMap;
         use std::collections::BTreeSet;
         use std::collections::HashMap;
+        use std::fmt::Debug;
         use std::fmt::Write;
         use std::sync::Arc;
         use $crate::paramvalue::ParameterValue;
         use $crate::utils::ColumnArgument;
+        use ext_php_rs::convert::FromZval;
 
         /// A reusable prepared SQL query with parameter support. Created using `PgDriver::builder()`, shares context with original driver.
         #[php_class]
@@ -21,22 +81,410 @@ macro_rules! php_sqlx_impl_query_builder {
             pub(crate) query: String,
             pub(crate) driver_inner: Arc<$driver_inner>,
             pub(crate) placeholders: BTreeSet<String>,
-            pub(crate) parameters: HashMap<String, ParameterValue>,
+            pub(crate) parameters: BTreeMap<String, ParameterValue>,
         }
 
         impl $struct {
             pub(crate) fn new(driver_inner: Arc<$driver_inner>) -> Self {
                 Self {
                     driver_inner,
-                    placeholders: BTreeSet::new(),
-                    parameters: HashMap::new(),
-                    query: String::new(),
+                    placeholders: Default::default(),
+                    parameters: Default::default(),
+                    query: Default::default(),
                 }
+            }
+
+            pub fn _append_op(
+                &mut self,
+                left_operand: &str,
+                operator: &str,
+                right_operand: Option<ParameterValue>,
+                placeholder_prefix: &str,
+            ) -> anyhow::Result<()> {
+                let op = match operator.to_ascii_lowercase().trim() {
+                    "=" | "eq" => "=",
+                    "!=" | "<>" | "neq" | "ne" => "!=",
+                    ">" | "gt" => ">",
+                    ">=" | "gte" => ">=",
+                    "<" | "lt" => "<",
+                    "<=" | "lte" => "<=",
+                    "like" => "LIKE",
+                    "not like" | "nlike" => "NOT LIKE",
+                    "ilike" => "ILIKE",
+                    "not ilike" | "nilike" => "NOT ILIKE",
+                    "in" => "IN",
+                    "not in" => "NOT IN",
+                    "is null" => "IS NULL",
+                    "is not null" => "IS NOT NULL",
+                    _ => bail!("Operator {operator:?} is not supported"),
+                };
+
+                match op {
+                    "IS NULL" | "IS NOT NULL" => {
+                        if right_operand.is_some() {
+                            bail!("Operator {op} must not be given a right-hand operand");
+                        }
+                        self._append(
+                            &format!("{left_operand} {op}"),
+                            None::<[(&str, ParameterValue); 0]>,
+                            placeholder_prefix
+                        )?;
+                    }
+                    "IN" | "NOT IN" => {
+                        let value = right_operand.ok_or_else(|| anyhow!("Operator {op} requires a right-hand operand"))?;
+                        self._append(
+                            &format!("{left_operand} {op} (?)"),
+                            Some([("0", value)]),
+                            placeholder_prefix
+                        )?;
+                    }
+                    _ => {
+                        let value = right_operand.ok_or_else(|| anyhow!("Operator {op} requires a right-hand operand"))?;
+                        self._append(
+                            &format!("{left_operand} {op} ?"),
+                            Some([("0", value)]),
+                            placeholder_prefix
+                        )?;
+                    }
+                }
+
+                Ok(())
+            }
+
+            pub fn _append_or(&mut self, or: &OrClause, prefix: &str) -> anyhow::Result<()> {
+                self.query.push('(');
+                for (i, item) in or.inner.iter().enumerate() {
+                    if i > 0 {
+                        self.query.push_str(" OR ");
+                    }
+                    match item {
+                        OrClauseItem::Item((part, parameters))  => {
+                            self._append(
+                                part.as_str(),
+                                parameters.clone(),
+                                prefix,
+                            )?;
+                        }
+                        OrClauseItem::Nested(nested)  => {
+                            self._append_or(
+                                nested,
+                                prefix,
+                            )?;
+                        }
+                    }
+                }
+                self.query.push(')');
+                Ok(())
+            }
+
+            /// Transforms the AST into a SQL string using only named placeholders, replacing all positional
+            /// placeholders (`?`, `:1`, `$1`) with unique names if they conflict with existing `placeholders`.
+            ///
+            /// Named placeholders that do not conflict will be preserved.
+            /// Also extends the `parameters_bucket` with values from `parameters`, accounting for
+            /// renaming of positional or conflicting placeholders.
+            pub fn _append<I, K, V>(
+                &mut self,
+                part: &str,
+                parameters: Option<I>,
+                prefix: &str,
+            ) -> anyhow::Result<()>
+            where
+                I: IntoIterator<Item = (K, V)> + Debug,
+                K: Into<String>,
+                V: Into<ParameterValue>,
+            {
+                self._append_ast(&self.driver_inner.parse_query(part)?, parameters, prefix)
+            }
+
+            pub fn _append_ast<I, K, V>(
+                &mut self,
+                ast: &Ast,
+                parameters: Option<I>,
+                prefix: &str,
+            ) -> anyhow::Result<()>
+            where
+                I: IntoIterator<Item = (K, V)> + Debug,
+                K: Into<String>,
+                V: Into<ParameterValue>,
+            {
+                fn walk(
+                    node: &Ast,
+                    sql: &mut String,
+                    placeholders: &mut BTreeSet<String>,
+                    param_map: &mut ParamsMap,
+                    parameters_bucket: &mut ParamsMap,
+                    positional_index: &mut usize,
+                    prefix: &str,
+                ) -> anyhow::Result<()> {
+                    match node {
+                        Ast::Root { branches, .. } | Ast::Nested(branches) => {
+                            for b in branches {
+                                walk(
+                                    b,
+                                    sql,
+                                    placeholders,
+                                    param_map,
+                                    parameters_bucket,
+                                    positional_index,
+                                    prefix,
+                                )?;
+                            }
+                        }
+                        Ast::Sql(s) => sql.push_str(s),
+                        Ast::Placeholder(name) => {
+                            let new_name = resolve_placeholder_name(
+                                name,
+                                placeholders,
+                                positional_index,
+                                prefix,
+                            );
+                            parameters_bucket.insert(
+                                new_name.clone(),
+                                param_map.remove(name).unwrap_or(ParameterValue::Null),
+                            );
+                            write!(sql, ":{new_name}")?;
+                        }
+                        Ast::ConditionalBlock { branches, .. } => {
+                            for b in branches {
+                                walk(
+                                    b,
+                                    sql,
+                                    placeholders,
+                                    param_map,
+                                    parameters_bucket,
+                                    positional_index,
+                                    prefix,
+                                )?;
+                            }
+                        }
+                        Ast::InClause { expr, placeholder }
+                        | Ast::NotInClause { expr, placeholder } => {
+                            let new_name = resolve_placeholder_name(
+                                placeholder,
+                                placeholders,
+                                positional_index,
+                                prefix,
+                            );
+                            parameters_bucket.insert(
+                                new_name.clone(),
+                                param_map
+                                    .remove(placeholder)
+                                    .unwrap_or(ParameterValue::Null),
+                            );
+                            let keyword = if matches!(node, Ast::InClause { .. }) {
+                                "IN"
+                            } else {
+                                "NOT IN"
+                            };
+                            write!(sql, "{} {} (:{} )", expr, keyword, new_name)?;
+                        }
+                        Ast::PaginateClause { placeholder } => {
+                            let new_name = resolve_placeholder_name(
+                                placeholder,
+                                placeholders,
+                                positional_index,
+                                prefix,
+                            );
+                            parameters_bucket.insert(
+                                new_name.clone(),
+                                param_map
+                                    .remove(placeholder)
+                                    .unwrap_or(ParameterValue::Null),
+                            );
+                            write!(sql, "PAGINATE :{}", new_name)?;
+                        }
+                    }
+                    Ok(())
+                }
+
+                fn resolve_placeholder_name(
+                    name: &str,
+                    placeholders: &mut BTreeSet<String>,
+                    positional_index: &mut usize,
+                    prefix: &str,
+                ) -> String {
+                    if name.parse::<usize>().is_ok() {
+                        loop {
+                            let candidate = format!("{prefix}__{positional_index}");
+                            *positional_index += 1;
+                            if placeholders.insert(candidate.clone()) {
+                                break candidate;
+                            }
+                        }
+                    } else if !placeholders.contains(name) {
+                        placeholders.insert(name.to_string());
+                        name.to_string()
+                    } else {
+                        let mut index = 2;
+                        loop {
+                            let candidate = format!("{name}_{index}");
+                            index += 1;
+                            if placeholders.insert(candidate.clone()) {
+                                break candidate;
+                            }
+                        }
+                    }
+                }
+                let mut positional_index = 0;
+                let mut param_map: ParamsMap = parameters
+                    .map(|x| {
+                        x.into_iter()
+                            .map(|(k, v)| {
+                                let mut k = k.into();
+                                if let Ok(n) = k.parse::<u32>() {
+                                    k = (n + 1).to_string();
+                                }
+                                (k, v.into())
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                walk(
+                    &ast,
+                    &mut self.query,
+                    &mut self.placeholders,
+                    &mut param_map,
+                    &mut self.parameters,
+                    &mut positional_index,
+                    prefix,
+                )?;
+
+                Ok(())
             }
         }
 
         #[php_impl]
         impl $struct {
+
+
+            /// Appends a `UPDATE` clause to the query.
+            ///
+            /// # Arguments
+            /// * `table` - A raw string representing the table(s).
+            ///
+            /// # Exceptions
+            /// Throws an exception if the argument is not a string.
+            fn update<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &Zval,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if let Some(str) = table.str() {
+                    if !self_.query.is_empty() {
+                        self_.query.push('\n');
+                    }
+                    write!(self_.query, "UPDATE {str}")?;
+                } else {
+                    bail!("illegal update() argument")
+                }
+                Ok(self_)
+            }
+
+
+            fn set<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                set: &Zval,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                use ext_php_rs::types::ArrayKey;
+
+                self_.query.push_str("\nSET ");
+                let mut first = true;
+
+                let set_array = set.array().ok_or_else(|| anyhow!("Argument to set() must be an array"))?;
+                for (key, value) in set_array.iter() {
+                    if !first {
+                        self_.query.push_str(", ");
+                    } else {
+                        first = false;
+                    }
+
+                    match key {
+                        ArrayKey::Long(_) => {
+                            if let Some(array) = value.array() {
+                                if array.has_sequential_keys() {
+                                    if array.len() != 2 {
+                                        bail!("each element must be [field, value]");
+                                    }
+                                    let field = array
+                                        .get_index(0)
+                                        .and_then(Zval::str)
+                                        .ok_or_else(|| anyhow!("first element (field) must be string"))?;
+
+                                    let param = array
+                                        .get_index(1)
+                                        .and_then(ParameterValue::from_zval)
+                                        .ok_or_else(|| anyhow!("second element (value) must be valid parameter value"))?;
+
+                                    self_._append_op(field, "=", Some(param), "set")?;
+                                } else {
+                                    if array.len() != 1 {
+                                        bail!("keyed array must contain a single element");
+                                    }
+                                    for (key, value) in array {
+                                        let Some(parameters) = value.array() else {
+                                            bail!("value of keyed element {key:?} must be array");
+                                        };
+                                        let parameters: HashMap<String, ParameterValue> =
+                                            parameters.try_into().map_err(|err| anyhow!("invalid parameters: {err}"))?;
+                                        self_._append(&key.to_string(), Some(parameters), "set")?;
+                                    }
+                                }
+                            } else if let Some(part) = value.str() {
+                                self_._append(
+                                    part,
+                                    None::<[(&str, &str); 0]>,
+                                    "set",
+                                )?;
+                            }
+                            else {
+                                bail!("numeric element #{key} must be string (raw expression) or array like [field, value]");
+                            }
+                        }
+                        ArrayKey::Str(_) | ArrayKey::String(_) => {
+                            let field = key.to_string();
+                            let param = ParameterValue::from_zval(&value)
+                                .ok_or_else(|| anyhow!("value for key `{field}` must be a valid parameter value"))?;
+
+                            self_._append_op(field.as_str(), "=", Some(param), "set")?;
+                        }
+                    }
+                }
+
+                Ok(self_)
+            }
+
+
+            /// Returns an array of all currently accumulated parameters.
+            pub(crate) fn parameters(&self) -> BTreeMap<String, ParameterValue> {
+                self.parameters.clone()
+            }
+
+            /// Appends a raw SQL fragment to the query without validation.
+            ///
+            /// # Arguments
+            /// * `part` - The SQL string to append.
+            /// * `parameters` - Optional parameters to associate with the fragment.
+            fn raw<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                part: &str,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._append(
+                    part,
+                    parameters,
+                    "raw"
+                )?;
+                Ok(self_)
+            }
+
+          /// Appends a `SELECT` clause to the query.
+          ///
+          /// # Arguments
+          /// * `fields` - Either a raw string or a `SelectClauseRendered` object.
+          ///
+          /// # Exceptions
+          /// Throws an exception if the argument is not a string or a supported object.
             fn select<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 fields: &Zval,
@@ -46,15 +494,16 @@ macro_rules! php_sqlx_impl_query_builder {
                         self_.query.push('\n');
                     }
                     write!(self_.query, "SELECT {str}")?;
-                } else if let Some(obj) = fields.object()
-                    && let Some(scr) = ZendClassObject::<SelectClauseRendered>::from_zend_obj(obj)
+                } else if let Some(scr) = fields
+                    .object()
+                    .and_then(ZendClassObject::<SelectClauseRendered>::from_zend_obj)
                 {
                     if !self_.query.is_empty() {
                         self_.query.push('\n');
                     }
 
                     let mut clause = String::from("SELECT ");
-                    scr.write_sql_to(&mut clause, &self_.driver_inner.rendering_settings)?;
+                    scr.write_sql_to(&mut clause, &self_.driver_inner.settings)?;
                     self_.query.push_str(&clause);
                 } else {
                     bail!("illegal select() argument")
@@ -62,6 +511,13 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(self_)
             }
 
+             /// Appends a `FROM` clause to the query.
+             ///
+             /// # Arguments
+             /// * `from` - A raw string representing the source table(s).
+             ///
+             /// # Exceptions
+             /// Throws an exception if the argument is not a string.
             fn from<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 from: &Zval,
@@ -77,21 +533,95 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(self_)
             }
 
+            /// Appends a `WHERE` clause to the query.
+            ///
+            /// # Arguments
+            /// * `where` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+            /// * `parameters` - Optional parameters associated with the `WHERE` condition.
+            ///
+            /// # Exceptions
+            /// Throws an exception if the input is not valid.
             fn _where<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 r#where: &Zval,
                 parameters: Option<HashMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
-                if let Some(str) = r#where.str() {
-                    if !self_.query.is_empty() {
-                        self_.query.push('\n');
+                if let Some(part) = r#where.str() {
+                    self_.query.push_str("\nWHERE ");
+                    self_._append(part, parameters, "where")?;
+                } else if let Some(array) = r#where.array() {
+                    self_.query.push_str("\nWHERE ");
+                    for (i, (key, value)) in array.iter().enumerate() {
+                        if i > 0 {
+                            self_.query.push_str(" AND ");
+                        }
+                        match key {
+                            ArrayKey::Long(_) => {
+                                if let Some(part) = value.str() {
+                                    self_._append(
+                                        part,
+                                        None::<[(&str, &str); 0]>,
+                                        "where",
+                                    )?;
+                                } else if let Some(array) = value.array() {
+                                    if array.has_sequential_keys() {
+                                        let array_len = array.len();
+                                        if array_len > 3 {
+                                            bail!("condition #{i}: array cannot contain more than 3 elements");
+                                        }
+                                        let left_operand = array.get_index(0)
+                                            .and_then(Zval::str)
+                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be string"))?;
+                                        let operator = array.get_index(1).and_then(Zval::str)
+                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be string"))?;
+                                        self_._append_op(left_operand, operator, if array_len > 2 {
+                                            Some(
+                                                array.get_index(2)
+                                                    .and_then(ParameterValue::from_zval)
+                                                    .ok_or_else(|| anyhow!("third element (value) must a valid parameter value"))?
+                                            )
+                                        } else {
+                                            None
+                                        }, "where")?;
+                                    }
+                                }
+                                else if let Some(or) = value
+                                    .object()
+                                    .and_then(ZendClassObject::<OrClause>::from_zend_obj)
+                                    .and_then(|x| x.obj.as_ref())
+                                {
+                                    //println!("{or:?}");
+                                    self_._append_or(or, "where")?;
+                                } else {
+                                    bail!("element must be string or OrClause");
+                                }
+                            }
+                            _ => {
+                                let part = key.to_string();
+                                let ast = self_.driver_inner.parse_query(&part)?;
+                                if ast.has_placeholders() {
+                                    let Some(parameters) = value.array() else {
+                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {ast:?}");
+                                    };
+                                    let parameters: HashMap<String, ParameterValue> =
+                                        parameters.try_into().map_err(|err| anyhow!("{err}"))?;
+                                    self_._append_ast(&ast, Some(parameters), "where")?;
+                                } else {
+                                    self_._append(
+                                        &format!("{part} = ?"),
+                                        Some([
+                                            ("0", ParameterValue::from_zval(value)
+                                                .ok_or_else(|| anyhow!("element value must a valid parameter value"))?
+                                            ); 1]
+                                        ),
+                                        "where"
+                                    )?;
+                                }
+                            }
+                        }
                     }
-
-                    let ast = self_.driver_inner.parse_query(str)?;
-                    
-                    write!(self_.query, "WHERE {str}")?;
                 } else {
-                    bail!("illegal where() argument")
+                    bail!("illegal where() argument");
                 }
                 Ok(self_)
             }

@@ -146,7 +146,7 @@ namespace Sqlx {
         /**
          * Applies pagination settings and returns a `PaginateClauseRendered`.
          *
-         * # Parameters and behavior are identical to `internal_apply`.
+         * # Parameters and behavior are identical to `render`.
          */
         public function apply(?int $page_number, ?int $per_page): \Sqlx\PaginateClauseRendered {}
 

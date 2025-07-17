@@ -1,4 +1,4 @@
-use crate::ast::RenderingSettings;
+use crate::ast::Settings;
 use crate::utils::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl, prelude::ModuleBuilder};
@@ -13,7 +13,7 @@ use trim_in_place::TrimInPlace;
 #[php(name = "Sqlx\\SelectClause")]
 pub struct SelectClause {
     /// Mapping of allowed column names to optional SQL expressions.
-    pub(crate) defined_columns: HashMap<String, Option<String>>,
+    pub(crate) allowed_columns: HashMap<String, Option<String>>,
 }
 
 impl SelectClause {
@@ -27,12 +27,12 @@ impl SelectClause {
     /// Returns an error if any provided expression is not a valid SQL identifier
     /// when the key is numeric.
     #[inline]
-    pub fn _new<K, V>(defined_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
+    pub fn _new<K, V>(allowed_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
     {
-        let map = defined_columns.into_iter().try_fold(
+        let map = allowed_columns.into_iter().try_fold(
             HashMap::<String, Option<String>>::new(),
             |mut map, (key, value)| -> anyhow::Result<_> {
                 let key: String = key.into();
@@ -51,20 +51,20 @@ impl SelectClause {
             },
         )?;
         Ok(Self {
-            defined_columns: map,
+            allowed_columns: map,
         })
     }
 
     /// Internal helper that filters and maps provided column names
-    /// into a `SelectClauseRendered` structure based on `defined_columns`.
+    /// into a `SelectClauseRendered` structure based on `allowed_columns`.
     #[must_use]
-    pub fn internal_apply(&self, columns: Vec<String>) -> SelectClauseRendered {
+    pub fn render(&self, columns: Vec<String>) -> SelectClauseRendered {
         let rendered = columns
             .into_iter()
             .filter_map(|mut field| {
                 // Trim whitespace and check if column is allowed
                 let key = field.trim_in_place();
-                self.defined_columns
+                self.allowed_columns
                     .get(key)
                     .map(|expr| SelectClauseRenderedColumn {
                         column: field,
@@ -81,7 +81,7 @@ impl SelectClause {
     /// PHP constructor for `Sqlx\\SelectClause`.
     ///
     /// # Arguments
-    /// - `defined_columns`: Associative array of allowed columns:
+    /// - `allowed_columns`: Associative array of allowed columns:
     ///    - Numeric keys map to simple column names
     ///    - String keys map to SQL expressions
     ///
@@ -93,19 +93,19 @@ impl SelectClause {
     ///     "full_name" => "CONCAT(first, ' ', last)"
     /// ]);
     /// ```
-    pub fn __construct(defined_columns: HashMap<String, String>) -> anyhow::Result<Self> {
-        Self::_new(defined_columns)
+    pub fn __construct(allowed_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+        Self::_new(allowed_columns)
     }
 
-    pub fn new(defined_columns: HashMap<String, String>) -> anyhow::Result<Self> {
-        Self::_new(defined_columns)
+    pub fn allowed(allowed_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+        Self::_new(allowed_columns)
     }
 
     /// Magic `__invoke` method allowing the object to be
     /// used as a callable for rendering select clauses.
     #[must_use]
     pub fn __invoke(&self, columns: Vec<String>) -> SelectClauseRendered {
-        self.internal_apply(columns)
+        self.render(columns)
     }
 
     /// Renders validated SELECT clause columns from user input.
@@ -117,8 +117,8 @@ impl SelectClause {
     /// A `SelectClauseRendered` containing only allowed columns.
     /// Unknown columns are silently ignored.
     #[must_use]
-    pub fn apply(&self, columns: Vec<String>) -> SelectClauseRendered {
-        self.internal_apply(columns)
+    pub fn input(&self, columns: Vec<String>) -> SelectClauseRendered {
+        self.render(columns)
     }
 }
 
@@ -152,7 +152,7 @@ impl SelectClauseRendered {
     pub(crate) fn write_sql_to(
         &self,
         sql: &mut String,
-        rendering_settings: &RenderingSettings,
+        settings: &Settings,
     ) -> anyhow::Result<()> {
         for (
             i,
@@ -166,12 +166,12 @@ impl SelectClauseRendered {
                 sql.push_str(", ");
             }
             if let Some(expression) = expression {
-                if rendering_settings.column_backticks {
+                if settings.column_backticks {
                     write!(sql, "{expression} AS `{field}`")?;
                 } else {
                     write!(sql, "{expression} AS \"{field}\"")?;
                 }
-            } else if rendering_settings.column_backticks {
+            } else if settings.column_backticks {
                 write!(sql, "`{field}`")?;
             } else {
                 write!(sql, "\"{field}\"")?;

@@ -1,7 +1,6 @@
 use crate::conversion::{Conversion, json_into_zval};
 #[cfg(feature = "lazy-row")]
 use crate::lazy_row::LazyRowJson;
-use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;

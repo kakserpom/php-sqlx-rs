@@ -1,3 +1,5 @@
+use crate::ast::Settings;
+use crate::paramvalue::ParameterValue;
 use anyhow::bail;
 use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 
@@ -46,11 +48,7 @@ impl PaginateClause {
     /// # Returns
     /// A `PaginateClauseRendered` containing clamped `limit` and computed `offset`.
     #[must_use]
-    fn internal_apply(
-        &self,
-        page_number: Option<i64>,
-        per_page: Option<i64>,
-    ) -> PaginateClauseRendered {
+    fn render(&self, page_number: Option<i64>, per_page: Option<i64>) -> PaginateClauseRendered {
         let per_page = per_page
             .unwrap_or(self.default_per_page)
             .clamp(self.min_per_page, self.max_per_page);
@@ -83,7 +81,7 @@ impl PaginateClause {
         page_number: Option<i64>,
         per_page: Option<i64>,
     ) -> PaginateClauseRendered {
-        self.internal_apply(page_number, per_page)
+        self.render(page_number, per_page)
     }
 
     /// Sets a fixed number of items per page.
@@ -139,10 +137,10 @@ impl PaginateClause {
 
     /// Applies pagination settings and returns a `PaginateClauseRendered`.
     ///
-    /// # Parameters and behavior are identical to `internal_apply`.
+    /// # Parameters and behavior are identical to `render`.
     #[must_use]
     pub fn apply(&self, page_number: Option<i64>, per_page: Option<i64>) -> PaginateClauseRendered {
-        self.internal_apply(page_number, per_page)
+        self.render(page_number, per_page)
     }
 }
 
@@ -159,6 +157,28 @@ pub struct PaginateClauseRendered {
     pub(crate) offset: i64,
 }
 
+impl PaginateClauseRendered {
+    #[inline]
+    pub(crate) fn write_sql_to(
+        &self,
+        sql: &mut String,
+        out_vals: &mut Vec<ParameterValue>,
+        settings: &Settings,
+    ) -> anyhow::Result<()> {
+        sql.push_str("LIMIT ");
+        ParameterValue::Int(self.limit).write_sql_to(
+            sql,
+            out_vals,
+            settings,
+        )?;
+        sql.push_str(" OFFSET ");
+        ParameterValue::Int(self.offset).write_sql_to(
+            sql,
+            out_vals,
+            settings,
+        )
+    }
+}
 /// Registers the `PaginateClause` and `PaginateClauseRendered` classes
 /// with the provided PHP module builder.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
