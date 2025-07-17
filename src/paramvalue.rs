@@ -37,6 +37,7 @@ pub enum ParameterValue {
     ByClauseRendered(ByClauseRendered),
     SelectClauseRendered(SelectClauseRendered),
     PaginateClauseRendered(PaginateClauseRendered),
+    Builder((String, BTreeMap<String, ParameterValue>)),
 }
 
 impl Serialize for ParameterValue {
@@ -76,6 +77,9 @@ impl Serialize for ParameterValue {
             ParameterValue::PaginateClauseRendered(val) => {
                 serializer.serialize_str(&format!("{val:?}"))
             }
+            ParameterValue::Builder(_) => {
+                Err(serde::ser::Error::custom("Builder cannot be serialized"))
+            }
         }
     }
 }
@@ -99,6 +103,7 @@ impl ParameterValue {
             | Self::Object(_)
             | Self::PaginateClauseRendered(_) => false,
             Self::Null => true,
+            Self::Builder(_) => false,
         }
     }
 
@@ -163,7 +168,8 @@ impl ParameterValue {
 
             ParameterValue::ByClauseRendered(_)
             | ParameterValue::SelectClauseRendered(_)
-            | ParameterValue::PaginateClauseRendered(_) => {
+            | ParameterValue::PaginateClauseRendered(_)
+            | ParameterValue::Builder(_) => {
                 bail!("Cannot quote a clause as a value")
             }
         })
@@ -292,28 +298,29 @@ impl IntoZval for ParameterValue {
     /// Returns an error if value insertion fails.
     fn set_zval(self, zv: &mut Zval, persistent: bool) -> ext_php_rs::error::Result<()> {
         match self {
-            ParameterValue::Str(str) => zv.set_string(str.as_str(), persistent)?,
-            ParameterValue::Int(i64) => zv.set_long(i64),
-            ParameterValue::Float(f64) => zv.set_double(f64),
-            ParameterValue::Bool(bool) => zv.set_bool(bool),
-            ParameterValue::Array(array) => {
+            Self::Str(str) => zv.set_string(str.as_str(), persistent)?,
+            Self::Int(i64) => zv.set_long(i64),
+            Self::Float(f64) => zv.set_double(f64),
+            Self::Bool(bool) => zv.set_bool(bool),
+            Self::Array(array) => {
                 let mut ht = ZendHashTable::new();
                 for val in array {
                     ht.push(val)?;
                 }
                 zv.set_hashtable(ht);
             }
-            ParameterValue::Object(hash_map) => {
+            Self::Object(hash_map) => {
                 let mut ht = ZendHashTable::new();
                 for (k, v) in hash_map {
                     ht.insert(k, v)?;
                 }
                 zv.set_hashtable(ht);
             }
-            ParameterValue::Null
-            | ParameterValue::ByClauseRendered(_)
-            | ParameterValue::SelectClauseRendered(_)
-            | ParameterValue::PaginateClauseRendered(_) => zv.set_null(),
+            Self::Null
+            | Self::ByClauseRendered(_)
+            | Self::SelectClauseRendered(_)
+            | Self::PaginateClauseRendered(_)
+            | Self::Builder(_) => zv.set_null(),
         }
         Ok(())
     }
@@ -468,6 +475,7 @@ where
             ParameterValue::ByClauseRendered(_)
             | ParameterValue::SelectClauseRendered(_)
             | ParameterValue::PaginateClauseRendered(_)
+            | ParameterValue::Builder(_)
             | ParameterValue::Null => bail!("Internal error: cannot bind parameter of this type"),
         })
     }

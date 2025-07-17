@@ -73,6 +73,7 @@ macro_rules! php_sqlx_impl_query_builder {
         use $crate::paramvalue::ParameterValue;
         use $crate::utils::ColumnArgument;
         use ext_php_rs::convert::FromZval;
+        use ext_php_rs::flags::DataType;
 
         /// A prepared SQL query builder.
         ///
@@ -85,6 +86,35 @@ macro_rules! php_sqlx_impl_query_builder {
             pub(crate) driver_inner: Arc<$driver_inner>,
             pub(crate) placeholders: BTreeSet<String>,
             pub(crate) parameters: BTreeMap<String, ParameterValue>,
+        }
+
+        enum ParameterValueOrBuilder<'a> {
+            ParameterValue(ParameterValue),
+            Builder((String, BTreeMap<String, ParameterValue>)),
+        }
+        impl FromZval<'_> for ParameterValueOrBuilder<'_> {
+            const TYPE: DataType = DataType::Mixed;
+            fn from_zval(zval: &Zval) -> Option<Self> {
+                if let Some(builder) = zval
+                    .object()
+                    .and_then(ZendClassObject::<$struct>::from_zend_obj)
+                    .and_then(|x| x.obj.as_ref())
+                {
+                    Some(Self::Builder((builder.query, builder.parameters.clone())))
+                } else if let Some(pv) = ParameterValue::from_zval(zval) {
+                    Some(Self::ParameterValue(pv))
+                } else {
+                    None
+                }
+            }
+        }
+        impl Into<ParameterValue> for ParameterValueOrBuilder<'_> {
+            fn into(self) -> ParameterValue {
+                match self {
+                    ParameterValueOrBuilder::ParameterValue(value) => value,
+                    ParameterValueOrBuilder::Builder(builder) => builder,
+                }
+            }
         }
 
         impl $struct {
@@ -705,7 +735,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn _where<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 r#where: &Zval,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<HashMap<String, ParameterValueOrBuilder>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if let Some(part) = r#where.str() {
                     self_.query.push_str("\nWHERE ");
