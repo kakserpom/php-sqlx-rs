@@ -6,7 +6,7 @@ use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable};
 /// Registers the `PaginateClause` and `PaginateClauseRendered` classes
 /// with the provided PHP module builder.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<OrClause>().function(wrap_function!(any))
+    module.class::<OrClause>().function(wrap_function!(or_))
 }
 
 #[php_class]
@@ -22,8 +22,8 @@ pub enum OrClauseItem {
 }
 
 #[php_function]
-#[php(name = "Sqlx\\any")]
-pub fn any(or: &ZendHashTable) -> anyhow::Result<OrClause> {
+#[php(name = "Sqlx\\OR_")]
+pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
     let mut inner = Vec::with_capacity(or.len());
     for (key, value) in or {
         if let ArrayKey::Long(_) = key {
@@ -74,7 +74,10 @@ macro_rules! php_sqlx_impl_query_builder {
         use $crate::utils::ColumnArgument;
         use ext_php_rs::convert::FromZval;
 
-        /// A reusable prepared SQL query with parameter support. Created using `PgDriver::builder()`, shares context with original driver.
+        /// A prepared SQL query builder.
+        ///
+        /// Holds the generated query string, parameters, and placeholder tracking
+        /// used during safe, composable query construction via AST rendering.
         #[php_class]
         #[php(name = $class)]
         pub struct $struct {
@@ -85,6 +88,17 @@ macro_rules! php_sqlx_impl_query_builder {
         }
 
         impl $struct {
+            /// Creates a new prepared query builder.
+            ///
+            /// This method initializes a fresh instance of the prepared query structure,
+            /// linking it to the provided `DriverInner`. It starts with an empty query
+            /// string, no parameters, and an empty set of used placeholders.
+            ///
+            /// # Arguments
+            /// * `driver_inner` – A shared reference to the internal driver state.
+            ///
+            /// # Returns
+            /// A new instance of the prepared query builder.
             pub(crate) fn new(driver_inner: Arc<$driver_inner>) -> Self {
                 Self {
                     driver_inner,
@@ -94,6 +108,11 @@ macro_rules! php_sqlx_impl_query_builder {
                 }
             }
 
+            /// Appends a SQL comparison or null-check operator to the query.
+            ///
+            /// Supports standard SQL operators (e.g., `=`, `!=`, `<`, `IN`, `IS NULL`, etc.).
+            /// Automatically binds parameters unless the operator is `IS NULL`/`IS NOT NULL`,
+            /// which must not receive a value.
             pub fn _append_op(
                 &mut self,
                 left_operand: &str,
@@ -151,6 +170,10 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(())
             }
 
+            /// Appends a grouped `OR` clause composed of multiple expressions.
+            ///
+            /// This method recursively renders nested `OrClause` groups and ensures
+            /// proper formatting within parenthesis.
             pub fn _append_or(&mut self, or: &OrClause, prefix: &str) -> anyhow::Result<()> {
                 self.query.push('(');
                 for (i, item) in or.inner.iter().enumerate() {
@@ -197,6 +220,10 @@ macro_rules! php_sqlx_impl_query_builder {
                 self._append_ast(&self.driver_inner.parse_query(part)?, parameters, prefix)
             }
 
+            /// Appends a parsed SQL AST fragment into the query string.
+            ///
+            /// Resolves placeholders (named or positional) and merges parameter values.
+            /// Ensures that each placeholder is unique and consistent throughout the query.
             pub fn _append_ast<I, K, V>(
                 &mut self,
                 ast: &Ast,
@@ -298,6 +325,10 @@ macro_rules! php_sqlx_impl_query_builder {
                     Ok(())
                 }
 
+                /// Generates a unique placeholder name to avoid name collisions.
+                ///
+                /// Reuses the original name if not yet taken; otherwise generates a unique
+                /// variant with a numeric suffix.
                 fn resolve_placeholder_name(
                     name: &str,
                     placeholders: &mut BTreeSet<String>,
@@ -358,6 +389,88 @@ macro_rules! php_sqlx_impl_query_builder {
         #[php_impl]
         impl $struct {
 
+            /// Creates a query builder object
+            ///
+            ///
+            /// # Returns
+            /// Query builder object
+            #[must_use]
+            pub fn builder(&self,) -> $struct {
+                $struct::new(self.driver_inner.clone())
+            }
+
+            /// Appends a `WITH` clause to the query.
+            ///
+            /// # Arguments
+            /// * `table` - Name of the CTE (common table expression).
+            /// * `as` - The query body to be rendered for the CTE.
+            /// * `parameters` - Optional parameters for the query body.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->with("cte_name", "SELECT * FROM users WHERE active = $active", [
+            ///     "active" => true,
+            /// ]);
+            /// ```
+            fn with<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+                r#as: &Zval,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                write!(self_.query, "WITH {table} AS (\n")?;
+                if let Some(part) = r#as.str() {
+                     self_._append(
+                        part,
+                        parameters,
+                        "with",
+                    )?;
+                } else if let Some(builder) = r#as
+                    .object()
+                    .and_then(ZendClassObject::<$struct>::from_zend_obj)
+                    .and_then(|x| x.obj.as_ref())
+                {
+                    self_._append(builder.query.as_str(), Some(builder.parameters.clone()), "with")?;
+                }
+                else {
+
+                }
+                self_.query.push_str("\n)");
+                Ok(self_)
+            }
+
+            /// Appends a `WITH RECURSIVE` clause to the query.
+            ///
+            /// # Arguments
+            /// * `table_and_fields` - Table name with field list, e.g. `cte(col1, col2)`.
+            /// * `as` - The recursive query body.
+            /// * `parameters` - Optional parameters for the recursive body.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
+            /// ```
+            fn with_recursive<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table_and_fields: &str,
+                r#as: &str,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                write!(self_.query, "WITH RECURSIVE {table_and_fields} AS (\n")?;
+                self_._append(
+                    r#as,
+                    parameters,
+                    "with",
+                )?;
+                self_.query.push_str("\n)");
+                Ok(self_)
+            }
 
             /// Appends a `UPDATE` clause to the query.
             ///
@@ -381,7 +494,21 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(self_)
             }
 
-
+            /// Appends a `SET` clause to the query, supporting both keyed and indexed formats.
+            ///
+            /// # Arguments
+            /// * `set` - An associative array mapping fields to values, or a sequential array
+            ///   of `[field, value]` pairs or raw fragments.
+            ///
+            /// # Supported Formats
+            /// ```php
+            /// $builder->set(["name" => "John", "age" => 30]);
+            /// $builder->set([["name", "John"], ["age", 30]]);
+            /// $builder->set(["updated_at = NOW()"]);
+            /// ```
+            ///
+            /// # Exceptions
+            /// - When the input array is malformed or contains invalid value types.
             fn set<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 set: &Zval,
@@ -454,6 +581,40 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(self_)
             }
 
+            /// Renders the SQL query using named parameters and returns the fully rendered SQL with values injected inline.
+            ///
+            /// # Returns
+            /// The rendered SQL query as a string with all parameters interpolated.
+            ///
+            /// # Exceptions
+            /// - If rendering or encoding of parameters fails.
+            pub(crate) fn dry(&self) -> anyhow::Result<Vec<Zval>> {
+                self.driver_inner.dry(&self.query, Some(self.parameters.clone().into_iter().collect()))
+            }
+
+            /// Returns the parameter map currently accumulated in the builder.
+            ///
+            /// # Returns
+            /// A cloned map of all parameter names and their corresponding `ParameterValue`.
+            ///
+            /// # Exceptions
+            /// - If rendering or encoding of parameters fails.
+            pub(crate) fn dry_inline(&self) -> anyhow::Result<String> {
+                self.driver_inner.dry_inline(&self.query, Some(self.parameters.clone().into_iter().collect()))
+            }
+
+            /// Returns the fully rendered SQL query with parameters embedded as literals.
+            ///
+            /// Used for debugging or fallback rendering when the placeholder limit is exceeded.
+            ///
+            /// # Returns
+            /// A string representing the complete SQL statement.
+            ///
+            /// # Exceptions
+            /// - If rendering or encoding of parameters fails.
+            fn __to_string(&self) -> anyhow::Result<String> {
+                self.dry_inline()
+            }
 
             /// Returns an array of all currently accumulated parameters.
             pub(crate) fn parameters(&self) -> BTreeMap<String, ParameterValue> {
@@ -626,9 +787,6 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(self_)
             }
 
-            fn __to_string(&self) -> String {
-                self.query.clone()
-            }
 
             /// Executes the prepared query and returns a dictionary mapping the first column to the second column.
             ///

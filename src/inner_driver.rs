@@ -48,6 +48,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                                 .as_str(),
                         ),
                 )?;
+                let mut settings = SETTINGS.clone();
+                settings.collapsible_in_enabled = options.collapsible_in_enabled;
                 Ok(Self {
                     tx_stack: RwLock::new(Vec::new()),
                     pool,
@@ -55,7 +57,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         options.ast_cache_shard_count,
                         options.ast_cache_shard_size,
                     ),
-                    settings: SETTINGS,
+                    settings,
                     options,
                 })
             }
@@ -109,6 +111,27 @@ macro_rules! php_sqlx_impl_driver_inner {
                     let rendered = ast.render(parameters, &self.settings)?;
                     self.ast_cache.insert(query.to_owned(), ast);
                     Ok(rendered)
+                }
+            }
+
+            fn render_query_inline(
+                &self,
+                query: &str,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<String> {
+                let parameters = parameters.unwrap_or_default();
+
+                let mut settings = self.settings.clone();
+                settings.max_placeholders = 0;
+
+                if let Some(ast) = self.ast_cache.get(query) {
+                    let (query, _) = ast.render(parameters, &settings)?;
+                    Ok(query)
+                } else {
+                    let ast = Ast::parse(query, &self.settings)?;
+                    let (query, _) = ast.render(parameters, &settings)?;
+                    self.ast_cache.insert(query.to_owned(), ast);
+                    Ok(query)
                 }
             }
 
@@ -400,6 +423,14 @@ macro_rules! php_sqlx_impl_driver_inner {
                     query.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
                     values.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
                 ])
+            }
+
+            pub fn dry_inline(
+                &self,
+                query: &str,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<String> {
+                self.render_query_inline(query, parameters)
             }
 
             /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row.

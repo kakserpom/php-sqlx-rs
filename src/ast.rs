@@ -65,6 +65,7 @@ pub enum Ast {
 /// optional features like collapsible `IN` clauses.
 /// Settings that determine how placeholders and identifiers are rendered:
 /// whether to use backticks, dollar-sign placeholders, `@`-style, etc.
+#[derive(Debug, Clone)]
 pub struct Settings {
     /// Enable special parsing for `IN` and `NOT IN` clauses.
     pub collapsible_in_enabled: bool,
@@ -121,7 +122,7 @@ impl Ast {
             placeholders_out: &mut Vec<String>,
             branches: &mut Vec<Ast>,
             positional_counter: &mut usize,
-            parsing_settings: &Settings,
+            settings: &Settings,
         ) -> anyhow::Result<&'s str> {
             let mut buf = String::new();
 
@@ -130,7 +131,7 @@ impl Ast {
                     let mut idx = 1;
                     let mut iter = rest.char_indices().skip(1).peekable();
                     while let Some((i, c)) = iter.next() {
-                        if parsing_settings.escaping_double_single_quotes {
+                        if settings.escaping_double_single_quotes {
                             if c == '\'' {
                                 if let Some((_, '\'')) = iter.peek() {
                                     iter.next();
@@ -167,7 +168,7 @@ impl Ast {
                     rest = &rest[2 + end..];
                     continue;
                 }
-                if parsing_settings.comment_hash {
+                if settings.comment_hash {
                     // Line comment #
                     if let Some(r) = rest.strip_prefix("#") {
                         let end = r.find('\n').map_or(r.len(), |i| i + 1);
@@ -198,7 +199,7 @@ impl Ast {
                         &mut inner_placeholders,
                         &mut inner_branches,
                         positional_counter,
-                        parsing_settings,
+                        settings,
                     )?;
                     branches.push(Ast::ConditionalBlock {
                         branches: inner_branches,
@@ -249,7 +250,7 @@ impl Ast {
                     }
                 }
 
-                if parsing_settings.collapsible_in_enabled {
+                if settings.collapsible_in_enabled {
                     // NOT IN support (with or without parentheses)
                     if let Some(suffix) = rest.strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]) {
                         let rest_after_in = suffix.trim_start();

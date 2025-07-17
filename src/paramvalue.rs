@@ -113,6 +113,11 @@ impl ParameterValue {
     pub fn quote(&self, settings: &Settings) -> anyhow::Result<String> {
         fn escape_sql_string(input: &str, settings: &Settings) -> String {
             let mut out = String::with_capacity(input.len() + 8);
+            if settings.strings_as_ntext {
+                out.push_str("N'");
+            } else {
+                out.push('\'');
+            }
             for c in input.chars() {
                 match c {
                     '\'' => out.push_str("''"),
@@ -124,6 +129,7 @@ impl ParameterValue {
                     _ => out.push(c),
                 }
             }
+            out.push('\'');
             out
         }
         Ok(match self {
@@ -132,22 +138,13 @@ impl ParameterValue {
             ParameterValue::Int(i) => i.to_string(),
             ParameterValue::Float(f) => f.to_string(),
 
-            ParameterValue::Bool(b) => {
-                if settings.booleans_as_literals {
-                    if *b { "TRUE" } else { "FALSE" }.to_string()
-                } else {
-                    if *b { "1" } else { "0" }.to_string()
-                }
-            }
+            ParameterValue::Bool(b) => String::from(if settings.booleans_as_literals {
+                if *b { "TRUE" } else { "FALSE" }
+            } else {
+                if *b { "1" } else { "0" }
+            }),
 
-            ParameterValue::Str(s) => {
-                let escaped = escape_sql_string(s, settings);
-                if settings.strings_as_ntext {
-                    format!("N'{escaped}'")
-                } else {
-                    format!("'{escaped}'")
-                }
-            }
+            ParameterValue::Str(s) => escape_sql_string(s, settings),
 
             ParameterValue::Array(values) => {
                 let elements = values
@@ -158,14 +155,11 @@ impl ParameterValue {
                 format!("({elements})")
             }
 
-            ParameterValue::Object(obj) => {
-                let json = serde_json::to_string(obj).unwrap_or_else(|_| "{}".to_string());
-                let quoted = escape_sql_string(&json, settings);
-                match settings.cast_json {
-                    Some(suffix) => format!("'{}' {}", quoted, suffix),
-                    None => format!("'{}'", quoted),
-                }
-            }
+            ParameterValue::Object(obj) => escape_sql_string(
+                &serde_json::to_string(obj)
+                    .map_err(|e| anyhow::anyhow!("JSON serialization error: {}", e))?,
+                settings,
+            ),
 
             ParameterValue::ByClauseRendered(_)
             | ParameterValue::SelectClauseRendered(_)
