@@ -226,7 +226,7 @@ fn test_pagination() {
     let mut vals = ParamsMap::default();
     vals.insert(
         "pagination".into(),
-        ParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
+        ParameterValue::PaginateClauseRendered(paginate_clause.input(Some(7), None)),
     );
     let (sql, values) = ast.render(vals, &SETTINGS).unwrap();
     println!("sql = {sql:#?}");

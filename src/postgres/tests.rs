@@ -90,7 +90,7 @@ fn test_render_var_types() {
 }
 
 #[test]
-fn test_render_order_by_apply() {
+fn test_render_order_by_input() {
     let ob = ByClause::allowed([
         ("name", "users.name"),
         ("age", "users.age"),
@@ -289,7 +289,7 @@ fn test_pagination() {
     let mut vals = ParamsMap::default();
     vals.insert(
         "pagination".into(),
-        ParameterValue::PaginateClauseRendered(paginate_clause.apply(Some(7), None)),
+        ParameterValue::PaginateClauseRendered(paginate_clause.input(Some(7), None)),
     );
     let (sql, values) = ast.render(vals, &SETTINGS).unwrap();
     println!("sql = {sql:#?}");

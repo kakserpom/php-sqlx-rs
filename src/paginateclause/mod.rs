@@ -139,7 +139,7 @@ impl PaginateClause {
     ///
     /// # Parameters and behavior are identical to `render`.
     #[must_use]
-    pub fn apply(&self, page_number: Option<i64>, per_page: Option<i64>) -> PaginateClauseRendered {
+    pub fn input(&self, page_number: Option<i64>, per_page: Option<i64>) -> PaginateClauseRendered {
         self.render(page_number, per_page)
     }
 }
@@ -166,17 +166,9 @@ impl PaginateClauseRendered {
         settings: &Settings,
     ) -> anyhow::Result<()> {
         sql.push_str("LIMIT ");
-        ParameterValue::Int(self.limit).write_sql_to(
-            sql,
-            out_vals,
-            settings,
-        )?;
+        ParameterValue::Int(self.limit).write_sql_to(sql, out_vals, settings)?;
         sql.push_str(" OFFSET ");
-        ParameterValue::Int(self.offset).write_sql_to(
-            sql,
-            out_vals,
-            settings,
-        )
+        ParameterValue::Int(self.offset).write_sql_to(sql, out_vals, settings)
     }
 }
 /// Registers the `PaginateClause` and `PaginateClauseRendered` classes

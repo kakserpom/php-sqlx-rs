@@ -1,7 +1,9 @@
-use crate::paramvalue::ParamsMap;
+use crate::paramvalue::{ParameterValue, ParamsMap};
 use anyhow::{anyhow, bail};
+use ext_php_rs::convert::FromZval;
 use ext_php_rs::prelude::*;
-use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable};
+use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable, Zval};
+use strum_macros::Display;
 
 /// Registers the `PaginateClause` and `PaginateClauseRendered` classes
 /// with the provided PHP module builder.
@@ -18,6 +20,7 @@ pub struct OrClause {
 #[derive(Debug, Clone)]
 pub enum OrClauseItem {
     Nested(OrClause),
+    Op((String, String, Option<ParameterValue>)),
     Item((String, Option<ParamsMap>)),
 }
 
@@ -25,10 +28,37 @@ pub enum OrClauseItem {
 #[php(name = "Sqlx\\OR_")]
 pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
     let mut inner = Vec::with_capacity(or.len());
-    for (key, value) in or {
+    for (i, (key, value)) in or.iter().enumerate() {
         if let ArrayKey::Long(_) = key {
             if let Some(value) = value.string() {
                 inner.push(OrClauseItem::Item((value, None)));
+            } else if let Some(array) = value.array() {
+                if array.has_sequential_keys() {
+                    let array_len = array.len();
+                    if array_len > 3 {
+                        bail!("condition #{i}: array cannot contain more than 3 elements");
+                    }
+                    let left_operand =
+                        array.get_index(0).and_then(Zval::string).ok_or_else(|| {
+                            anyhow!("first element (left operand) of #{i} must be a string")
+                        })?;
+                    let operator = array.get_index(1).and_then(Zval::string).ok_or_else(|| {
+                        anyhow!("second element (operator) of #{i} must be a string")
+                    })?;
+                    let right_operand = if array_len > 2 {
+                        Some(
+                            array
+                                .get_index(2)
+                                .and_then(ParameterValue::from_zval)
+                                .ok_or_else(|| {
+                                    anyhow!("third element (value) must a valid parameter value")
+                                })?,
+                        )
+                    } else {
+                        None
+                    };
+                    inner.push(OrClauseItem::Op((left_operand, operator, right_operand)));
+                }
             } else if let Some(or) = value
                 .object()
                 .and_then(ZendClassObject::<OrClause>::from_zend_obj)
@@ -50,6 +80,28 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
     Ok(OrClause { inner })
 }
 
+/// Represents the supported SQL `JOIN` types.
+#[derive(Debug, Clone, Copy, Display)]
+pub enum JoinType {
+    #[strum(to_string = "INNER")]
+    Inner,
+
+    #[strum(to_string = "LEFT")]
+    Left,
+
+    #[strum(to_string = "RIGHT")]
+    Right,
+
+    #[strum(to_string = "NATURAL")]
+    Natural,
+
+    #[strum(to_string = "FULL OUTER")]
+    FullOuter,
+
+    #[strum(to_string = "CROSS")]
+    Cross,
+}
+
 #[macro_export]
 macro_rules! php_sqlx_impl_query_builder {
     ( $struct:ident, $class:literal, $driver_inner: ident ) => {
@@ -57,6 +109,11 @@ macro_rules! php_sqlx_impl_query_builder {
         use $crate::paramvalue::ParamsMap;
         use $crate::query_builder::{OrClause, OrClauseItem};
         use $crate::selectclause::SelectClauseRendered;
+        use $crate::byclause::ByClauseRendered;
+        use $crate::paramvalue::ParameterValue;
+        use $crate::utils::ColumnArgument;
+        use $crate::utils::IndentSql;
+        use $crate::query_builder::JoinType;
         use anyhow::anyhow;
         use anyhow::bail;
         use ext_php_rs::php_impl;
@@ -69,11 +126,9 @@ macro_rules! php_sqlx_impl_query_builder {
         use std::collections::HashMap;
         use std::fmt::Write;
         use std::sync::Arc;
-        use $crate::paramvalue::ParameterValue;
-        use $crate::utils::ColumnArgument;
         use ext_php_rs::convert::FromZval;
         use ext_php_rs::flags::DataType;
-        use crate::utils::IndentSql;
+
 
         /// A prepared SQL query builder.
         ///
@@ -130,6 +185,67 @@ macro_rules! php_sqlx_impl_query_builder {
                     parameters: Default::default(),
                     query: Default::default(),
                 }
+            }
+
+            /// Appends a SQL `JOIN` clause to the query with an `ON` condition.
+            ///
+            /// # Arguments
+            /// * `join_type` – Enum value specifying the join type (e.g. `JoinType::Left`).
+            /// * `table` – The name of the table to join.
+            /// * `on` – SQL expression used in the `ON` clause.
+            /// * `parameters` – Optional map of parameters for the `ON` clause.
+            ///
+            /// # Errors
+            /// Returns an error if placeholder resolution fails.
+            fn _join_clause(
+                &mut self,
+                join_type: JoinType,
+                table: &str,
+                on: &str,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<()> {
+                if !self.query.is_empty() {
+                    self.query.push('\n');
+                }
+                write!(self.query, "{} JOIN {} ON ", join_type, table)?;
+                self._append(on, parameters, "join")?;
+                Ok(())
+            }
+
+
+            /// Internal helper to append a UNION clause.
+            ///
+            /// # Arguments
+            /// * `keyword` – Either "UNION" or "UNION ALL"
+            /// * `query` – SQL string or Builder
+            /// * `parameters` – Optional bound parameters
+            fn _append_union_clause(
+                &mut self,
+                keyword: &str,
+                query: &Zval,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<()> {
+                use ext_php_rs::types::ZendClassObject;
+
+                self.query.push_str(&format!("\n{keyword}\n"));
+
+                if let Some(part) = query.str() {
+                    self._append(&part.indent_sql(true), parameters, "union")?;
+                } else if let Some($struct { query, parameters, .. }) = query
+                    .object()
+                    .and_then(ZendClassObject::<$struct>::from_zend_obj)
+                    .and_then(|x| x.obj.as_ref())
+                {
+                    self._append(
+                        &format!("({})", query.indent_sql(true)),
+                        Some(parameters.clone()),
+                        "union",
+                    )?;
+                } else {
+                    bail!("argument to union must be a string or Builder");
+                }
+
+                Ok(())
             }
 
             /// Appends a SQL comparison or null-check operator to the query.
@@ -205,16 +321,24 @@ macro_rules! php_sqlx_impl_query_builder {
                         self.query.push_str(" OR ");
                     }
                     match item {
+                        OrClauseItem::Nested(nested)  => {
+                            self._append_or(
+                                nested,
+                                prefix,
+                            )?;
+                        }
+                        OrClauseItem::Op((left_operand, operator, right_operand))  => {
+                            self._append_op(
+                                left_operand,
+                                operator,
+                                right_operand.clone(),
+                                prefix,
+                            )?;
+                        }
                         OrClauseItem::Item((part, parameters))  => {
                             self._append(
                                 part.as_str(),
                                 parameters.clone(),
-                                prefix,
-                            )?;
-                        }
-                        OrClauseItem::Nested(nested)  => {
-                            self._append_or(
-                                nested,
                                 prefix,
                             )?;
                         }
@@ -436,6 +560,144 @@ macro_rules! php_sqlx_impl_query_builder {
                 $struct::new(self.driver_inner.clone())
             }
 
+
+            /// Appends an `ON CONFLICT` clause to the query.
+            ///
+            /// # Arguments
+            /// * `target` – A string or array of column names to specify the conflict target.
+            /// * `set` – Optional `SET` clause. If `null`, generates `DO NOTHING`; otherwise uses the `SET` values.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->onConflict("id", null);
+            /// $builder->onConflict(["email", "tenant_id"], ["name" => "New"]);
+            /// ```
+            fn on_conflict<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                target: &Zval,
+                set: Option<&Zval>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                let target_str = if let Some(scalar) = target.str() {
+                    scalar.to_string()
+                } else if let Some(arr) = target.array() {
+                    arr
+                        .iter()
+                        .map(|(_, val)| {
+                            val.str().ok_or_else(|| anyhow!("ON CONFLICT array elements must be strings"))
+                        })
+                        .collect::<anyhow::Result<Vec<_>>>()?.join(", ")
+                } else {
+                    bail!("Conflict target must be a string or array of strings");
+                };
+
+                if let Some(set_val) = set {
+                    write!(self_.query, "\nON CONFLICT ({target_str}) DO UPDATE")?;
+                    $struct::set(self_, set_val)?;
+                } else {
+                    write!(self_.query, "\nON CONFLICT ({target_str}) DO NOTHING")?;
+                }
+
+                Ok(self_)
+            }
+
+
+            /// Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+            ///
+            /// # Arguments
+            /// * `set` – An array representing fields and values to update.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->onDuplicateKeyUpdate(["email" => "new@example.com"]);
+            /// ```
+            fn on_duplicate_key_update<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                set: &Zval,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_.query.push_str("\nON DUPLICATE KEY UPDATE");
+                $struct::set(self_, set)?;
+                Ok(self_)
+            }
+
+            /// Appends an `INNER JOIN` clause to the query.
+            fn inner_join<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+                on: &str,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._join_clause(JoinType::Inner, table, on, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends an `INNER JOIN` clause to the query.
+            /// Alias for `inner_join()`.
+            fn join<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+                on: &str,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._join_clause(JoinType::Inner, table, on, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends a `LEFT JOIN` clause to the query.
+            fn left_join<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+                on: &str,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._join_clause(JoinType::Left, table, on, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends a `RIGHT JOIN` clause to the query.
+            fn right_join<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+                on: &str,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._join_clause(JoinType::Right, table, on, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends a `FULL OUTER JOIN` clause to the query.
+            fn full_join<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+                on: &str,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._join_clause(JoinType::FullOuter, table, on, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends a `CROSS JOIN` clause to the query.
+            fn cross_join<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+                on: &str,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._join_clause(JoinType::Cross, table, on, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends a `NATURAL JOIN` clause to the query.
+            ///
+            /// # Note
+            /// `NATURAL JOIN` does not accept `ON` conditions. The `on` argument is ignored.
+            fn natural_join<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._join_clause(JoinType::Natural, table, "", None)?;
+                Ok(self_)
+            }
+
             /// Appends a `WITH` clause to the query.
             ///
             /// # Arguments
@@ -476,6 +738,387 @@ macro_rules! php_sqlx_impl_query_builder {
                     bail!("`as` must be a string or Builder");
                 }
                 self_.query.push_str("\n)");
+                Ok(self_)
+            }
+
+            /// Appends a `WHERE` clause to the query.
+            ///
+            /// # Arguments
+            /// * `where` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+            /// * `parameters` - Optional parameters associated with the `WHERE` condition.
+            ///
+            /// # Exceptions
+            /// Throws an exception if the input is not valid.
+            fn _where<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                r#where: &Zval,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if let Some(part) = r#where.str() {
+                    self_.query.push_str("\nWHERE ");
+                    self_._append(&part.indent_sql(false), parameters, "where")?;
+                } else if let Some(array) = r#where.array() {
+                    self_.query.push_str("\nWHERE ");
+                    for (i, (key, value)) in array.iter().enumerate() {
+                        if i > 0 {
+                            self_.query.push_str("\n   AND ");
+                        }
+                        match key {
+                            ArrayKey::Long(_) => {
+                                if let Some(part) = value.str() {
+                                    self_._append(
+                                        part,
+                                        None::<[(&str, &str); 0]>,
+                                        "where",
+                                    )?;
+                                } else if let Some(array) = value.array() {
+                                    if array.has_sequential_keys() {
+                                        let array_len = array.len();
+                                        if array_len > 3 {
+                                            bail!("condition #{i}: array cannot contain more than 3 elements");
+                                        }
+                                        let left_operand = array.get_index(0)
+                                            .and_then(Zval::str)
+                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be a string"))?;
+                                        let operator = array.get_index(1).and_then(Zval::str)
+                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be a string"))?;
+                                        self_._append_op(left_operand, operator, if array_len > 2 {
+                                            Some(
+                                                array.get_index(2)
+                                                    .and_then(ParameterValue::from_zval)
+                                                    .ok_or_else(|| anyhow!("third element (value) must a valid parameter value"))?
+                                            )
+                                        } else {
+                                            None
+                                        }, "where")?;
+                                    } else {
+                                        bail!("condition #{i}: array must be a list");
+                                    }
+                                }
+                                else if let Some(or) = value
+                                    .object()
+                                    .and_then(ZendClassObject::<OrClause>::from_zend_obj)
+                                    .and_then(|x| x.obj.as_ref())
+                                {
+                                    self_._append_or(or, "where")?;
+                                } else {
+                                    bail!("element must be a string or OrClause");
+                                }
+                            }
+                            _ => {
+                                let part = key.to_string();
+                                let ast = self_.driver_inner.parse_query(&part)?;
+                                if ast.has_placeholders() {
+                                    let Some(parameters) = value.array() else {
+                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {ast:?}");
+                                    };
+                                    let parameters: HashMap<String, ParameterValueWrapper> =
+                                        parameters.try_into().map_err(|err| anyhow!("{err}"))?;
+                                    self_._append_ast(&ast, Some(parameters), "where")?;
+                                } else {
+                                    self_._append(
+                                        &format!("{part} = ?"),
+                                        Some([
+                                            ("0", ParameterValue::from_zval(value)
+                                                .ok_or_else(|| anyhow!("element value must a valid parameter value"))?
+                                            ); 1]
+                                        ),
+                                        "where"
+                                    )?;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    bail!("illegal where() argument");
+                }
+                Ok(self_)
+            }
+
+
+            /// Appends a `UNION` clause to the query.
+            ///
+            /// # Arguments
+            /// * `query` – A raw SQL string or another Builder instance (subquery).
+            /// * `parameters` – Optional parameters to bind to the unioned subquery.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->union("SELECT id FROM users");
+            /// $builder->union($other_builder);
+            /// ```
+            fn union<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                query: &Zval,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._append_union_clause("UNION", query, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends a `UNION ALL` clause to the query.
+            ///
+            /// # Arguments
+            /// * `query` – A raw SQL string or another Builder instance (subquery).
+            /// * `parameters` – Optional parameters to bind to the unioned subquery.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->union_all("SELECT id FROM users");
+            /// $builder->union_all($other_builder);
+            /// ```
+            fn union_all<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                query: &Zval,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._append_union_clause("UNION ALL", query, parameters)?;
+                Ok(self_)
+            }
+
+            /// Appends a `HAVING` clause to the query.
+            ///
+            /// # Arguments
+            /// * `having` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+            /// * `parameters` - Optional parameters associated with the `WHERE` condition.
+            ///
+            /// # Exceptions
+            /// Throws an exception if the input is not valid.
+            fn having<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                having: &Zval,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if let Some(part) = having.str() {
+                    self_.query.push_str("\nHAVING ");
+                    self_._append(&part.indent_sql(false), parameters, "having")?;
+                } else if let Some(array) = having.array() {
+                    self_.query.push_str("\nHAVING ");
+                    for (i, (key, value)) in array.iter().enumerate() {
+                        if i > 0 {
+                            self_.query.push_str("\n   AND ");
+                        }
+                        match key {
+                            ArrayKey::Long(_) => {
+                                if let Some(part) = value.str() {
+                                    self_._append(
+                                        part,
+                                        None::<[(&str, &str); 0]>,
+                                        "having",
+                                    )?;
+                                } else if let Some(array) = value.array() {
+                                    if array.has_sequential_keys() {
+                                        let array_len = array.len();
+                                        if array_len > 3 {
+                                            bail!("condition #{i}: array cannot contain more than 3 elements");
+                                        }
+                                        let left_operand = array.get_index(0)
+                                            .and_then(Zval::str)
+                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be a string"))?;
+                                        let operator = array.get_index(1).and_then(Zval::str)
+                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be a string"))?;
+                                        self_._append_op(left_operand, operator, if array_len > 2 {
+                                            Some(
+                                                array.get_index(2)
+                                                    .and_then(ParameterValue::from_zval)
+                                                    .ok_or_else(|| anyhow!("third element (value) must a valid parameter value"))?
+                                            )
+                                        } else {
+                                            None
+                                        }, "having")?;
+                                    } else {
+                                        bail!("condition #{i}: array must be a list");
+                                    }
+                                }
+                                else if let Some(or) = value
+                                    .object()
+                                    .and_then(ZendClassObject::<OrClause>::from_zend_obj)
+                                    .and_then(|x| x.obj.as_ref())
+                                {
+                                    self_._append_or(or, "having")?;
+                                } else {
+                                    bail!("element must be a string or OrClause");
+                                }
+                            }
+                            _ => {
+                                let part = key.to_string();
+                                let ast = self_.driver_inner.parse_query(&part)?;
+                                if ast.has_placeholders() {
+                                    let Some(parameters) = value.array() else {
+                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {ast:?}");
+                                    };
+                                    let parameters: HashMap<String, ParameterValueWrapper> =
+                                        parameters.try_into().map_err(|err| anyhow!("{err}"))?;
+                                    self_._append_ast(&ast, Some(parameters), "having")?;
+                                } else {
+                                    self_._append(
+                                        &format!("{part} = ?"),
+                                        Some([
+                                            ("0", ParameterValue::from_zval(value)
+                                                .ok_or_else(|| anyhow!("element value must a valid parameter value"))?
+                                            ); 1]
+                                        ),
+                                        "having"
+                                    )?;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    bail!("illegal having() argument");
+                }
+                Ok(self_)
+            }
+
+            /// Appends a `LIMIT` (and optional `OFFSET`) clause to the query.
+            ///
+            /// # Arguments
+            /// * `limit` – Maximum number of rows to return.
+            /// * `offset` – Optional number of rows to skip before starting to return rows.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->limit(10);
+            /// $builder->limit(10, 20); // LIMIT 10 OFFSET 20
+            /// ```
+            fn limit<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                limit: i64,
+                offset: Option<i64>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if limit < 0 {
+                    bail!("LIMIT must be non-negative");
+                }
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                write!(self_.query, "LIMIT {limit}")?;
+                if let Some(offset) = offset {
+                    if offset < 0 {
+                        bail!("OFFSET must be non-negative");
+                    }
+                    write!(self_.query, " OFFSET {offset}")?;
+                }
+                Ok(self_)
+            }
+
+            /// Appends an `OFFSET` clause to the query independently.
+            ///
+            /// # Arguments
+            /// * `offset` – Number of rows to skip before returning results.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->offset(30); // OFFSET 30
+            /// ```
+            fn offset<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                offset: i64,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if offset < 0 {
+                    bail!("OFFSET must be non-negative");
+                }
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                write!(self_.query, "OFFSET {offset}")?;
+                Ok(self_)
+            }
+
+
+            /// Appends a `DELETE FROM` clause to the query.
+            ///
+            /// # Arguments
+            /// * `from` - A string table name or a nested builder object.
+            /// * `parameters` - Optional parameters if the `from` is a raw string.
+            ///
+            /// # Examples
+            /// ```php
+            /// $builder->deleteFrom("users");
+            /// $builder->deleteFrom($builder->select("id")->from("temp_users"));
+            /// ```
+            fn delete_from<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                from: &Zval,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+
+                if let Some(str) = from.str() {
+                    self_._append(&format!("DELETE FROM ({})", str.indent_sql(true)), parameters, "delete")?;
+                } else if from.array().is_some() {
+                    bail!("deleteFrom() does not support arrays");
+                } else if let Some($struct { query, parameters, .. }) = from
+                    .object()
+                    .and_then(ZendClassObject::<$struct>::from_zend_obj)
+                    .and_then(|x| x.obj.as_ref())
+                {
+                    self_._append(&format!("DELETE FROM ({})", query.indent_sql(true)), Some(parameters.clone()), "delete")?;
+                } else {
+                    bail!("invalid deleteFrom() argument");
+                }
+                Ok(self_)
+            }
+
+            /// Appends a `USING` clause to the query.
+            ///
+            /// # Arguments
+            /// * `from` - Either a string table name or a subquery builder.
+            /// * `parameters` - Optional parameters if `from` is a string.
+            fn using<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                from: &Zval,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_.query.push_str("\nUSING ");
+
+                if let Some(str) = from.str() {
+                    self_._append(&str.indent_sql(true), parameters, "using")?;
+                } else if from.array().is_some() {
+                    bail!("using() does not support arrays");
+                } else if let Some($struct { query, parameters, .. }) = from
+                    .object()
+                    .and_then(ZendClassObject::<$struct>::from_zend_obj)
+                    .and_then(|x| x.obj.as_ref())
+                {
+                    self_._append(&format!("({})", query.indent_sql(true)), Some(parameters.clone()), "using")?;
+                } else {
+                    bail!("invalid using() argument");
+                }
+
+                Ok(self_)
+            }
+
+            /// Appends a `PAGINATE` clause to the query using a `PaginateClauseRendered` object.
+            ///
+            /// This expands into the appropriate SQL `LIMIT` and `OFFSET` syntax during rendering,
+            /// using the values stored in the given `PaginateClauseRendered` instance.
+            ///
+            /// # Arguments
+            /// * `paginate` – An instance of `Sqlx\PaginateClauseRendered`, produced by invoking a `PaginateClause`
+            ///               (e.g., `$paginate = (new PaginateClause)($page, $perPage)`).
+            ///
+            /// # Errors
+            /// Returns an error if the argument is not an instance of `PaginateClauseRendered`.
+            ///
+            /// # Example
+            /// ```php
+            /// $paginate = (new \Sqlx\PaginateClause())->__invoke(2, 10); // page 2, 10 per page
+            /// $builder->select("*")->from("users")->paginate($paginate);
+            /// // SELECT * FROM users LIMIT 10 OFFSET 20
+            /// ```
+            fn paginate<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                paginate: &Zval,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+
+                let pv =  ParameterValue::from_zval(paginate);
+                if !matches!(pv, Some(ParameterValue::PaginateClauseRendered(_))) {
+                    bail!("argument must be PaginateClauseRendered");
+                }
+                self_._append(&format!("PAGINATE ?"), pv.map(|x| [("0", x); 1]), "paginate")?;
                 Ok(self_)
             }
 
@@ -687,13 +1330,13 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(self_)
             }
 
-          /// Appends a `SELECT` clause to the query.
-          ///
-          /// # Arguments
-          /// * `fields` - Either a raw string or a `SelectClauseRendered` object.
-          ///
-          /// # Exceptions
-          /// Throws an exception if the argument is not a string or a supported object.
+            /// Appends a `SELECT` clause to the query.
+            ///
+            /// # Arguments
+            /// * `fields` - Either a raw string or a `SelectClauseRendered` object.
+            ///
+            /// # Exceptions
+            /// Throws an exception if the argument is not a string or a supported object.
             fn select<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 fields: &Zval,
@@ -705,7 +1348,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     write!(self_.query, "SELECT {str}")?;
                 }
                 else if let Some(array) = fields.array() {
-                    write!(self_.query, "SELECT ")?;
+                    self_.query.push_str("SELECT ");
                     for (i, (key, value)) in array.iter().enumerate() {
                         if i > 0 {
                             self_.query.push_str(", ");
@@ -721,7 +1364,7 @@ macro_rules! php_sqlx_impl_query_builder {
                             if let Some(expr) = value.str() {
                                 write!(self_.query, "{expr} AS {field}")?;
                             } else {
-                                bail!("indexed element must be a string")
+                                bail!("keyed element value must be a string")
                             }
                         }
                     }
@@ -739,122 +1382,522 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(self_)
             }
 
-             /// Appends a `FROM` clause to the query.
-             ///
-             /// # Arguments
-             /// * `from` - A raw string representing the source table(s).
-             ///
-             /// # Exceptions
-             /// Throws an exception if the argument is not a string.
-            fn from<'a>(
+            /// Appends a `ORDER BY` clause to the query.
+            ///
+            /// # Arguments
+            /// * `fields` - Either a raw string or a `ByClauseRendered` object.
+            ///
+            /// # Exceptions
+            /// Throws an exception if the argument is not a string or a supported object.
+            fn order_by<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
-                from: &Zval,
+                fields: &Zval,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
-                if let Some(str) = from.str() {
-                    if !self_.query.is_empty() {
-                        self_.query.push('\n');
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                if let Some(str) = fields.str() {
+                    write!(self_.query, "ORDER BY {str}")?;
+                }
+                else if let Some(array) = fields.array() {
+                    self_.query.push_str("ORDER BY ");
+                    for (i, (key, value)) in array.iter().enumerate() {
+                        if i > 0 {
+                            self_.query.push_str(", ");
+                        }
+                        if let ArrayKey::Long(_) = key {
+                            if let Some(field) = value.str() {
+                                self_.query.push_str(field);
+                            } else {
+                                bail!("indexed element must be a string")
+                            }
+                        } else {
+                            let field = key.to_string();
+                            if let Some(dir) = value.str() {
+                                write!(self_.query, "{field} {dir}")?;
+                            } else {
+                                bail!("keyed element value must be a string")
+                            }
+                        }
                     }
-                    write!(self_.query, "FROM {str}")?;
+                }
+                else if let Some(bcr) = fields
+                    .object()
+                    .and_then(ZendClassObject::<ByClauseRendered>::from_zend_obj)
+                {
+                    let mut clause = String::from("ORDER BY ");
+                    bcr.write_sql_to(&mut clause, &self_.driver_inner.settings)?;
+                    self_.query.push_str(&clause);
                 } else {
-                    bail!("illegal from() argument")
+                    bail!("illegal order_by() argument")
                 }
                 Ok(self_)
             }
 
-            /// Appends a `WHERE` clause to the query.
+            /// Appends a `GROUP BY` clause to the query.
             ///
             /// # Arguments
-            /// * `where` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
-            /// * `parameters` - Optional parameters associated with the `WHERE` condition.
+            /// * `fields` - Either a raw string or a `ByClauseRendered` object.
             ///
             /// # Exceptions
-            /// Throws an exception if the input is not valid.
-            fn _where<'a>(
+            /// Throws an exception if the argument is not a string or a supported object.
+            fn group_by<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
-                r#where: &Zval,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                fields: &Zval,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
-                if let Some(part) = r#where.str() {
-                    self_.query.push_str("\nWHERE ");
-                    self_._append(&part.indent_sql(false), parameters, "where")?;
-                } else if let Some(array) = r#where.array() {
-                    self_.query.push_str("\nWHERE ");
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                if let Some(str) = fields.str() {
+                    write!(self_.query, "GROUP BY {str}")?;
+                }
+                else if let Some(array) = fields.array() {
+                    self_.query.push_str("GROUP BY ");
                     for (i, (key, value)) in array.iter().enumerate() {
                         if i > 0 {
-                            self_.query.push_str("\n   AND ");
+                            self_.query.push_str(", ");
+                        }
+                        if let ArrayKey::Long(_) = key {
+                            if let Some(field) = value.str() {
+                                self_.query.push_str(field);
+                            } else {
+                                bail!("indexed element must be a string")
+                            }
+                        } else {
+                            let field = key.to_string();
+                            if let Some(dir) = value.str() {
+                                write!(self_.query, "{field} {dir}")?;
+                            } else {
+                                bail!("keyed element value must be a string")
+                            }
+                        }
+                    }
+                }
+                else if let Some(bcr) = fields
+                    .object()
+                    .and_then(ZendClassObject::<ByClauseRendered>::from_zend_obj)
+                {
+                    let mut clause = String::from("GROUP BY ");
+                    bcr.write_sql_to(&mut clause, &self_.driver_inner.settings)?;
+                    self_.query.push_str(&clause);
+                } else {
+                    bail!("illegal group_by() argument")
+                }
+                Ok(self_)
+            }
+
+
+            /// Appends a `FOR UPDATE` locking clause to the query.
+            ///
+            /// This clause is used in `SELECT` statements to lock the selected rows
+            /// for update, preventing other transactions from modifying or acquiring
+            /// locks on them until the current transaction completes.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->select("*")->from("users")->for_update();
+            /// // SELECT * FROM users FOR UPDATE
+            /// ```
+            ///
+            /// # Notes
+            /// - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+            /// - Useful for implementing pessimistic locking in concurrent systems.
+            ///
+            /// # Returns
+            /// The query builder with `FOR UPDATE` appended.
+            fn for_update<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_.query.push_str("\nFOR UPDATE");
+                Ok(self_)
+            }
+
+            /// Appends a `FOR SHARE` locking clause to the query.
+            ///
+            /// This clause is used in `SELECT` statements to acquire shared locks
+            /// on the selected rows, allowing concurrent transactions to read but
+            /// not modify the rows until the current transaction completes.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->select("*")->from("documents")->for_share();
+            /// // SELECT * FROM documents FOR SHARE
+            /// ```
+            ///
+            /// # Notes
+            /// - Supported in PostgreSQL and some MySQL configurations.
+            /// - Ensures rows cannot be updated or deleted by other transactions while locked.
+            ///
+            /// # Returns
+            /// The query builder with `FOR SHARE` appended.
+            fn for_share<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_.query.push_str("\nFOR SHARE");
+                Ok(self_)
+            }
+
+            /// Appends an `INSERT INTO` clause to the query.
+            ///
+            /// # Arguments
+            /// * `table` - The name of the target table.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->insert("users");
+            /// ```
+            fn insert<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                write!(self_.query, "INSERT INTO {table}")?;
+                Ok(self_)
+            }
+
+            /// Appends a `VALUES` clause to the query.
+            ///
+            /// # Arguments
+            /// * `values` - Can be:
+            ///     - An associative array: `["name" => "John", "email" => "j@example.com"]`
+            ///     - A list of `[column, value]` pairs: `[["name", "John"], ["email", "j@example.com"]]`
+            ///     - A raw SQL string or a subquery builder
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->insert("users")->values(["name" => "John", "email" => "j@example.com"]);
+            /// ```
+            fn values<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                values: &Zval,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                use ext_php_rs::types::ArrayKey;
+
+                if let Some(array) = values.array() {
+                    let mut columns = Vec::new();
+                    let mut placeholders = Vec::new();
+                    let mut param_index = 0;
+
+                    // Case 1: associative array or list of [col, val]
+                    for (key, val) in array.iter() {
+                        match key {
+                            ArrayKey::Long(_) => {
+                                // Expecting list of [col, val]
+                                let arr = val.array().ok_or_else(|| anyhow!("each element must be [column, value]"))?;
+                                if arr.len() != 2 {
+                                    bail!("each sub-array must be [column, value]");
+                                }
+                                let column = arr.get_index(0).and_then(Zval::str).ok_or_else(|| anyhow!("first element must be string"))?;
+                                let value = arr.get_index(1).and_then(ParameterValue::from_zval).ok_or_else(|| anyhow!("invalid value"))?;
+                                columns.push(column.to_string());
+                                placeholders.push((String::from("0"), value));
+                            }
+                            _ => {
+                                // Associative array
+                                let column = key.to_string();
+                                let value = ParameterValue::from_zval(&val).ok_or_else(|| anyhow!("invalid value"))?;
+                                columns.push(column);
+                                placeholders.push((param_index.to_string(), value));
+                                param_index += 1;
+                            }
+                        }
+                    }
+
+                    if columns.is_empty() {
+                        bail!("values() requires at least one column-value pair");
+                    }
+
+                    write!(self_.query, "\n({})\nVALUES (", columns.join(", "))?;
+                    for i in 0..placeholders.len() {
+                        if i > 0 {
+                            self_.query.push_str(", ");
+                        }
+                        self_.query.push('?');
+                    }
+                    self_.query.push(')');
+                    self_.parameters.extend(
+                        placeholders
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, (_, v))| (format!("values__{i}"), v)),
+                    );
+                    Ok(self_)
+                } else if let Some(str) = values.str() {
+                    // Case 2: raw subquery string
+                    write!(self_.query, "\n{str}")?;
+                    Ok(self_)
+                } else if let Some($struct { query, parameters, .. }) = values
+                    .object()
+                    .and_then(ZendClassObject::<$struct>::from_zend_obj)
+                    .and_then(|x| x.obj.as_ref())
+                {
+                    // Case 3: subquery builder
+                    write!(self_.query, "\n({})", query.indent_sql(true))?;
+                    self_.parameters.extend(parameters.clone());
+                    Ok(self_)
+                } else {
+                    bail!("values() expects array, string or Builder");
+                }
+            }
+
+            /// Appends a `TRUNCATE TABLE` statement to the query.
+            ///
+            /// This command removes all rows from the specified table quickly and efficiently.
+            /// It is faster than `DELETE FROM` and usually does not fire triggers or return affected row counts.
+            ///
+            /// # Arguments
+            /// * `table` – The name of the table to truncate.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->truncate_table("users");
+            /// // TRUNCATE TABLE users
+            /// ```
+            ///
+            /// # Notes
+            /// - May require elevated privileges depending on the database.
+            /// - This method can be chained with other query builder methods.
+            ///
+            /// # Errors
+            /// Returns an error if appending the SQL fragment fails (e.g., formatting error).
+            fn truncate_table<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                write!(self_.query, "TRUNCATE TABLE {table}")?;
+                Ok(self_)
+            }
+
+            /// Finalizes the query by appending a semicolon (`;`).
+            ///
+            /// This method is optional. Most databases do not require semicolons in prepared queries,
+            /// but you may use it to explicitly terminate a query string.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->select("*")->from("users")->end();
+            /// // SELECT * FROM users;
+            /// ```
+            ///
+            /// # Returns
+            /// The builder instance after appending the semicolon.
+            ///
+            /// # Notes
+            /// - Only appends the semicolon character; does not perform any execution.
+            /// - Useful when exporting a full query string with a terminating symbol (e.g., for SQL scripts).
+            fn end<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                _table: &str,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_.query.push(';');
+                Ok(self_)
+            }
+
+            /// Appends multiple rows to the `VALUES` clause of an `INSERT` statement.
+            ///
+            /// Each row must be:
+            /// - an ordered list of values (indexed array),
+            /// - or a map of column names to values (associative array) — only for the first row, to infer column order.
+            ///
+            /// # Arguments
+            /// * `rows` – A sequential array of rows (arrays of values).
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->insert("users")->values_many([
+            ///     ["Alice", "alice@example.com"],
+            ///     ["Bob", "bob@example.com"]
+            /// ]);
+            ///
+            /// $builder->insert("users")->values_many([
+            ///     ["name" => "Alice", "email" => "alice@example.com"],
+            ///     ["name" => "Bob",   "email" => "bob@example.com"]
+            /// ]);
+            /// ```
+            fn values_many<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                rows: &Zval,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                use ext_php_rs::types::ArrayKey;
+
+                let rows_array = rows
+                    .array()
+                    .ok_or_else(|| anyhow!("values_many() expects an array of rows"))?;
+
+                if rows_array.len() == 0 {
+                    bail!("values_many() array is empty");
+                }
+
+                let mut columns: Vec<String> = Vec::new();
+                let mut all_placeholders: Vec<Vec<ParameterValue>> = Vec::new();
+
+                for (row_index, (_, row_val)) in rows_array.iter().enumerate() {
+                    let row = row_val
+                        .array()
+                        .ok_or_else(|| anyhow!("each row must be an array"))?;
+
+                    if row_index == 0 {
+                        // Infer column names or count
+                        for (k, _) in row.iter() {
+                            match k {
+                                ArrayKey::Long(_) => columns.push(format!("col{}", columns.len() + 1)), // dummy name
+                                _ => columns.push(k.to_string()),
+                            }
+                        }
+                    } else if row.len() != columns.len() {
+                        bail!("row #{row_index} has inconsistent column count");
+                    }
+
+                    let mut placeholder_row = Vec::with_capacity(columns.len());
+                    for (_, v) in row.iter() {
+                        let pv = ParameterValue::from_zval(&v).ok_or_else(|| {
+                            anyhow!("row #{row_index}: failed to convert value to parameter")
+                        })?;
+                        placeholder_row.push(pv);
+                    }
+                    all_placeholders.push(placeholder_row);
+                }
+
+                // Append header
+                write!(self_.query, "\n({})\nVALUES", columns.join(", "))?;
+
+                // Append each VALUES (...)
+                for (i, row) in all_placeholders.iter().enumerate() {
+                    if i > 0 {
+                        self_.query.push(',');
+                    }
+                    self_.query.push_str("\n(");
+                    for j in 0..row.len() {
+                        if j > 0 {
+                            self_.query.push_str(", ");
+                        }
+                        self_.query.push('?');
+                    }
+                    self_.query.push(')');
+                }
+
+                // Register parameters
+                for (i, row) in all_placeholders.into_iter().enumerate() {
+                    for (j, val) in row.into_iter().enumerate() {
+                        let name = format!("values__{}_{}", i, j);
+                        self_.parameters.insert(name, val);
+                    }
+                }
+
+                Ok(self_)
+            }
+
+            /// Appends a `RETURNING` clause to the query.
+            ///
+            /// # Arguments
+            /// * `fields` - A string or array of column names to return.
+            ///
+            /// # Supported formats
+            /// ```php
+            /// $builder->returning("id");
+            /// $builder->returning(["id", "name"]);
+            /// ```
+            ///
+            /// # Notes
+            /// - This is mainly supported in PostgreSQL.
+            /// - Use with `INSERT`, `UPDATE`, or `DELETE`.
+            fn returning<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                fields: &Zval,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                use ext_php_rs::types::ArrayKey;
+
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+
+                self_.query.push_str("RETURNING ");
+
+                if let Some(field_str) = fields.str() {
+                    self_.query.push_str(field_str);
+                } else if let Some(array) = fields.array() {
+                    for (i, (key, value)) in array.iter().enumerate() {
+                        if i > 0 {
+                            self_.query.push_str(", ");
                         }
                         match key {
                             ArrayKey::Long(_) => {
-                                if let Some(part) = value.str() {
-                                    self_._append(
-                                        part,
-                                        None::<[(&str, &str); 0]>,
-                                        "where",
-                                    )?;
-                                } else if let Some(array) = value.array() {
-                                    if array.has_sequential_keys() {
-                                        let array_len = array.len();
-                                        if array_len > 3 {
-                                            bail!("condition #{i}: array cannot contain more than 3 elements");
-                                        }
-                                        let left_operand = array.get_index(0)
-                                            .and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be a string"))?;
-                                        let operator = array.get_index(1).and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be a string"))?;
-                                        self_._append_op(left_operand, operator, if array_len > 2 {
-                                            Some(
-                                                array.get_index(2)
-                                                    .and_then(ParameterValue::from_zval)
-                                                    .ok_or_else(|| anyhow!("third element (value) must a valid parameter value"))?
-                                            )
-                                        } else {
-                                            None
-                                        }, "where")?;
-                                    } else {
-                                        bail!("condition #{i}: array must be a list");
-                                    }
-                                }
-                                else if let Some(or) = value
-                                    .object()
-                                    .and_then(ZendClassObject::<OrClause>::from_zend_obj)
-                                    .and_then(|x| x.obj.as_ref())
-                                {
-                                    self_._append_or(or, "where")?;
-                                } else {
-                                    bail!("element must be a string or OrClause");
-                                }
+                                let Some(field) = value.str() else {
+                                    bail!("returning[] values must be strings");
+                                };
+                                self_.query.push_str(field);
                             }
                             _ => {
-                                let part = key.to_string();
-                                let ast = self_.driver_inner.parse_query(&part)?;
-                                if ast.has_placeholders() {
-                                    let Some(parameters) = value.array() else {
-                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {ast:?}");
-                                    };
-                                    let parameters: HashMap<String, ParameterValueWrapper> =
-                                        parameters.try_into().map_err(|err| anyhow!("{err}"))?;
-                                    self_._append_ast(&ast, Some(parameters), "where")?;
-                                } else {
-                                    self_._append(
-                                        &format!("{part} = ?"),
-                                        Some([
-                                            ("0", ParameterValue::from_zval(value)
-                                                .ok_or_else(|| anyhow!("element value must a valid parameter value"))?
-                                            ); 1]
-                                        ),
-                                        "where"
-                                    )?;
-                                }
+                                let alias = key.to_string();
+                                let Some(expr) = value.str() else {
+                                    bail!("returning[key => value] must be strings");
+                                };
+                                write!(self_.query, "{expr} AS {alias}")?;
                             }
                         }
                     }
                 } else {
-                    bail!("illegal where() argument");
+                    bail!("Argument to returning() must be a string or array");
                 }
+
                 Ok(self_)
             }
 
+            fn from<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                from: &Zval,
+                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                use ext_php_rs::types::ArrayKey;
+
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+
+                self_.query.push_str("FROM ");
+
+                if let Some(from_str) = from.str() {
+                    self_._append(&from_str.indent_sql(false), parameters, "from")?;
+                } else if let Some(from_array) = from.array() {
+                    if parameters.is_some() {
+                        bail!("parameters argument cannot be used with array-based `from()`");
+                    }
+
+                    let parts: Vec<_> = from_array
+                        .iter()
+                        .map(|(key, value)| {
+                            let alias = match key {
+                                ArrayKey::Long(_) => None,
+                                _ => Some(key.to_string())
+                            };
+                            let source = value
+                                .str()
+                                .ok_or_else(|| anyhow!("`from` value must be a string"))?;
+
+                            Ok(match alias {
+                                Some(alias) => (format!("{source} AS {alias}"), ParamsMap::default()),
+                                None => (source.to_string(), ParamsMap::default()),
+                            })
+                        })
+                        .collect::<anyhow::Result<_>>()?;
+
+                    for (i, (part, params)) in parts.into_iter().enumerate() {
+                        if i > 0 {
+                            self_.query.push_str(", ");
+                        }
+                        self_._append(&part.indent_sql(true), Some(params), "from")?;
+                    }
+                } else {
+                    bail!("illegal `from()` argument: must be string or array");
+                }
+
+                Ok(self_)
+            }
 
             /// Executes the prepared query and returns a dictionary mapping the first column to the second column.
             ///
