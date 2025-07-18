@@ -648,7 +648,6 @@ macro_rules! php_sqlx_impl_query_builder {
             /// # Exceptions
             /// - If rendering or encoding of parameters fails.
             pub(crate) fn dry_inline(&self) -> anyhow::Result<String> {
-                println!("{:?}", self.query);
                 self.driver_inner.dry_inline(&self.query, Some(self.parameters.clone().into_iter().collect()))
             }
 
