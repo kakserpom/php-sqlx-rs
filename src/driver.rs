@@ -1,14 +1,14 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
-    ( $struct:ident, $className:literal, $inner:ident, $prepared:ident $(,)? ) => {
+    ( $struct:ident, $className:literal, $inner:ident, $prepared_query:ident, $query_builder:ident $(,)? ) => {
         mod conversion;
         pub mod prepared_query;
-        use $crate::utils::ColumnArgument;
+        pub mod query_builder;
         use inner::$inner;
-        pub use prepared_query::$prepared;
+        use query_builder::$query_builder;
+        pub use prepared_query::$prepared_query;
+        use $crate::utils::ColumnArgument;
 
-        use $crate::options::DriverOptionsArg;
-        use $crate::paramvalue::ParameterValue;
         use anyhow::anyhow;
         use dashmap::DashMap;
         use ext_php_rs::builders::ModuleBuilder;
@@ -19,6 +19,8 @@ macro_rules! php_sqlx_impl_driver {
         use std::collections::HashMap;
         use std::sync::Arc;
         use std::sync::LazyLock;
+        use $crate::options::DriverOptionsArg;
+        use $crate::paramvalue::ParameterValue;
         pub mod inner;
 
         static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<$inner>>> =
@@ -33,7 +35,10 @@ macro_rules! php_sqlx_impl_driver {
         }
 
         pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-            module.class::<$struct>().class::<$prepared>()
+            module
+                .class::<$struct>()
+                .class::<$prepared_query>()
+                .class::<$query_builder>()
         }
 
         #[php_impl]
@@ -73,11 +78,21 @@ macro_rules! php_sqlx_impl_driver {
             /// # Returns
             /// Prepared query object
             #[must_use]
-            pub fn prepare(&self, query: &str) -> $prepared {
-                $prepared {
+            pub fn prepare(&self, query: &str) -> $prepared_query {
+                $prepared_query {
                     driver_inner: self.driver_inner.clone(),
                     query: query.to_owned(),
                 }
+            }
+
+            /// Creates a query builder object
+            ///
+            ///
+            /// # Returns
+            /// Query builder object
+            #[must_use]
+            pub fn builder(&self,) -> $query_builder {
+                $query_builder::new(self.driver_inner.clone()) 
             }
 
             /// Returns whether results are returned as associative arrays.
@@ -845,7 +860,6 @@ macro_rules! php_sqlx_impl_driver {
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner.dry(query, parameters)
             }
-
 
             /// Begins a new transaction, yields control to the provided callable,
             /// and commits or rolls back based on the callable's return value or error.

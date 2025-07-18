@@ -1,5 +1,4 @@
 use crate::conversion::Conversion;
-use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;

@@ -3,12 +3,16 @@
 // Stubs for php-sqlx
 
 namespace Sqlx {
+    function OR_(array $or): \Sqlx\OrClause {}
+
     /**
      * The `Sqlx\\SelectClause` class manages a set of allowed
      * columns for SQL SELECT operations and provides methods
      * to render validated column clauses from user input.
      */
     class SelectClause {
+        public static function allowed(array $allowed_columns): \Sqlx\SelectClause {}
+
         /**
          * Magic `__invoke` method allowing the object to be
          * used as a callable for rendering select clauses.
@@ -25,9 +29,26 @@ namespace Sqlx {
          * A `SelectClauseRendered` containing only allowed columns.
          * Unknown columns are silently ignored.
          */
-        public function apply(array $columns): \Sqlx\SelectClauseRendered {}
+        public function input(array $columns): \Sqlx\SelectClauseRendered {}
 
-        public function __construct(array $defined_columns) {}
+        /**
+         * PHP constructor for `Sqlx\\SelectClause`.
+         *
+         * # Arguments
+         * - `allowed_columns`: Associative array of allowed columns:
+         *    - Numeric keys map to simple column names
+         *    - String keys map to SQL expressions
+         *
+         * # Example
+         * ```php
+         * $select = new Sqlx\\SelectClause([
+         *     "id",
+         *     "name",
+         *     "full_name" => "CONCAT(first, ' ', last)"
+         * ]);
+         * ```
+         */
+        public function __construct(array $allowed_columns) {}
     }
 
     /**
@@ -79,9 +100,24 @@ namespace Sqlx {
          * # Notes
          * Unknown or disallowed fields are silently ignored.
          */
-        public function apply(array $columns): \Sqlx\ByClauseRendered {}
+        public function input(array $columns): \Sqlx\ByClauseRendered {}
 
-        public function __construct(array $defined_columns) {}
+        /**
+         * Constructs a `ByClause` helper with allowed sortable columns.
+         *
+         * # Arguments
+         * - `allowed_columns`: Map of allowed sort columns (key = user input, value = SQL expression)
+         *
+         * # Example
+         * ```php
+         * $order_by = new Sqlx\ByClause([
+         *     "name",
+         *     "age",
+         *     "total_posts" => "COUNT(posts.*)"
+         * ]);
+         * ```
+         */
+        public function __construct(array $allowed_columns) {}
     }
 
     /**
@@ -146,10 +182,13 @@ namespace Sqlx {
         /**
          * Applies pagination settings and returns a `PaginateClauseRendered`.
          *
-         * # Parameters and behavior are identical to `internal_apply`.
+         * # Parameters and behavior are identical to `render`.
          */
-        public function apply(?int $page_number, ?int $per_page): \Sqlx\PaginateClauseRendered {}
+        public function input(?int $page_number, ?int $per_page): \Sqlx\PaginateClauseRendered {}
 
+        /**
+         * PHP constructor for `Sqlx\PaginateClause`.
+         */
         public function __construct() {}
     }
 
@@ -159,6 +198,10 @@ namespace Sqlx {
      * - `offset`: Number of items to skip (`OFFSET`).
      */
     class PaginateClauseRendered {
+        public function __construct() {}
+    }
+
+    class OrClause {
         public function __construct() {}
     }
 
@@ -176,6 +219,15 @@ namespace Sqlx {
          * Prepared query object
          */
         public function prepare(string $query): \Sqlx\MySqlPreparedQuery {}
+
+        /**
+         * Creates a query builder object
+         *
+         *
+         * # Returns
+         * Query builder object
+         */
+        public function builder(): \Sqlx\MySqlQueryBuilder {}
 
         /**
          * Returns whether results are returned as associative arrays.
@@ -823,6 +875,17 @@ namespace Sqlx {
          */
         public function releaseSavepoint(string $savepoint): mixed {}
 
+        /**
+         * Constructs a new SQLx driver instance.
+         *
+         * # Arguments
+         * - `options`: Connection URL as string or associative array with options:
+         *   - `url`: (string) database connection string (required)
+         *   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
+         *   - `ast_cache_shard_size`: (int) size per shard (default: 256)
+         *   - `persistent_name`: (string) name of persistent connection
+         *   - `assoc_arrays`: (bool) return associative arrays instead of objects
+         */
         public function __construct(mixed $options) {}
     }
 
@@ -830,6 +893,903 @@ namespace Sqlx {
      * A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
      */
     class MySqlPreparedQuery {
+        /**
+         * Executes the prepared query and returns a dictionary mapping the first column to the second column.
+         *
+         * This method expects each result row to contain at least two columns. It converts the first column
+         * into a PHP string (used as the key), and the second column into a PHP value (used as the value).
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * An associative array (`array<string, mixed>`) where each key is the first column (as string),
+         * and the value is the second column.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a PHP string;
+         * - the second column cannot be converted to a PHP value.
+         *
+         * # Notes
+         * - The order of dictionary entries is preserved.
+         * - The query must return at least two columns per row.
+         */
+        public function queryColumnDictionary(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary in associative array mode.
+         *
+         * Same as `query_column_dictionary`, but forces JSON objects to be represented as associative arrays.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * A dictionary where each key is the first column (as string),
+         * and each value is the second column as an associative PHP array.
+         *
+         * # Errors
+         * Same as `query_column_dictionary`.
+         */
+        public function queryColumnDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary in object mode.
+         *
+         * Same as `query_column_dictionary`, but forces JSON objects to be represented as objects.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * A dictionary where each key is the first column (as string),
+         * and each value is the second column as a PHP object.
+         *
+         * # Errors
+         * Same as `query_column_dictionary`.
+         */
+        public function queryColumnDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row.
+         *
+         * The result is a `HashMap` where the key is the stringified first column from each row,
+         * and the value is the full row, returned as array or object depending on config.
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionary(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+         * with each row returned as an associative array.
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row as an associative array.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+         * with each row returned as an object (`stdClass`).
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row as an object.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes a query and returns a grouped dictionary (Vec of rows per key).
+         *
+         * Same as [`queryGroupedDictionary`](crate::Driver::query_grouped_dictionary), but works on a prepared query.
+         *
+         * The first column is used as the key (must be scalar),
+         * and each resulting row is appended to the corresponding key's Vec.
+         *
+         * # Errors
+         * Fails if the query fails, or the first column is not scalar.
+         */
+        public function queryGroupedDictionary(?array $parameters): mixed {}
+
+        /**
+         * Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
+         */
+        public function queryGroupedDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
+         */
+        public function queryGroupedDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a grouped dictionary where:
+         * - the key is the **first column** (must be scalar),
+         * - the value is a list of values from the **second column** for each group.
+         *
+         * This variant uses the driver's default associative array option for JSON values.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionary(?array $parameters): mixed {}
+
+        /**
+         * Same as `queryGroupedColumnDictionary()`, but forces associative arrays
+         * for the second column if it contains JSON objects.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Same as `queryGroupedColumnDictionary()`, but forces PHP objects
+         * for the second column if it contains JSON objects.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query with optional parameters.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Number of affected rows
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+         * - parameters contain unsupported types or fail to bind correctly;
+         * - the runtime fails to execute the query (e.g., task panic or timeout).
+         */
+        public function execute(?array $parameters): int {}
+
+        /**
+         * Executes the prepared query and returns a single result.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Single row as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or execution fails;
+         * - a parameter cannot be bound or has incorrect type;
+         * - the row contains unsupported database types;
+         * - conversion to PHP object fails.
+         */
+        public function queryRow(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an associative array.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an object.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowObj(?array $parameters): mixed {}
+
+        /**
+         * Executes an SQL query and returns a single result, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Single row as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if the query fails for reasons other than no matching rows.
+         * For example, syntax errors, type mismatches, or database connection issues.
+         */
+        public function queryMaybeRow(?array $parameters): mixed {}
+
+        /**
+         * Executes the SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
+         */
+        public function queryMaybeRowAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes an SQL query and returns a single row as a PHP object, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as a `stdClass` PHP object, or `null` if no matching row is found.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
+         */
+        public function queryMaybeRowObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all result rows.
+         *
+         * # Arguments
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract.
+         *
+         * # Returns
+         * An array of column values, one for each row.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query fails to execute;
+         * - the specified column is not found;
+         * - a column value cannot be converted to PHP.
+         */
+        public function queryColumn(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all rows in associative array mode.
+         *
+         * # Arguments
+         * - `query`: SQL query string.
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (associative arrays for structured data).
+         *
+         * # Exceptions
+         * Same as `query_column`.
+         */
+        public function queryColumnAssoc(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all rows in object mode.
+         *
+         * # Arguments
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (objects for structured data).
+         *
+         * # Exceptions
+         * Same as `query_column`.
+         */
+        public function queryColumnObj(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the prepared query and returns all rows.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Array of rows as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAll(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as associative arrays.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllAssoc(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as objects.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllObj(?array $parameters): array {}
+
+        public function __construct() {}
+    }
+
+    /**
+     * A prepared SQL query builder.
+     *
+     * Holds the generated query string, parameters, and placeholder tracking
+     * used during safe, composable query construction via AST rendering.
+     */
+    class MySqlQueryBuilder {
+        /**
+         * Creates a query builder object
+         *
+         *
+         * # Returns
+         * Query builder object
+         */
+        public function builder(): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `ON CONFLICT` clause to the query.
+         *
+         * # Arguments
+         * * `target` – A string or array of column names to specify the conflict target.
+         * * `set` – Optional `SET` clause. If `null`, generates `DO NOTHING`; otherwise uses the `SET` values.
+         *
+         * # Example
+         * ```php
+         * $builder->onConflict("id", null);
+         * $builder->onConflict(["email", "tenant_id"], ["name" => "New"]);
+         * ```
+         */
+        public function onConflict(mixed $target, ?mixed $set): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         *
+         * # Arguments
+         * * `set` – An array representing fields and values to update.
+         *
+         * # Example
+         * ```php
+         * $builder->onDuplicateKeyUpdate(["email" => "new@example.com"]);
+         * ```
+         */
+        public function onDuplicateKeyUpdate(mixed $set): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `INNER JOIN` clause to the query.
+         */
+        public function innerJoin(string $table, string $on, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `INNER JOIN` clause to the query.
+         * Alias for `inner_join()`.
+         */
+        public function join(string $table, string $on, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `LEFT JOIN` clause to the query.
+         */
+        public function leftJoin(string $table, string $on, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `RIGHT JOIN` clause to the query.
+         */
+        public function rightJoin(string $table, string $on, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `FULL OUTER JOIN` clause to the query.
+         */
+        public function fullJoin(string $table, string $on, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `CROSS JOIN` clause to the query.
+         */
+        public function crossJoin(string $table, string $on, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `NATURAL JOIN` clause to the query.
+         *
+         * # Note
+         * `NATURAL JOIN` does not accept `ON` conditions. The `on` argument is ignored.
+         */
+        public function naturalJoin(string $table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `WITH` clause to the query.
+         *
+         * # Arguments
+         * * `table` - Name of the CTE (common table expression).
+         * * `as` - The query body to be rendered for the CTE.
+         * * `parameters` - Optional parameters for the query body.
+         *
+         * # Example
+         * ```php
+         * $builder->with("cte_name", "SELECT * FROM users WHERE active = $active", [
+         *     "active" => true,
+         * ]);
+         * ```
+         */
+        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `WHERE` clause to the query.
+         *
+         * # Arguments
+         * * `where` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function where(mixed $r#where, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union("SELECT id FROM users");
+         * $builder->union($other_builder);
+         * ```
+         */
+        public function union(mixed $query, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION ALL` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union_all("SELECT id FROM users");
+         * $builder->union_all($other_builder);
+         * ```
+         */
+        public function unionAll(mixed $query, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `HAVING` clause to the query.
+         *
+         * # Arguments
+         * * `having` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function having(mixed $having, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `LIMIT` (and optional `OFFSET`) clause to the query.
+         *
+         * # Arguments
+         * * `limit` – Maximum number of rows to return.
+         * * `offset` – Optional number of rows to skip before starting to return rows.
+         *
+         * # Example
+         * ```php
+         * $builder->limit(10);
+         * $builder->limit(10, 20); // LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function limit(int $limit, ?int $offset): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `OFFSET` clause to the query independently.
+         *
+         * # Arguments
+         * * `offset` – Number of rows to skip before returning results.
+         *
+         * # Example
+         * ```php
+         * $builder->offset(30); // OFFSET 30
+         * ```
+         */
+        public function offset(int $offset): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `DELETE FROM` clause to the query.
+         *
+         * # Arguments
+         * * `from` - A string table name or a nested builder object.
+         * * `parameters` - Optional parameters if the `from` is a raw string.
+         *
+         * # Examples
+         * ```php
+         * $builder->deleteFrom("users");
+         * $builder->deleteFrom($builder->select("id")->from("temp_users"));
+         * ```
+         */
+        public function deleteFrom(mixed $from, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `USING` clause to the query.
+         *
+         * # Arguments
+         * * `from` - Either a string table name or a subquery builder.
+         * * `parameters` - Optional parameters if `from` is a string.
+         */
+        public function using(mixed $from, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `PAGINATE` clause to the query using a `PaginateClauseRendered` object.
+         *
+         * This expands into the appropriate SQL `LIMIT` and `OFFSET` syntax during rendering,
+         * using the values stored in the given `PaginateClauseRendered` instance.
+         *
+         * # Arguments
+         * * `paginate` – An instance of `Sqlx\PaginateClauseRendered`, produced by invoking a `PaginateClause`
+         *               (e.g., `$paginate = (new PaginateClause)($page, $perPage)`).
+         *
+         * # Errors
+         * Returns an error if the argument is not an instance of `PaginateClauseRendered`.
+         *
+         * # Example
+         * ```php
+         * $paginate = (new \Sqlx\PaginateClause())->__invoke(2, 10); // page 2, 10 per page
+         * $builder->select("*")->from("users")->paginate($paginate);
+         * // SELECT * FROM users LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function paginate(mixed $paginate): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `WITH RECURSIVE` clause to the query.
+         *
+         * # Arguments
+         * * `table_and_fields` - Table name with field list, e.g. `cte(col1, col2)`.
+         * * `as` - The recursive query body.
+         * * `parameters` - Optional parameters for the recursive body.
+         *
+         * # Example
+         * ```php
+         * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
+         * ```
+         */
+        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `UPDATE` clause to the query.
+         *
+         * # Arguments
+         * * `table` - A raw string representing the table(s).
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string.
+         */
+        public function update(mixed $table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `SET` clause to the query, supporting both keyed and indexed formats.
+         *
+         * # Arguments
+         * * `set` - An associative array mapping fields to values, or a sequential array
+         *   of `[field, value]` pairs or raw fragments.
+         *
+         * # Supported Formats
+         * ```php
+         * $builder->set(["name" => "John", "age" => 30]);
+         * $builder->set([["name", "John"], ["age", 30]]);
+         * $builder->set(["updated_at = NOW()"]);
+         * ```
+         *
+         * # Exceptions
+         * - When the input array is malformed or contains invalid value types.
+         */
+        public function set(mixed $set): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Renders the SQL query using named parameters and returns the fully rendered SQL with values injected inline.
+         *
+         * # Returns
+         * The rendered SQL query as a string with all parameters interpolated.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function dry(): array {}
+
+        /**
+         * Returns the parameter map currently accumulated in the builder.
+         *
+         * # Returns
+         * A cloned map of all parameter names and their corresponding `ParameterValue`.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function dryInline(): string {}
+
+        /**
+         * Returns the fully rendered SQL query with parameters embedded as literals.
+         *
+         * Used for debugging or fallback rendering when the placeholder limit is exceeded.
+         *
+         * # Returns
+         * A string representing the complete SQL statement.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function __toString(): string {}
+
+        /**
+         * Returns an array of all currently accumulated parameters.
+         */
+        public function parameters(): array {}
+
+        /**
+         * Appends a raw SQL fragment to the query without validation.
+         *
+         * # Arguments
+         * * `part` - The SQL string to append.
+         * * `parameters` - Optional parameters to associate with the fragment.
+         */
+        public function raw(string $part, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `SELECT` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `SelectClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function select(mixed $fields): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `ORDER BY` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `ByClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function orderBy(mixed $fields): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `GROUP BY` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `ByClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function groupBy(mixed $fields): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `FOR UPDATE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to lock the selected rows
+         * for update, preventing other transactions from modifying or acquiring
+         * locks on them until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->for_update();
+         * // SELECT * FROM users FOR UPDATE
+         * ```
+         *
+         * # Notes
+         * - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+         * - Useful for implementing pessimistic locking in concurrent systems.
+         *
+         * # Returns
+         * The query builder with `FOR UPDATE` appended.
+         */
+        public function forUpdate(): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `FOR SHARE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to acquire shared locks
+         * on the selected rows, allowing concurrent transactions to read but
+         * not modify the rows until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("documents")->for_share();
+         * // SELECT * FROM documents FOR SHARE
+         * ```
+         *
+         * # Notes
+         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Ensures rows cannot be updated or deleted by other transactions while locked.
+         *
+         * # Returns
+         * The query builder with `FOR SHARE` appended.
+         */
+        public function forShare(): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `INSERT INTO` clause to the query.
+         *
+         * # Arguments
+         * * `table` - The name of the target table.
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users");
+         * ```
+         */
+        public function insert(string $table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `VALUES` clause to the query.
+         *
+         * # Arguments
+         * * `values` - Can be:
+         *     - An associative array: `["name" => "John", "email" => "j@example.com"]`
+         *     - A list of `[column, value]` pairs: `[["name", "John"], ["email", "j@example.com"]]`
+         *     - A raw SQL string or a subquery builder
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values(["name" => "John", "email" => "j@example.com"]);
+         * ```
+         */
+        public function values(mixed $values): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `TRUNCATE TABLE` statement to the query.
+         *
+         * This command removes all rows from the specified table quickly and efficiently.
+         * It is faster than `DELETE FROM` and usually does not fire triggers or return affected row counts.
+         *
+         * # Arguments
+         * * `table` – The name of the table to truncate.
+         *
+         * # Example
+         * ```php
+         * $builder->truncate_table("users");
+         * // TRUNCATE TABLE users
+         * ```
+         *
+         * # Notes
+         * - May require elevated privileges depending on the database.
+         * - This method can be chained with other query builder methods.
+         *
+         * # Errors
+         * Returns an error if appending the SQL fragment fails (e.g., formatting error).
+         */
+        public function truncateTable(string $table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Finalizes the query by appending a semicolon (`;`).
+         *
+         * This method is optional. Most databases do not require semicolons in prepared queries,
+         * but you may use it to explicitly terminate a query string.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->end();
+         * // SELECT * FROM users;
+         * ```
+         *
+         * # Returns
+         * The builder instance after appending the semicolon.
+         *
+         * # Notes
+         * - Only appends the semicolon character; does not perform any execution.
+         * - Useful when exporting a full query string with a terminating symbol (e.g., for SQL scripts).
+         */
+        public function end(string $_table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends multiple rows to the `VALUES` clause of an `INSERT` statement.
+         *
+         * Each row must be:
+         * - an ordered list of values (indexed array),
+         * - or a map of column names to values (associative array) — only for the first row, to infer column order.
+         *
+         * # Arguments
+         * * `rows` – A sequential array of rows (arrays of values).
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values_many([
+         *     ["Alice", "alice@example.com"],
+         *     ["Bob", "bob@example.com"]
+         * ]);
+         *
+         * $builder->insert("users")->values_many([
+         *     ["name" => "Alice", "email" => "alice@example.com"],
+         *     ["name" => "Bob",   "email" => "bob@example.com"]
+         * ]);
+         * ```
+         */
+        public function valuesMany(mixed $rows): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `RETURNING` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - A string or array of column names to return.
+         *
+         * # Supported formats
+         * ```php
+         * $builder->returning("id");
+         * $builder->returning(["id", "name"]);
+         * ```
+         *
+         * # Notes
+         * - This is mainly supported in PostgreSQL.
+         * - Use with `INSERT`, `UPDATE`, or `DELETE`.
+         */
+        public function returning(mixed $fields): \Sqlx\MySqlQueryBuilder {}
+
+        public function from(mixed $from, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
         /**
          * Executes the prepared query and returns a dictionary mapping the first column to the second column.
          *
@@ -1225,6 +2185,15 @@ namespace Sqlx {
         public function prepare(string $query): \Sqlx\PgPreparedQuery {}
 
         /**
+         * Creates a query builder object
+         *
+         *
+         * # Returns
+         * Query builder object
+         */
+        public function builder(): \Sqlx\PgQueryBuilder {}
+
+        /**
          * Returns whether results are returned as associative arrays.
          *
          * If true, result rows are returned as PHP associative arrays (key-value pairs).
@@ -1870,6 +2839,17 @@ namespace Sqlx {
          */
         public function releaseSavepoint(string $savepoint): mixed {}
 
+        /**
+         * Constructs a new SQLx driver instance.
+         *
+         * # Arguments
+         * - `options`: Connection URL as string or associative array with options:
+         *   - `url`: (string) database connection string (required)
+         *   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
+         *   - `ast_cache_shard_size`: (int) size per shard (default: 256)
+         *   - `persistent_name`: (string) name of persistent connection
+         *   - `assoc_arrays`: (bool) return associative arrays instead of objects
+         */
         public function __construct(mixed $options) {}
     }
 
@@ -1877,6 +2857,903 @@ namespace Sqlx {
      * A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
      */
     class PgPreparedQuery {
+        /**
+         * Executes the prepared query and returns a dictionary mapping the first column to the second column.
+         *
+         * This method expects each result row to contain at least two columns. It converts the first column
+         * into a PHP string (used as the key), and the second column into a PHP value (used as the value).
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * An associative array (`array<string, mixed>`) where each key is the first column (as string),
+         * and the value is the second column.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a PHP string;
+         * - the second column cannot be converted to a PHP value.
+         *
+         * # Notes
+         * - The order of dictionary entries is preserved.
+         * - The query must return at least two columns per row.
+         */
+        public function queryColumnDictionary(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary in associative array mode.
+         *
+         * Same as `query_column_dictionary`, but forces JSON objects to be represented as associative arrays.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * A dictionary where each key is the first column (as string),
+         * and each value is the second column as an associative PHP array.
+         *
+         * # Errors
+         * Same as `query_column_dictionary`.
+         */
+        public function queryColumnDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary in object mode.
+         *
+         * Same as `query_column_dictionary`, but forces JSON objects to be represented as objects.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * A dictionary where each key is the first column (as string),
+         * and each value is the second column as a PHP object.
+         *
+         * # Errors
+         * Same as `query_column_dictionary`.
+         */
+        public function queryColumnDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row.
+         *
+         * The result is a `HashMap` where the key is the stringified first column from each row,
+         * and the value is the full row, returned as array or object depending on config.
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionary(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+         * with each row returned as an associative array.
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row as an associative array.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+         * with each row returned as an object (`stdClass`).
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row as an object.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes a query and returns a grouped dictionary (Vec of rows per key).
+         *
+         * Same as [`queryGroupedDictionary`](crate::Driver::query_grouped_dictionary), but works on a prepared query.
+         *
+         * The first column is used as the key (must be scalar),
+         * and each resulting row is appended to the corresponding key's Vec.
+         *
+         * # Errors
+         * Fails if the query fails, or the first column is not scalar.
+         */
+        public function queryGroupedDictionary(?array $parameters): mixed {}
+
+        /**
+         * Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
+         */
+        public function queryGroupedDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
+         */
+        public function queryGroupedDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a grouped dictionary where:
+         * - the key is the **first column** (must be scalar),
+         * - the value is a list of values from the **second column** for each group.
+         *
+         * This variant uses the driver's default associative array option for JSON values.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionary(?array $parameters): mixed {}
+
+        /**
+         * Same as `queryGroupedColumnDictionary()`, but forces associative arrays
+         * for the second column if it contains JSON objects.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Same as `queryGroupedColumnDictionary()`, but forces PHP objects
+         * for the second column if it contains JSON objects.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query with optional parameters.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Number of affected rows
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+         * - parameters contain unsupported types or fail to bind correctly;
+         * - the runtime fails to execute the query (e.g., task panic or timeout).
+         */
+        public function execute(?array $parameters): int {}
+
+        /**
+         * Executes the prepared query and returns a single result.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Single row as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or execution fails;
+         * - a parameter cannot be bound or has incorrect type;
+         * - the row contains unsupported database types;
+         * - conversion to PHP object fails.
+         */
+        public function queryRow(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an associative array.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an object.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowObj(?array $parameters): mixed {}
+
+        /**
+         * Executes an SQL query and returns a single result, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Single row as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if the query fails for reasons other than no matching rows.
+         * For example, syntax errors, type mismatches, or database connection issues.
+         */
+        public function queryMaybeRow(?array $parameters): mixed {}
+
+        /**
+         * Executes the SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
+         */
+        public function queryMaybeRowAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes an SQL query and returns a single row as a PHP object, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as a `stdClass` PHP object, or `null` if no matching row is found.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
+         */
+        public function queryMaybeRowObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all result rows.
+         *
+         * # Arguments
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract.
+         *
+         * # Returns
+         * An array of column values, one for each row.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query fails to execute;
+         * - the specified column is not found;
+         * - a column value cannot be converted to PHP.
+         */
+        public function queryColumn(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all rows in associative array mode.
+         *
+         * # Arguments
+         * - `query`: SQL query string.
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (associative arrays for structured data).
+         *
+         * # Exceptions
+         * Same as `query_column`.
+         */
+        public function queryColumnAssoc(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all rows in object mode.
+         *
+         * # Arguments
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (objects for structured data).
+         *
+         * # Exceptions
+         * Same as `query_column`.
+         */
+        public function queryColumnObj(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the prepared query and returns all rows.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Array of rows as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAll(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as associative arrays.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllAssoc(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as objects.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllObj(?array $parameters): array {}
+
+        public function __construct() {}
+    }
+
+    /**
+     * A prepared SQL query builder.
+     *
+     * Holds the generated query string, parameters, and placeholder tracking
+     * used during safe, composable query construction via AST rendering.
+     */
+    class PgQueryBuilder {
+        /**
+         * Creates a query builder object
+         *
+         *
+         * # Returns
+         * Query builder object
+         */
+        public function builder(): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `ON CONFLICT` clause to the query.
+         *
+         * # Arguments
+         * * `target` – A string or array of column names to specify the conflict target.
+         * * `set` – Optional `SET` clause. If `null`, generates `DO NOTHING`; otherwise uses the `SET` values.
+         *
+         * # Example
+         * ```php
+         * $builder->onConflict("id", null);
+         * $builder->onConflict(["email", "tenant_id"], ["name" => "New"]);
+         * ```
+         */
+        public function onConflict(mixed $target, ?mixed $set): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         *
+         * # Arguments
+         * * `set` – An array representing fields and values to update.
+         *
+         * # Example
+         * ```php
+         * $builder->onDuplicateKeyUpdate(["email" => "new@example.com"]);
+         * ```
+         */
+        public function onDuplicateKeyUpdate(mixed $set): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `INNER JOIN` clause to the query.
+         */
+        public function innerJoin(string $table, string $on, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `INNER JOIN` clause to the query.
+         * Alias for `inner_join()`.
+         */
+        public function join(string $table, string $on, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `LEFT JOIN` clause to the query.
+         */
+        public function leftJoin(string $table, string $on, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `RIGHT JOIN` clause to the query.
+         */
+        public function rightJoin(string $table, string $on, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `FULL OUTER JOIN` clause to the query.
+         */
+        public function fullJoin(string $table, string $on, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `CROSS JOIN` clause to the query.
+         */
+        public function crossJoin(string $table, string $on, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `NATURAL JOIN` clause to the query.
+         *
+         * # Note
+         * `NATURAL JOIN` does not accept `ON` conditions. The `on` argument is ignored.
+         */
+        public function naturalJoin(string $table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `WITH` clause to the query.
+         *
+         * # Arguments
+         * * `table` - Name of the CTE (common table expression).
+         * * `as` - The query body to be rendered for the CTE.
+         * * `parameters` - Optional parameters for the query body.
+         *
+         * # Example
+         * ```php
+         * $builder->with("cte_name", "SELECT * FROM users WHERE active = $active", [
+         *     "active" => true,
+         * ]);
+         * ```
+         */
+        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `WHERE` clause to the query.
+         *
+         * # Arguments
+         * * `where` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function where(mixed $r#where, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `UNION` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union("SELECT id FROM users");
+         * $builder->union($other_builder);
+         * ```
+         */
+        public function union(mixed $query, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `UNION ALL` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union_all("SELECT id FROM users");
+         * $builder->union_all($other_builder);
+         * ```
+         */
+        public function unionAll(mixed $query, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `HAVING` clause to the query.
+         *
+         * # Arguments
+         * * `having` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function having(mixed $having, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `LIMIT` (and optional `OFFSET`) clause to the query.
+         *
+         * # Arguments
+         * * `limit` – Maximum number of rows to return.
+         * * `offset` – Optional number of rows to skip before starting to return rows.
+         *
+         * # Example
+         * ```php
+         * $builder->limit(10);
+         * $builder->limit(10, 20); // LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function limit(int $limit, ?int $offset): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `OFFSET` clause to the query independently.
+         *
+         * # Arguments
+         * * `offset` – Number of rows to skip before returning results.
+         *
+         * # Example
+         * ```php
+         * $builder->offset(30); // OFFSET 30
+         * ```
+         */
+        public function offset(int $offset): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `DELETE FROM` clause to the query.
+         *
+         * # Arguments
+         * * `from` - A string table name or a nested builder object.
+         * * `parameters` - Optional parameters if the `from` is a raw string.
+         *
+         * # Examples
+         * ```php
+         * $builder->deleteFrom("users");
+         * $builder->deleteFrom($builder->select("id")->from("temp_users"));
+         * ```
+         */
+        public function deleteFrom(mixed $from, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `USING` clause to the query.
+         *
+         * # Arguments
+         * * `from` - Either a string table name or a subquery builder.
+         * * `parameters` - Optional parameters if `from` is a string.
+         */
+        public function using(mixed $from, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `PAGINATE` clause to the query using a `PaginateClauseRendered` object.
+         *
+         * This expands into the appropriate SQL `LIMIT` and `OFFSET` syntax during rendering,
+         * using the values stored in the given `PaginateClauseRendered` instance.
+         *
+         * # Arguments
+         * * `paginate` – An instance of `Sqlx\PaginateClauseRendered`, produced by invoking a `PaginateClause`
+         *               (e.g., `$paginate = (new PaginateClause)($page, $perPage)`).
+         *
+         * # Errors
+         * Returns an error if the argument is not an instance of `PaginateClauseRendered`.
+         *
+         * # Example
+         * ```php
+         * $paginate = (new \Sqlx\PaginateClause())->__invoke(2, 10); // page 2, 10 per page
+         * $builder->select("*")->from("users")->paginate($paginate);
+         * // SELECT * FROM users LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function paginate(mixed $paginate): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `WITH RECURSIVE` clause to the query.
+         *
+         * # Arguments
+         * * `table_and_fields` - Table name with field list, e.g. `cte(col1, col2)`.
+         * * `as` - The recursive query body.
+         * * `parameters` - Optional parameters for the recursive body.
+         *
+         * # Example
+         * ```php
+         * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
+         * ```
+         */
+        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `UPDATE` clause to the query.
+         *
+         * # Arguments
+         * * `table` - A raw string representing the table(s).
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string.
+         */
+        public function update(mixed $table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `SET` clause to the query, supporting both keyed and indexed formats.
+         *
+         * # Arguments
+         * * `set` - An associative array mapping fields to values, or a sequential array
+         *   of `[field, value]` pairs or raw fragments.
+         *
+         * # Supported Formats
+         * ```php
+         * $builder->set(["name" => "John", "age" => 30]);
+         * $builder->set([["name", "John"], ["age", 30]]);
+         * $builder->set(["updated_at = NOW()"]);
+         * ```
+         *
+         * # Exceptions
+         * - When the input array is malformed or contains invalid value types.
+         */
+        public function set(mixed $set): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Renders the SQL query using named parameters and returns the fully rendered SQL with values injected inline.
+         *
+         * # Returns
+         * The rendered SQL query as a string with all parameters interpolated.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function dry(): array {}
+
+        /**
+         * Returns the parameter map currently accumulated in the builder.
+         *
+         * # Returns
+         * A cloned map of all parameter names and their corresponding `ParameterValue`.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function dryInline(): string {}
+
+        /**
+         * Returns the fully rendered SQL query with parameters embedded as literals.
+         *
+         * Used for debugging or fallback rendering when the placeholder limit is exceeded.
+         *
+         * # Returns
+         * A string representing the complete SQL statement.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function __toString(): string {}
+
+        /**
+         * Returns an array of all currently accumulated parameters.
+         */
+        public function parameters(): array {}
+
+        /**
+         * Appends a raw SQL fragment to the query without validation.
+         *
+         * # Arguments
+         * * `part` - The SQL string to append.
+         * * `parameters` - Optional parameters to associate with the fragment.
+         */
+        public function raw(string $part, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `SELECT` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `SelectClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function select(mixed $fields): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `ORDER BY` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `ByClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function orderBy(mixed $fields): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `GROUP BY` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `ByClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function groupBy(mixed $fields): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `FOR UPDATE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to lock the selected rows
+         * for update, preventing other transactions from modifying or acquiring
+         * locks on them until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->for_update();
+         * // SELECT * FROM users FOR UPDATE
+         * ```
+         *
+         * # Notes
+         * - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+         * - Useful for implementing pessimistic locking in concurrent systems.
+         *
+         * # Returns
+         * The query builder with `FOR UPDATE` appended.
+         */
+        public function forUpdate(): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `FOR SHARE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to acquire shared locks
+         * on the selected rows, allowing concurrent transactions to read but
+         * not modify the rows until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("documents")->for_share();
+         * // SELECT * FROM documents FOR SHARE
+         * ```
+         *
+         * # Notes
+         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Ensures rows cannot be updated or deleted by other transactions while locked.
+         *
+         * # Returns
+         * The query builder with `FOR SHARE` appended.
+         */
+        public function forShare(): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `INSERT INTO` clause to the query.
+         *
+         * # Arguments
+         * * `table` - The name of the target table.
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users");
+         * ```
+         */
+        public function insert(string $table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `VALUES` clause to the query.
+         *
+         * # Arguments
+         * * `values` - Can be:
+         *     - An associative array: `["name" => "John", "email" => "j@example.com"]`
+         *     - A list of `[column, value]` pairs: `[["name", "John"], ["email", "j@example.com"]]`
+         *     - A raw SQL string or a subquery builder
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values(["name" => "John", "email" => "j@example.com"]);
+         * ```
+         */
+        public function values(mixed $values): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `TRUNCATE TABLE` statement to the query.
+         *
+         * This command removes all rows from the specified table quickly and efficiently.
+         * It is faster than `DELETE FROM` and usually does not fire triggers or return affected row counts.
+         *
+         * # Arguments
+         * * `table` – The name of the table to truncate.
+         *
+         * # Example
+         * ```php
+         * $builder->truncate_table("users");
+         * // TRUNCATE TABLE users
+         * ```
+         *
+         * # Notes
+         * - May require elevated privileges depending on the database.
+         * - This method can be chained with other query builder methods.
+         *
+         * # Errors
+         * Returns an error if appending the SQL fragment fails (e.g., formatting error).
+         */
+        public function truncateTable(string $table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Finalizes the query by appending a semicolon (`;`).
+         *
+         * This method is optional. Most databases do not require semicolons in prepared queries,
+         * but you may use it to explicitly terminate a query string.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->end();
+         * // SELECT * FROM users;
+         * ```
+         *
+         * # Returns
+         * The builder instance after appending the semicolon.
+         *
+         * # Notes
+         * - Only appends the semicolon character; does not perform any execution.
+         * - Useful when exporting a full query string with a terminating symbol (e.g., for SQL scripts).
+         */
+        public function end(string $_table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends multiple rows to the `VALUES` clause of an `INSERT` statement.
+         *
+         * Each row must be:
+         * - an ordered list of values (indexed array),
+         * - or a map of column names to values (associative array) — only for the first row, to infer column order.
+         *
+         * # Arguments
+         * * `rows` – A sequential array of rows (arrays of values).
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values_many([
+         *     ["Alice", "alice@example.com"],
+         *     ["Bob", "bob@example.com"]
+         * ]);
+         *
+         * $builder->insert("users")->values_many([
+         *     ["name" => "Alice", "email" => "alice@example.com"],
+         *     ["name" => "Bob",   "email" => "bob@example.com"]
+         * ]);
+         * ```
+         */
+        public function valuesMany(mixed $rows): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `RETURNING` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - A string or array of column names to return.
+         *
+         * # Supported formats
+         * ```php
+         * $builder->returning("id");
+         * $builder->returning(["id", "name"]);
+         * ```
+         *
+         * # Notes
+         * - This is mainly supported in PostgreSQL.
+         * - Use with `INSERT`, `UPDATE`, or `DELETE`.
+         */
+        public function returning(mixed $fields): \Sqlx\PgQueryBuilder {}
+
+        public function from(mixed $from, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
         /**
          * Executes the prepared query and returns a dictionary mapping the first column to the second column.
          *
@@ -2269,7 +4146,16 @@ namespace Sqlx {
          * # Returns
          * Prepared query object
          */
-        public function prepare(string $query): \Sqlx\MyssqlPreparedQuery {}
+        public function prepare(string $query): \Sqlx\Driver\MssqlPreparedQuery {}
+
+        /**
+         * Creates a query builder object
+         *
+         *
+         * # Returns
+         * Query builder object
+         */
+        public function builder(): \Sqlx\MssqlQueryBuilder {}
 
         /**
          * Returns whether results are returned as associative arrays.
@@ -2917,13 +4803,538 @@ namespace Sqlx {
          */
         public function releaseSavepoint(string $savepoint): mixed {}
 
+        /**
+         * Constructs a new SQLx driver instance.
+         *
+         * # Arguments
+         * - `options`: Connection URL as string or associative array with options:
+         *   - `url`: (string) database connection string (required)
+         *   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
+         *   - `ast_cache_shard_size`: (int) size per shard (default: 256)
+         *   - `persistent_name`: (string) name of persistent connection
+         *   - `assoc_arrays`: (bool) return associative arrays instead of objects
+         */
         public function __construct(mixed $options) {}
     }
 
     /**
-     * A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
+     * A prepared SQL query builder.
+     *
+     * Holds the generated query string, parameters, and placeholder tracking
+     * used during safe, composable query construction via AST rendering.
      */
-    class MyssqlPreparedQuery {
+    class MssqlQueryBuilder {
+        /**
+         * Creates a query builder object
+         *
+         *
+         * # Returns
+         * Query builder object
+         */
+        public function builder(): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `ON CONFLICT` clause to the query.
+         *
+         * # Arguments
+         * * `target` – A string or array of column names to specify the conflict target.
+         * * `set` – Optional `SET` clause. If `null`, generates `DO NOTHING`; otherwise uses the `SET` values.
+         *
+         * # Example
+         * ```php
+         * $builder->onConflict("id", null);
+         * $builder->onConflict(["email", "tenant_id"], ["name" => "New"]);
+         * ```
+         */
+        public function onConflict(mixed $target, ?mixed $set): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         *
+         * # Arguments
+         * * `set` – An array representing fields and values to update.
+         *
+         * # Example
+         * ```php
+         * $builder->onDuplicateKeyUpdate(["email" => "new@example.com"]);
+         * ```
+         */
+        public function onDuplicateKeyUpdate(mixed $set): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `INNER JOIN` clause to the query.
+         */
+        public function innerJoin(string $table, string $on, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `INNER JOIN` clause to the query.
+         * Alias for `inner_join()`.
+         */
+        public function join(string $table, string $on, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `LEFT JOIN` clause to the query.
+         */
+        public function leftJoin(string $table, string $on, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `RIGHT JOIN` clause to the query.
+         */
+        public function rightJoin(string $table, string $on, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `FULL OUTER JOIN` clause to the query.
+         */
+        public function fullJoin(string $table, string $on, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `CROSS JOIN` clause to the query.
+         */
+        public function crossJoin(string $table, string $on, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `NATURAL JOIN` clause to the query.
+         *
+         * # Note
+         * `NATURAL JOIN` does not accept `ON` conditions. The `on` argument is ignored.
+         */
+        public function naturalJoin(string $table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `WITH` clause to the query.
+         *
+         * # Arguments
+         * * `table` - Name of the CTE (common table expression).
+         * * `as` - The query body to be rendered for the CTE.
+         * * `parameters` - Optional parameters for the query body.
+         *
+         * # Example
+         * ```php
+         * $builder->with("cte_name", "SELECT * FROM users WHERE active = $active", [
+         *     "active" => true,
+         * ]);
+         * ```
+         */
+        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `WHERE` clause to the query.
+         *
+         * # Arguments
+         * * `where` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function where(mixed $r#where, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union("SELECT id FROM users");
+         * $builder->union($other_builder);
+         * ```
+         */
+        public function union(mixed $query, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION ALL` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union_all("SELECT id FROM users");
+         * $builder->union_all($other_builder);
+         * ```
+         */
+        public function unionAll(mixed $query, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `HAVING` clause to the query.
+         *
+         * # Arguments
+         * * `having` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function having(mixed $having, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `LIMIT` (and optional `OFFSET`) clause to the query.
+         *
+         * # Arguments
+         * * `limit` – Maximum number of rows to return.
+         * * `offset` – Optional number of rows to skip before starting to return rows.
+         *
+         * # Example
+         * ```php
+         * $builder->limit(10);
+         * $builder->limit(10, 20); // LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function limit(int $limit, ?int $offset): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `OFFSET` clause to the query independently.
+         *
+         * # Arguments
+         * * `offset` – Number of rows to skip before returning results.
+         *
+         * # Example
+         * ```php
+         * $builder->offset(30); // OFFSET 30
+         * ```
+         */
+        public function offset(int $offset): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `DELETE FROM` clause to the query.
+         *
+         * # Arguments
+         * * `from` - A string table name or a nested builder object.
+         * * `parameters` - Optional parameters if the `from` is a raw string.
+         *
+         * # Examples
+         * ```php
+         * $builder->deleteFrom("users");
+         * $builder->deleteFrom($builder->select("id")->from("temp_users"));
+         * ```
+         */
+        public function deleteFrom(mixed $from, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `USING` clause to the query.
+         *
+         * # Arguments
+         * * `from` - Either a string table name or a subquery builder.
+         * * `parameters` - Optional parameters if `from` is a string.
+         */
+        public function using(mixed $from, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `PAGINATE` clause to the query using a `PaginateClauseRendered` object.
+         *
+         * This expands into the appropriate SQL `LIMIT` and `OFFSET` syntax during rendering,
+         * using the values stored in the given `PaginateClauseRendered` instance.
+         *
+         * # Arguments
+         * * `paginate` – An instance of `Sqlx\PaginateClauseRendered`, produced by invoking a `PaginateClause`
+         *               (e.g., `$paginate = (new PaginateClause)($page, $perPage)`).
+         *
+         * # Errors
+         * Returns an error if the argument is not an instance of `PaginateClauseRendered`.
+         *
+         * # Example
+         * ```php
+         * $paginate = (new \Sqlx\PaginateClause())->__invoke(2, 10); // page 2, 10 per page
+         * $builder->select("*")->from("users")->paginate($paginate);
+         * // SELECT * FROM users LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function paginate(mixed $paginate): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `WITH RECURSIVE` clause to the query.
+         *
+         * # Arguments
+         * * `table_and_fields` - Table name with field list, e.g. `cte(col1, col2)`.
+         * * `as` - The recursive query body.
+         * * `parameters` - Optional parameters for the recursive body.
+         *
+         * # Example
+         * ```php
+         * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
+         * ```
+         */
+        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `UPDATE` clause to the query.
+         *
+         * # Arguments
+         * * `table` - A raw string representing the table(s).
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string.
+         */
+        public function update(mixed $table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `SET` clause to the query, supporting both keyed and indexed formats.
+         *
+         * # Arguments
+         * * `set` - An associative array mapping fields to values, or a sequential array
+         *   of `[field, value]` pairs or raw fragments.
+         *
+         * # Supported Formats
+         * ```php
+         * $builder->set(["name" => "John", "age" => 30]);
+         * $builder->set([["name", "John"], ["age", 30]]);
+         * $builder->set(["updated_at = NOW()"]);
+         * ```
+         *
+         * # Exceptions
+         * - When the input array is malformed or contains invalid value types.
+         */
+        public function set(mixed $set): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Renders the SQL query using named parameters and returns the fully rendered SQL with values injected inline.
+         *
+         * # Returns
+         * The rendered SQL query as a string with all parameters interpolated.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function dry(): array {}
+
+        /**
+         * Returns the parameter map currently accumulated in the builder.
+         *
+         * # Returns
+         * A cloned map of all parameter names and their corresponding `ParameterValue`.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function dryInline(): string {}
+
+        /**
+         * Returns the fully rendered SQL query with parameters embedded as literals.
+         *
+         * Used for debugging or fallback rendering when the placeholder limit is exceeded.
+         *
+         * # Returns
+         * A string representing the complete SQL statement.
+         *
+         * # Exceptions
+         * - If rendering or encoding of parameters fails.
+         */
+        public function __toString(): string {}
+
+        /**
+         * Returns an array of all currently accumulated parameters.
+         */
+        public function parameters(): array {}
+
+        /**
+         * Appends a raw SQL fragment to the query without validation.
+         *
+         * # Arguments
+         * * `part` - The SQL string to append.
+         * * `parameters` - Optional parameters to associate with the fragment.
+         */
+        public function raw(string $part, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `SELECT` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `SelectClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function select(mixed $fields): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `ORDER BY` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `ByClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function orderBy(mixed $fields): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `GROUP BY` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - Either a raw string or a `ByClauseRendered` object.
+         *
+         * # Exceptions
+         * Throws an exception if the argument is not a string or a supported object.
+         */
+        public function groupBy(mixed $fields): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `FOR UPDATE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to lock the selected rows
+         * for update, preventing other transactions from modifying or acquiring
+         * locks on them until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->for_update();
+         * // SELECT * FROM users FOR UPDATE
+         * ```
+         *
+         * # Notes
+         * - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+         * - Useful for implementing pessimistic locking in concurrent systems.
+         *
+         * # Returns
+         * The query builder with `FOR UPDATE` appended.
+         */
+        public function forUpdate(): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `FOR SHARE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to acquire shared locks
+         * on the selected rows, allowing concurrent transactions to read but
+         * not modify the rows until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("documents")->for_share();
+         * // SELECT * FROM documents FOR SHARE
+         * ```
+         *
+         * # Notes
+         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Ensures rows cannot be updated or deleted by other transactions while locked.
+         *
+         * # Returns
+         * The query builder with `FOR SHARE` appended.
+         */
+        public function forShare(): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `INSERT INTO` clause to the query.
+         *
+         * # Arguments
+         * * `table` - The name of the target table.
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users");
+         * ```
+         */
+        public function insert(string $table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `VALUES` clause to the query.
+         *
+         * # Arguments
+         * * `values` - Can be:
+         *     - An associative array: `["name" => "John", "email" => "j@example.com"]`
+         *     - A list of `[column, value]` pairs: `[["name", "John"], ["email", "j@example.com"]]`
+         *     - A raw SQL string or a subquery builder
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values(["name" => "John", "email" => "j@example.com"]);
+         * ```
+         */
+        public function values(mixed $values): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `TRUNCATE TABLE` statement to the query.
+         *
+         * This command removes all rows from the specified table quickly and efficiently.
+         * It is faster than `DELETE FROM` and usually does not fire triggers or return affected row counts.
+         *
+         * # Arguments
+         * * `table` – The name of the table to truncate.
+         *
+         * # Example
+         * ```php
+         * $builder->truncate_table("users");
+         * // TRUNCATE TABLE users
+         * ```
+         *
+         * # Notes
+         * - May require elevated privileges depending on the database.
+         * - This method can be chained with other query builder methods.
+         *
+         * # Errors
+         * Returns an error if appending the SQL fragment fails (e.g., formatting error).
+         */
+        public function truncateTable(string $table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Finalizes the query by appending a semicolon (`;`).
+         *
+         * This method is optional. Most databases do not require semicolons in prepared queries,
+         * but you may use it to explicitly terminate a query string.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->end();
+         * // SELECT * FROM users;
+         * ```
+         *
+         * # Returns
+         * The builder instance after appending the semicolon.
+         *
+         * # Notes
+         * - Only appends the semicolon character; does not perform any execution.
+         * - Useful when exporting a full query string with a terminating symbol (e.g., for SQL scripts).
+         */
+        public function end(string $_table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends multiple rows to the `VALUES` clause of an `INSERT` statement.
+         *
+         * Each row must be:
+         * - an ordered list of values (indexed array),
+         * - or a map of column names to values (associative array) — only for the first row, to infer column order.
+         *
+         * # Arguments
+         * * `rows` – A sequential array of rows (arrays of values).
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values_many([
+         *     ["Alice", "alice@example.com"],
+         *     ["Bob", "bob@example.com"]
+         * ]);
+         *
+         * $builder->insert("users")->values_many([
+         *     ["name" => "Alice", "email" => "alice@example.com"],
+         *     ["name" => "Bob",   "email" => "bob@example.com"]
+         * ]);
+         * ```
+         */
+        public function valuesMany(mixed $rows): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `RETURNING` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - A string or array of column names to return.
+         *
+         * # Supported formats
+         * ```php
+         * $builder->returning("id");
+         * $builder->returning(["id", "name"]);
+         * ```
+         *
+         * # Notes
+         * - This is mainly supported in PostgreSQL.
+         * - Use with `INSERT`, `UPDATE`, or `DELETE`.
+         */
+        public function returning(mixed $fields): \Sqlx\MssqlQueryBuilder {}
+
+        public function from(mixed $from, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
         /**
          * Executes the prepared query and returns a dictionary mapping the first column to the second column.
          *
@@ -3408,6 +5819,391 @@ namespace Sqlx {
         const OPT_IDLE_TIMEOUT = null;
 
         const OPT_TEST_BEFORE_ACQUIRE = null;
+
+        public function __construct() {}
+    }
+}
+
+namespace Sqlx\Driver {
+    /**
+     * A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
+     */
+    class MssqlPreparedQuery {
+        /**
+         * Executes the prepared query and returns a dictionary mapping the first column to the second column.
+         *
+         * This method expects each result row to contain at least two columns. It converts the first column
+         * into a PHP string (used as the key), and the second column into a PHP value (used as the value).
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * An associative array (`array<string, mixed>`) where each key is the first column (as string),
+         * and the value is the second column.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a PHP string;
+         * - the second column cannot be converted to a PHP value.
+         *
+         * # Notes
+         * - The order of dictionary entries is preserved.
+         * - The query must return at least two columns per row.
+         */
+        public function queryColumnDictionary(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary in associative array mode.
+         *
+         * Same as `query_column_dictionary`, but forces JSON objects to be represented as associative arrays.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * A dictionary where each key is the first column (as string),
+         * and each value is the second column as an associative PHP array.
+         *
+         * # Errors
+         * Same as `query_column_dictionary`.
+         */
+        public function queryColumnDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary in object mode.
+         *
+         * Same as `query_column_dictionary`, but forces JSON objects to be represented as objects.
+         *
+         * # Parameters
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * A dictionary where each key is the first column (as string),
+         * and each value is the second column as a PHP object.
+         *
+         * # Errors
+         * Same as `query_column_dictionary`.
+         */
+        public function queryColumnDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row.
+         *
+         * The result is a `HashMap` where the key is the stringified first column from each row,
+         * and the value is the full row, returned as array or object depending on config.
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionary(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+         * with each row returned as an associative array.
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row as an associative array.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
+         * with each row returned as an object (`stdClass`).
+         *
+         * # Parameters
+         * - `parameters`: Optional map of named parameters to bind.
+         *
+         * # Returns
+         * A map from the first column (as string) to the corresponding row as an object.
+         *
+         * # Errors
+         * Returns an error if:
+         * - the query fails to execute;
+         * - the first column cannot be converted to a string;
+         * - any row cannot be decoded or converted to a PHP value.
+         *
+         * # Notes
+         * - The iteration order of the returned map is **not** guaranteed.
+         */
+        public function queryDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes a query and returns a grouped dictionary (Vec of rows per key).
+         *
+         * Same as [`queryGroupedDictionary`](crate::Driver::query_grouped_dictionary), but works on a prepared query.
+         *
+         * The first column is used as the key (must be scalar),
+         * and each resulting row is appended to the corresponding key's Vec.
+         *
+         * # Errors
+         * Fails if the query fails, or the first column is not scalar.
+         */
+        public function queryGroupedDictionary(?array $parameters): mixed {}
+
+        /**
+         * Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
+         */
+        public function queryGroupedDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
+         */
+        public function queryGroupedDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns a grouped dictionary where:
+         * - the key is the **first column** (must be scalar),
+         * - the value is a list of values from the **second column** for each group.
+         *
+         * This variant uses the driver's default associative array option for JSON values.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionary(?array $parameters): mixed {}
+
+        /**
+         * Same as `queryGroupedColumnDictionary()`, but forces associative arrays
+         * for the second column if it contains JSON objects.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionaryAssoc(?array $parameters): mixed {}
+
+        /**
+         * Same as `queryGroupedColumnDictionary()`, but forces PHP objects
+         * for the second column if it contains JSON objects.
+         *
+         * # Errors
+         * Returns an error if the first column is not convertible to a string.
+         */
+        public function queryGroupedColumnDictionaryObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query with optional parameters.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Number of affected rows
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
+         * - parameters contain unsupported types or fail to bind correctly;
+         * - the runtime fails to execute the query (e.g., task panic or timeout).
+         */
+        public function execute(?array $parameters): int {}
+
+        /**
+         * Executes the prepared query and returns a single result.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Single row as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or execution fails;
+         * - a parameter cannot be bound or has incorrect type;
+         * - the row contains unsupported database types;
+         * - conversion to PHP object fails.
+         */
+        public function queryRow(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an associative array.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes the prepared query and returns one row as an object.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         */
+        public function queryRowObj(?array $parameters): mixed {}
+
+        /**
+         * Executes an SQL query and returns a single result, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Single row as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if the query fails for reasons other than no matching rows.
+         * For example, syntax errors, type mismatches, or database connection issues.
+         */
+        public function queryMaybeRow(?array $parameters): mixed {}
+
+        /**
+         * Executes the SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
+         */
+        public function queryMaybeRowAssoc(?array $parameters): mixed {}
+
+        /**
+         * Executes an SQL query and returns a single row as a PHP object, or `null` if no row matched.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * The result row as a `stdClass` PHP object, or `null` if no matching row is found.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query is invalid or fails to execute;
+         * - parameters are invalid or cannot be bound;
+         * - the row contains unsupported or unconvertible data types.
+         */
+        public function queryMaybeRowObj(?array $parameters): mixed {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all result rows.
+         *
+         * # Arguments
+         * - `query`: SQL query string to execute.
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         * - `column`: Optional column name or index to extract.
+         *
+         * # Returns
+         * An array of column values, one for each row.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - the query fails to execute;
+         * - the specified column is not found;
+         * - a column value cannot be converted to PHP.
+         */
+        public function queryColumn(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all rows in associative array mode.
+         *
+         * # Arguments
+         * - `query`: SQL query string.
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (associative arrays for structured data).
+         *
+         * # Exceptions
+         * Same as `query_column`.
+         */
+        public function queryColumnAssoc(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the SQL query and returns the specified column values from all rows in object mode.
+         *
+         * # Arguments
+         * - `parameters`: Optional named parameters.
+         * - `column`: Column index or name to extract.
+         *
+         * # Returns
+         * An array of column values (objects for structured data).
+         *
+         * # Exceptions
+         * Same as `query_column`.
+         */
+        public function queryColumnObj(?array $parameters, ?mixed $column): array {}
+
+        /**
+         * Executes the prepared query and returns all rows.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Returns
+         * Array of rows as array or object depending on config
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAll(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as associative arrays.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllAssoc(?array $parameters): array {}
+
+        /**
+         * Executes the prepared query and returns all rows as objects.
+         *
+         * # Arguments
+         * - `parameters`: Optional array of indexed/named parameters to bind.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - SQL query is invalid or fails to execute;
+         * - parameter binding fails;
+         * - row decoding fails due to an unsupported or mismatched database type;
+         * - conversion to PHP values fails (e.g., due to memory or encoding issues).
+         */
+        public function queryAllObj(?array $parameters): array {}
 
         public function __construct() {}
     }

@@ -71,7 +71,7 @@ impl LazyRow {
             .get_mut(name)
             .ok_or_else(|| PhpException::from("column not found"))?;
 
-        if let Some(obj) = value.object_mut() {
+        if let Some(obj) = value.object() {
             if let Some(lazy_row_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
                 // Take the raw JSON, decode it, and replace the stored placeholder
                 let zval = LazyRowJson::take_zval(lazy_row_json)?;
@@ -96,7 +96,7 @@ impl LazyRow {
             .get_mut(key)
             .ok_or_else(|| PhpException::from("column not found"))?;
 
-        if let Some(obj) = value.object_mut() {
+        if let Some(obj) = value.object() {
             if let Some(lazy_row_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
                 let zval = LazyRowJson::take_zval(lazy_row_json)?;
                 let clone = value.shallow_clone();

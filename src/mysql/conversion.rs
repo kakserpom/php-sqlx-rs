@@ -1,6 +1,5 @@
 use crate::LazyRowJson;
 use crate::conversion::{Conversion, json_into_zval};
-use crate::utils::ZvalNull;
 use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;

@@ -1,14 +1,13 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
-        use $crate::ast::{Ast, RenderingSettings, ParsingSettings};
+        use $crate::ast::{Ast, Settings};
         use $crate::conversion::Conversion;
         use $crate::utils::is_valid_ident;
         use $crate::options::DriverInnerOptions;
         use $crate::paramvalue::{ParameterValue, bind_values};
         use sqlx_oldapi::$database;
         use sqlx_oldapi::pool::PoolOptions;
-        use $crate::utils::ZvalNull;
         use $crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
         use $crate::RUNTIME;
         use anyhow::{anyhow, bail};
@@ -29,8 +28,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub ast_cache: LruCache<String, Ast>,
             pub options: DriverInnerOptions,
             pub tx_stack: RwLock<Vec<Transaction<'static, $database>>>,
-            pub parsing_settings: ParsingSettings,
-            pub rendering_settings: RenderingSettings,
+            pub settings: Settings,
         }
 
         impl $struct {
@@ -50,6 +48,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                                 .as_str(),
                         ),
                 )?;
+                let mut settings = SETTINGS.clone();
+                settings.collapsible_in_enabled = options.collapsible_in_enabled;
                 Ok(Self {
                     tx_stack: RwLock::new(Vec::new()),
                     pool,
@@ -57,16 +57,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         options.ast_cache_shard_count,
                         options.ast_cache_shard_size,
                     ),
-                    parsing_settings: ParsingSettings {
-                        collapsible_in_enabled: options.collapsible_in_enabled,
-                        escaping_double_single_quotes: ESCAPING_DOUBLE_SINGLE_QUOTES,
-                        comment_hash: COMMENT_HASH,
-                    },
-                    rendering_settings: RenderingSettings {
-                        column_backticks: COLUMN_BACKTICKS,
-                        placeholder_dollar_sign: PLACEHOLDER_DOLLAR_SIGN,
-                        placeholder_at_sign: PLACEHOLDER_AT_SIGN,
-                    },
+                    settings,
                     options,
                 })
             }
@@ -114,12 +105,43 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> anyhow::Result<(String, Vec<ParameterValue>)> {
                 let parameters = parameters.unwrap_or_default();
                 if let Some(ast) = self.ast_cache.get(query) {
-                    ast.render(parameters, &self.rendering_settings)
+                    ast.render(parameters, &self.settings)
                 } else {
-                    let ast = Ast::parse(query, &self.parsing_settings)?;
-                    let rendered = ast.render(parameters, &self.rendering_settings)?;
+                    let ast = Ast::parse(query, &self.settings)?;
+                    let rendered = ast.render(parameters, &self.settings)?;
                     self.ast_cache.insert(query.to_owned(), ast);
                     Ok(rendered)
+                }
+            }
+
+            fn render_query_inline(
+                &self,
+                query: &str,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<String> {
+                let parameters = parameters.unwrap_or_default();
+
+                let mut settings = self.settings.clone();
+                settings.max_placeholders = 0;
+
+                if let Some(ast) = self.ast_cache.get(query) {
+                    let (query, _) = ast.render(parameters, &settings)?;
+                    Ok(query)
+                } else {
+                    let ast = Ast::parse(query, &self.settings)?;
+                    let (query, _) = ast.render(parameters, &settings)?;
+                    self.ast_cache.insert(query.to_owned(), ast);
+                    Ok(query)
+                }
+            }
+
+            pub fn parse_query(&self, query: &str) -> anyhow::Result<Ast> {
+                if let Some(ast) = self.ast_cache.get(query) {
+                    Ok(ast)
+                } else {
+                    let ast = Ast::parse(query, &self.settings)?;
+                    self.ast_cache.insert(query.to_owned(), ast.clone());
+                    Ok(ast)
                 }
             }
 
@@ -401,6 +423,14 @@ macro_rules! php_sqlx_impl_driver_inner {
                     query.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
                     values.into_zval(false).map_err(|err| anyhow!("{err:?}"))?,
                 ])
+            }
+
+            pub fn dry_inline(
+                &self,
+                query: &str,
+                parameters: Option<HashMap<String, ParameterValue>>,
+            ) -> anyhow::Result<String> {
+                self.render_query_inline(query, parameters)
             }
 
             /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row.

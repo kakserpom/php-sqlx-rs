@@ -3,6 +3,11 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::must_use_candidate)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
+
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub mod ast;
 pub mod byclause;
 pub mod conversion;
@@ -20,6 +25,7 @@ pub mod paramvalue;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 mod prepared_query;
+pub mod query_builder;
 pub mod selectclause;
 #[cfg(test)]
 mod tests;
@@ -53,6 +59,7 @@ pub fn module(module: ModuleBuilder) -> ModuleBuilder {
     let module = selectclause::build(module);
     let module = byclause::build(module);
     let module = paginateclause::build(module);
+    let module = query_builder::build(module);
 
     #[cfg(feature = "mysql")]
     let module = mysql::build(module);

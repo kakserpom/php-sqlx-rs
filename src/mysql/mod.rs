@@ -7,5 +7,6 @@ php_sqlx_impl_driver!(
     MySqlDriver,
     "Sqlx\\MySqlDriver",
     MySqlDriverInner,
-    MySqlPreparedQuery
+    MySqlPreparedQuery,
+    MySqlQueryBuilder
 );

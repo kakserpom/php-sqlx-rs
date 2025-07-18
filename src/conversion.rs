@@ -1,6 +1,5 @@
 #[cfg(feature = "lazy-row")]
 use crate::LazyRow;
-use crate::utils::ZvalNull;
 use anyhow::anyhow;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
