@@ -15,21 +15,16 @@ mod driver;
 mod inner_driver;
 #[cfg(feature = "lazy-row")]
 mod lazy_row;
-#[cfg(feature = "mssql")]
-pub mod mssql;
-#[cfg(feature = "mysql")]
-pub mod mysql;
 pub mod options;
 pub mod paginate_clause;
 pub mod paramvalue;
-#[cfg(feature = "postgres")]
-pub mod postgres;
 mod prepared_query;
 pub mod query_builder;
 pub mod select_clause;
 
 pub mod driver_factory;
 pub mod utils;
+mod dbms;
 
 use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]
@@ -37,6 +32,7 @@ pub use lazy_row::{LazyRow, LazyRowJson};
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
+use dbms::{mssql, mysql, postgres};
 
 /// Global runtime for executing async `SQLx` queries from sync context.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
@@ -50,7 +46,7 @@ const DEFAULT_COLLAPSIBLE_IN: bool = true;
 const DEFAULT_TEST_BEFORE_ACQUIRE: bool = false;
 
 #[cfg(feature = "mysql")]
-pub use mysql::{MySqlDriver, MySqlPreparedQuery};
+pub use dbms::mysql::{MySqlDriver, MySqlPreparedQuery};
 
 #[php_module]
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {

@@ -1,10 +1,12 @@
 use crate::options::{DriverOptions, DriverOptionsArg};
-use crate::{mssql::MssqlDriver, mysql::MySqlDriver, postgres::PgDriver};
+use crate::dbms::postgres::PgDriver;
 use anyhow::{anyhow, bail};
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ZendClassObject, Zval};
 use url::Url;
+use crate::dbms::mssql::MssqlDriver;
+use crate::dbms::mysql::MySqlDriver;
 
 #[php_class]
 #[php(name = "Sqlx\\DriverFactory")]

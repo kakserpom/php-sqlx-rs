@@ -1,3 +1,3 @@
 use crate::php_sqlx_impl_prepared_query;
-use crate::postgres::inner::PgDriverInner;
+use crate::dbms::postgres::inner::PgDriverInner;
 php_sqlx_impl_prepared_query!(PgPreparedQuery, "Sqlx\\PgPreparedQuery", PgDriverInner);

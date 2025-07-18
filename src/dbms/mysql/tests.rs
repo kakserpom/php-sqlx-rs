@@ -1,6 +1,6 @@
 use crate::ast::Ast;
 use crate::by_clause::{ByClause, ByClauseColumnDefinition};
-use crate::mysql::inner::SETTINGS;
+use crate::dbms::mysql::inner::SETTINGS;
 use crate::paginate_clause::PaginateClause;
 use crate::paramvalue::{ParameterValue, ParamsMap};
 use collapse::*;
