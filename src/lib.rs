@@ -51,8 +51,6 @@ const DEFAULT_ASSOC_ARRAYS: bool = false;
 const DEFAULT_COLLAPSIBLE_IN: bool = true;
 const DEFAULT_TEST_BEFORE_ACQUIRE: bool = false;
 
-use crate::options::DriverOptions;
-
 #[cfg(feature = "mysql")]
 pub use mysql::{MySqlDriver, MySqlPreparedQuery};
 
@@ -62,6 +60,7 @@ pub fn module(module: ModuleBuilder) -> ModuleBuilder {
     let module = byclause::build(module);
     let module = paginateclause::build(module);
     let module = query_builder::build(module);
+    let module = driver_factory::build(module);
 
     #[cfg(feature = "mysql")]
     let module = mysql::build(module);
@@ -75,5 +74,5 @@ pub fn module(module: ModuleBuilder) -> ModuleBuilder {
     #[cfg(feature = "lazy-row")]
     let module = lazy_row::build(module);
 
-    module.class::<DriverOptions>()
+    module
 }

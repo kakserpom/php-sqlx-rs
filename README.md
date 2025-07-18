@@ -388,16 +388,16 @@ cargo php install --release --yes
 
 ## API
 
-### `Sqlx\PgDriver` \| `Sqlx\MySqlDriver` \| `Sqlx\MssqlDriver`
+### `Sql\DriverFactory`
 
 ```php
-$driver = new Sqlx\PgDriver("postgres://user:pass@localhost/db");
+$driver = Sqlx\DriverFactory::make("postgres://user:pass@localhost/db");
 ```
 
 Or with options:
 
 ```php
-$driver = new Sqlx\PgDriver([
+$driver = Sqlx\DriverFactory::make([
     Sqlx\DriverOptions::OPT_URL => 'postgres://user:pass@localhost/db',
     Sqlx\DriverOptions::OPT_ASSOC_ARRAYS => true,   // return arrays instead of objects
     Sqlx\DriverOptions::OPT_PERSISTENT_NAME => 'main_db'

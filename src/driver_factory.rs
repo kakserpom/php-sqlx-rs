@@ -1,4 +1,4 @@
-use crate::options::DriverOptionsArg;
+use crate::options::{DriverOptions, DriverOptionsArg};
 use crate::{mssql::MssqlDriver, mysql::MySqlDriver, postgres::PgDriver};
 use anyhow::{anyhow, bail};
 use ext_php_rs::convert::IntoZval;
@@ -37,7 +37,7 @@ impl DriverFactory {
                 .ok_or_else(|| anyhow!("Missing OPT_URL"))?,
         )?;
         let scheme = url.scheme();
-        match scheme {
+        match scheme.to_lowercase().as_str() {
             "postgres" | "postgresql" | "pgsql" => {
                 Ok(ZendClassObject::new(PgDriver::new(options)?)
                     .into_zval(false)
@@ -57,5 +57,5 @@ impl DriverFactory {
 }
 
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<DriverFactory>()
+    module.class::<DriverFactory>().class::<DriverOptions>()
 }
