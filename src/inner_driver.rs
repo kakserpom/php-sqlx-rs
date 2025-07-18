@@ -3,12 +3,12 @@ macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
         use $crate::ast::{Ast, Settings};
         use $crate::conversion::Conversion;
-        use $crate::utils::is_valid_ident;
+        use $crate::utils::ident::is_valid_ident;
         use $crate::options::DriverInnerOptions;
         use $crate::paramvalue::{ParameterValue, bind_values};
         use sqlx_oldapi::$database;
         use sqlx_oldapi::pool::PoolOptions;
-        use $crate::utils::{ColumnArgument, fold_into_zend_hashmap, fold_into_zend_hashmap_grouped};
+        use $crate::utils::{types::ColumnArgument, hashmap_fold::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped}};
         use $crate::RUNTIME;
         use anyhow::{anyhow, bail};
         use ext_php_rs::convert::IntoZval;

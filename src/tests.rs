@@ -20,7 +20,7 @@ fn test_driver_options() {
 
 #[test]
 pub fn test_strip_prefix_word_ignore_ascii_case() {
-    use crate::utils::StripPrefixWordIgnoreAsciiCase;
+    use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
     "NOT IN (:ph)"
         .strip_prefix_word_ignore_ascii_case(&["NOT", "IN"])
         .unwrap();

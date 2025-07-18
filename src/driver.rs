@@ -7,7 +7,7 @@ macro_rules! php_sqlx_impl_driver {
         use inner::$inner;
         use query_builder::$query_builder;
         pub use prepared_query::$prepared_query;
-        use $crate::utils::ColumnArgument;
+        use $crate::utils::types::ColumnArgument;
 
         use anyhow::anyhow;
         use dashmap::DashMap;
@@ -93,6 +93,60 @@ macro_rules! php_sqlx_impl_driver {
             #[must_use]
             pub fn builder(&self,) -> $query_builder {
                 $query_builder::new(self.driver_inner.clone()) 
+            }
+
+            /// Quotes a single scalar value for safe embedding into SQL.
+            ///
+            /// This method renders the given `ParameterValue` into a properly escaped SQL literal,
+            /// using the driver's configuration (e.g., quoting style, encoding).
+            ///
+            /// ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+            /// This method should only be used for debugging or generating static fragments,
+            /// not for constructing dynamic SQL with user input.
+            ///
+            /// # Arguments
+            /// * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+            ///
+            /// # Returns
+            /// Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+            ///
+            /// # Errors
+            /// Returns an error if the parameter is not a scalar or if rendering fails.
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+            /// ```
+            pub fn quote(&self, param: ParameterValue) -> anyhow::Result<String> {
+                param.quote(&self.driver_inner.settings)
+            }
+
+            /// Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+            ///
+            /// This helper is designed for safely preparing user input for use with
+            /// pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+            ///
+            /// ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+            /// It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+            /// not interpolate it directly into the query string.
+            ///
+            /// # Arguments
+            /// * `param` – The parameter to escape (must be a string).
+            ///
+            /// # Returns
+            /// A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+            ///
+            /// # Errors
+            /// Returns an error if the input is not a string.
+            ///
+            /// # Example
+            /// ```php
+            /// $escaped = $builder->metaQuoteLike("100%_safe");
+            /// // Use like:
+            /// $builder->where([["name", "LIKE", "%$escaped%"]]);
+            /// ```
+            pub fn meta_quote_like(&self, param: ParameterValue) -> anyhow::Result<String> {
+                param.meta_quote_like()
             }
 
             /// Returns whether results are returned as associative arrays.

@@ -76,7 +76,7 @@ impl DriverOptionsArg {
                     kv.get(DriverOptions::OPT_URL)
                         .ok_or_else(|| anyhow!("missing {}", DriverOptions::OPT_URL))
                         .and_then(|value| {
-                            if let ParameterValue::Str(str) = value {
+                            if let ParameterValue::String(str) = value {
                                 Ok(str.clone())
                             } else {
                                 Err(anyhow!("{} must be a string", DriverOptions::OPT_URL))
@@ -125,7 +125,7 @@ impl DriverOptionsArg {
                 persistent_name: match kv.get(DriverOptions::OPT_PERSISTENT_NAME) {
                     None => None,
                     Some(value) => {
-                        if let ParameterValue::Str(str) = value {
+                        if let ParameterValue::String(str) = value {
                             Some(str.clone())
                         } else {
                             return Err(anyhow!(
@@ -163,7 +163,7 @@ impl DriverOptionsArg {
                 )?,
                 max_lifetime: match kv.get(DriverOptions::OPT_MAX_LIFETIME) {
                     None => None,
-                    Some(ParameterValue::Str(value)) => Some(parse_duration::parse(value)?),
+                    Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)?),
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }
@@ -174,7 +174,7 @@ impl DriverOptionsArg {
                 },
                 idle_timeout: match kv.get(DriverOptions::OPT_IDLE_TIMEOUT) {
                     None => None,
-                    Some(ParameterValue::Str(value)) => Some(parse_duration::parse(value)?),
+                    Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)?),
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }

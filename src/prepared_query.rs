@@ -2,7 +2,7 @@
 macro_rules! php_sqlx_impl_prepared_query {
     ( $struct:ident, $class:literal, $driver_inner: ident ) => {
         use $crate::paramvalue::ParameterValue;
-        use $crate::utils::ColumnArgument;
+        use $crate::utils::types::ColumnArgument;
         use ext_php_rs::php_impl;
         use ext_php_rs::prelude::*;
         use ext_php_rs::types::Zval;

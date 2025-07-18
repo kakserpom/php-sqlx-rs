@@ -28,7 +28,7 @@ pub type ParamsMap = BTreeMap<Placeholder, ParameterValue>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParameterValue {
     Null,
-    Str(String),
+    String(String),
     Int(i64),
     Float(f64),
     Bool(bool),
@@ -46,13 +46,13 @@ impl Serialize for ParameterValue {
         S: Serializer,
     {
         match self {
-            ParameterValue::Null => serializer.serialize_none(),
-            ParameterValue::Str(s) => serializer.serialize_str(s),
-            ParameterValue::Int(i) => serializer.serialize_i64(*i),
-            ParameterValue::Float(f) => serializer.serialize_f64(*f),
-            ParameterValue::Bool(b) => serializer.serialize_bool(*b),
+            Self::Null => serializer.serialize_none(),
+            Self::String(s) => serializer.serialize_str(s),
+            Self::Int(i) => serializer.serialize_i64(*i),
+            Self::Float(f) => serializer.serialize_f64(*f),
+            Self::Bool(b) => serializer.serialize_bool(*b),
 
-            ParameterValue::Array(arr) => {
+            Self::Array(arr) => {
                 let mut seq = serializer.serialize_seq(Some(arr.len()))?;
                 for elem in arr {
                     seq.serialize_element(elem)?;
@@ -60,7 +60,7 @@ impl Serialize for ParameterValue {
                 seq.end()
             }
 
-            ParameterValue::Object(map) => {
+            Self::Object(map) => {
                 let mut m = serializer.serialize_map(Some(map.len()))?;
                 for (k, v) in map {
                     m.serialize_entry(k, v)?;
@@ -68,18 +68,12 @@ impl Serialize for ParameterValue {
                 m.end()
             }
 
-            ParameterValue::ByClauseRendered(val) => serializer.serialize_str(&format!("{val:?}")),
+            Self::ByClauseRendered(val) => serializer.serialize_str(&format!("{val:?}")),
 
-            ParameterValue::SelectClauseRendered(val) => {
-                serializer.serialize_str(&format!("{val:?}"))
-            }
+            Self::SelectClauseRendered(val) => serializer.serialize_str(&format!("{val:?}")),
 
-            ParameterValue::PaginateClauseRendered(val) => {
-                serializer.serialize_str(&format!("{val:?}"))
-            }
-            ParameterValue::Builder(_) => {
-                Err(serde::ser::Error::custom("Builder cannot be serialized"))
-            }
+            Self::PaginateClauseRendered(val) => serializer.serialize_str(&format!("{val:?}")),
+            Self::Builder(_) => Err(serde::ser::Error::custom("Builder cannot be serialized")),
         }
     }
 }
@@ -96,7 +90,7 @@ impl ParameterValue {
             Self::ByClauseRendered(x) => x.is_empty(),
             Self::SelectClauseRendered(x) => x.is_empty(),
             Self::Array(array) => array.is_empty(),
-            Self::Str(_)
+            Self::String(_)
             | Self::Int(_)
             | Self::Float(_)
             | Self::Bool(_)
@@ -105,6 +99,28 @@ impl ParameterValue {
             Self::Null => true,
             Self::Builder(_) => false,
         }
+    }
+
+    /// Escapes `%`, `_`, and `\` characters in the input string by prefixing them with a backslash,
+    /// making it safe to use in SQL `LIKE` patterns.
+    ///
+    /// # Returns
+    /// A new `String` where all occurrences of `%`, `_`, and `\` are escaped.
+    pub fn meta_quote_like(&self) -> anyhow::Result<String> {
+        let Self::String(input) = self else {
+            bail!("meta_quote_like called on non-string parameter");
+        };
+
+        let mut escaped = String::with_capacity(input.len());
+
+        for c in input.chars() {
+            if c == '%' || c == '_' || c == '\\' {
+                escaped.push('\\');
+            }
+            escaped.push(c);
+        }
+
+        Ok(escaped)
     }
 
     /// Quotes the value as a SQL literal string, number, or boolean,
@@ -138,20 +154,20 @@ impl ParameterValue {
             out
         }
         Ok(match self {
-            ParameterValue::Null => "NULL".to_string(),
+            Self::Null => "NULL".to_string(),
 
-            ParameterValue::Int(i) => i.to_string(),
-            ParameterValue::Float(f) => f.to_string(),
+            Self::Int(i) => i.to_string(),
+            Self::Float(f) => f.to_string(),
 
-            ParameterValue::Bool(b) => String::from(if settings.booleans_as_literals {
+            Self::Bool(b) => String::from(if settings.booleans_as_literals {
                 if *b { "TRUE" } else { "FALSE" }
             } else {
                 if *b { "1" } else { "0" }
             }),
 
-            ParameterValue::Str(s) => escape_sql_string(s, settings),
+            Self::String(s) => escape_sql_string(s, settings),
 
-            ParameterValue::Array(values) => {
+            Self::Array(values) => {
                 let elements = values
                     .iter()
                     .map(|v| v.quote(settings))
@@ -160,16 +176,16 @@ impl ParameterValue {
                 format!("({elements})")
             }
 
-            ParameterValue::Object(obj) => escape_sql_string(
+            Self::Object(obj) => escape_sql_string(
                 &serde_json::to_string(obj)
                     .map_err(|e| anyhow::anyhow!("JSON serialization error: {}", e))?,
                 settings,
             ),
 
-            ParameterValue::ByClauseRendered(_)
-            | ParameterValue::SelectClauseRendered(_)
-            | ParameterValue::PaginateClauseRendered(_)
-            | ParameterValue::Builder(_) => {
+            Self::ByClauseRendered(_)
+            | Self::SelectClauseRendered(_)
+            | Self::PaginateClauseRendered(_)
+            | Self::Builder(_) => {
                 bail!("Cannot quote a clause as a value")
             }
         })
@@ -190,7 +206,7 @@ impl ParameterValue {
     fn write_placeholder_to(
         &self,
         sql: &mut String,
-        out_vals: &mut Vec<ParameterValue>,
+        out_vals: &mut Vec<Self>,
         settings: &Settings,
     ) -> anyhow::Result<()> {
         if out_vals.len() < settings.max_placeholders {
@@ -260,13 +276,13 @@ impl ParamVecWriteSqlTo for Vec<ParameterValue> {
 impl From<&str> for ParameterValue {
     /// Converts a `&str` into a `ParameterValue::Str`.
     fn from(s: &str) -> Self {
-        ParameterValue::Str(s.to_string())
+        ParameterValue::String(s.to_string())
     }
 }
 impl From<String> for ParameterValue {
     /// Converts a `String` into a `ParameterValue::Str`.
     fn from(s: String) -> Self {
-        ParameterValue::Str(s)
+        ParameterValue::String(s)
     }
 }
 
@@ -298,7 +314,7 @@ impl IntoZval for ParameterValue {
     /// Returns an error if value insertion fails.
     fn set_zval(self, zv: &mut Zval, persistent: bool) -> ext_php_rs::error::Result<()> {
         match self {
-            Self::Str(str) => zv.set_string(str.as_str(), persistent)?,
+            Self::String(str) => zv.set_string(str.as_str(), persistent)?,
             Self::Int(i64) => zv.set_long(i64),
             Self::Float(f64) => zv.set_double(f64),
             Self::Bool(bool) => zv.set_bool(bool),
@@ -341,7 +357,7 @@ impl FromZval<'_> for ParameterValue {
             DataType::True => Some(Self::Bool(true)),
             DataType::Long => Some(Self::Int(zval.long()?)),
             DataType::Double => Some(Self::Float(zval.double()?)),
-            DataType::String => Some(Self::Str(zval.string()?)),
+            DataType::String => Some(Self::String(zval.string()?)),
             DataType::Array => {
                 let array = zval.array()?;
                 if array.has_sequential_keys() {
@@ -465,7 +481,7 @@ where
         String: Encode<'a, D>,
     {
         Ok(match value {
-            ParameterValue::Str(s) => q.bind(s),
+            ParameterValue::String(s) => q.bind(s),
             ParameterValue::Int(s) => q.bind(s),
             ParameterValue::Bool(s) => q.bind(s),
             ParameterValue::Float(s) => q.bind(s),

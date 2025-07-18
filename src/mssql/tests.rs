@@ -72,7 +72,7 @@ fn test_render_var_types() {
         "0".into(),
         ParameterValue::Array(vec![ParameterValue::Int(1), ParameterValue::Int(2)]),
     );
-    vals.insert("data".into(), ParameterValue::Str("xyz".into()));
+    vals.insert("data".into(), ParameterValue::String("xyz".into()));
     let (q, params) = ast.render(vals, &SETTINGS).expect("Rendering failed");
     collapsed_eq!(
         &q,
@@ -85,7 +85,7 @@ fn test_render_var_types() {
             ParameterValue::Bool(true),
             ParameterValue::Int(1),
             ParameterValue::Int(2),
-            ParameterValue::Str("xyz".into()),
+            ParameterValue::String("xyz".into()),
         ]
     );
 }

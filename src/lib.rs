@@ -29,7 +29,8 @@ pub mod query_builder;
 pub mod selectclause;
 #[cfg(test)]
 mod tests;
-mod utils;
+
+pub mod utils;
 
 use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]

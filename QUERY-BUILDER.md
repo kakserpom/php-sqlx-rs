@@ -1,6 +1,8 @@
 # SQLx PHP Extension: Query Builder Guide
 
-This guide covers the full functionality of the SQLx query builder provided by the `builder()` method in `Sqlx\PgDriver`, `Sqlx\MySqlDriver`, or `Sqlx\MssqlDriver`. It allows safe, fluent SQL construction in PHP using composable camelCase methods.
+This guide covers the full functionality of the SQLx query builder provided by the `builder()` method in
+`Sqlx\PgDriver`, `Sqlx\MySqlDriver`, or `Sqlx\MssqlDriver`. It allows safe, fluent SQL construction in PHP using
+composable camelCase methods.
 
 ---
 
@@ -145,12 +147,21 @@ Supports:
 * string
 * array of aliases (e.g. `["u" => "users"]`)
 
-### where()
+### where() / having()
 
 ```php
 $builder->where(["status" => "active"]);
+
 $builder->where([
   ["created_at", ">", "2024-01-01"]
+]);
+
+$builder->having([
+  ["COUNT(id)", ">", 10]
+]);
+
+$builder->having([
+  "COUNT(id) > ?" => [10]
 ]);
 ```
 
@@ -160,28 +171,48 @@ Supports:
 * indexed arrays of `[column, operator, value]`
 * nested `OrClause`
 
+Standard operators:
+
+| Operator                           | Description                               |
+|------------------------------------|-------------------------------------------|
+| `=`, `eq`                          | Equal                                     |
+| `!=`, `<>`, `neq`, `ne`            | Not equal                                 |
+| `>`, `gt`                          | Greater than                              |
+| `>=`, `gte`                        | Greater than or equal                     |
+| `<`, `lt`                          | Less than                                 |
+| `<=`, `lte`                        | Less than or equal                        |
+| `LIKE`, `like`                     | SQL `LIKE`, case-sensitive                |
+| `NOT LIKE`, `not like`, `nlike`    | Negated `LIKE`, case-sensitive            |
+| `ILIKE`, `ilike`                   | Case-insensitive `LIKE` (PostgreSQL only) |
+| `NOT ILIKE`, `not ilike`, `nilike` | Negated case-insensitive `LIKE`           |
+| `IN`, `in`                         | Membership test                           |
+| `NOT IN`, `not in`                 | Negated membership test                   |
+| `IS NULL`, `is null`               | Tests for NULL                            |
+| `IS NOT NULL`, `is not null`       | Tests for NOT NULL                        |
+
+---
+
+Additional `LIKE`/`ILIKE` derivatives with auto-escaping of meta-characters (`%` and `_`):
+
+| Operator                          | Description                           |
+|-----------------------------------|---------------------------------------|
+| `IEQ` / `NOT IEQ`                 | `ILIKE value` / `NOT ILIKE value`     |
+| `CONTAINS` / `NOT CONTAINS`       | `LIKE %value%` / `NOT LIKE %value%`   |
+| `ICONTAINS` / `NOT ICONTAINS`     | `ILIKE %value%` / `NOT ILIKE %value%` |
+| `STARTSWITH` / `NOT STARTSWITH`   | `LIKE value%` / `LIKE value%`         |
+| `ISTARTSWITH` / `NOT ISTARTSWITH` | `ILIKE value%` /  `NOT ILIKE value%`  |
+| `ENDSWITH` / `NOT ENDSWITH`       | `LIKE %value` / `NOT LIKE %value`     |
+| `IENDSWITH` / `NOT IENDSWITH`     | `ILIKE %value` / `NOT ILIKE %value`   |
+
+---
+
+Would you like this inserted under the `where()` section or moved into its own "Operators" section in the guide?
+
 ### groupBy()
 
 ```php
 $builder->groupBy("type");
 $builder->groupBy(["type", "region"]);
-```
-
-### having()
-
-Supports:
-
-* indexed array of `[column, operator, value]`
-* associative array with placeholders
-
-```php
-$builder->having([
-  ["COUNT(id)", ">", 10]
-]);
-
-$builder->having([
-  "COUNT(id) > ?" => [10]
-]);
 ```
 
 ### orderBy()

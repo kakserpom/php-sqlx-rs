@@ -80,28 +80,6 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
     Ok(OrClause { inner })
 }
 
-/// Represents the supported SQL `JOIN` types.
-#[derive(Debug, Clone, Copy, Display)]
-pub enum JoinType {
-    #[strum(to_string = "INNER")]
-    Inner,
-
-    #[strum(to_string = "LEFT")]
-    Left,
-
-    #[strum(to_string = "RIGHT")]
-    Right,
-
-    #[strum(to_string = "NATURAL")]
-    Natural,
-
-    #[strum(to_string = "FULL OUTER")]
-    FullOuter,
-
-    #[strum(to_string = "CROSS")]
-    Cross,
-}
-
 #[macro_export]
 macro_rules! php_sqlx_impl_query_builder {
     ( $struct:ident, $class:literal, $driver_inner: ident ) => {
@@ -111,8 +89,8 @@ macro_rules! php_sqlx_impl_query_builder {
         use $crate::selectclause::SelectClauseRendered;
         use $crate::byclause::ByClauseRendered;
         use $crate::paramvalue::ParameterValue;
-        use $crate::utils::ColumnArgument;
-        use $crate::utils::IndentSql;
+        use $crate::utils::types::ColumnArgument;
+        use $crate::utils::indent_sql::IndentSql;
         use $crate::query_builder::JoinType;
         use anyhow::anyhow;
         use anyhow::bail;
@@ -128,6 +106,8 @@ macro_rules! php_sqlx_impl_query_builder {
         use std::sync::Arc;
         use ext_php_rs::convert::FromZval;
         use ext_php_rs::flags::DataType;
+        use trim_in_place::TrimInPlace;
+        use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
 
 
         /// A prepared SQL query builder.
@@ -260,27 +240,38 @@ macro_rules! php_sqlx_impl_query_builder {
                 right_operand: Option<ParameterValue>,
                 placeholder_prefix: &str,
             ) -> anyhow::Result<()> {
-                let op = match operator.to_ascii_lowercase().trim() {
-                    "=" | "eq" => "=",
-                    "!=" | "<>" | "neq" | "ne" => "!=",
-                    ">" | "gt" => ">",
-                    ">=" | "gte" => ">=",
-                    "<" | "lt" => "<",
-                    "<=" | "lte" => "<=",
-                    "like" => "LIKE",
-                    "not like" | "nlike" => "NOT LIKE",
-                    "ilike" => "ILIKE",
-                    "not ilike" | "nilike" => "NOT ILIKE",
-                    "in" => "IN",
-                    "not in" => "NOT IN",
-                    "is null" => "IS NULL",
-                    "is not null" => "IS NOT NULL",
-                    _ => bail!("Operator {operator:?} is not supported"),
-                };
+                let mut op = operator.to_ascii_uppercase();
+                op.trim_in_place();
 
-                match op {
-                    "IS NULL" | "IS NOT NULL" => {
-                        if right_operand.is_some() {
+                if op.eq("NLIKE") {
+                    op = String::from("NOT LIKE")
+                }
+                if op.eq("NILIKE") {
+                    op = String::from("NOT ILIKE")
+                }
+
+                let not = if let Some(stripped) = op.strip_prefix_word_ignore_ascii_case(&["NOT"; 1]) {
+                    op = stripped.trim_start().to_owned();
+                    true
+                } else {
+                    false
+                };
+                if let Some(to) = match op.as_str() {
+                    "=" | "EQ" => Some("="),
+                    "!=" | "<>" | "NEQ" | "NE" => Some("!="),
+                    ">" | "GT" => Some(">"),
+                    ">=" | "GTE" => Some(">="),
+                    "<" | "LT" => Some("<"),
+                    "<=" | "LTE" => Some("<="),
+                    _ => None
+                } {
+                   op = to.to_owned();
+                }
+                if matches!(op.as_str(), "IS NULL" | "IS NOT NULL") {
+                    if not {
+                        bail!("Invalid operator");
+                    }
+                    if right_operand.is_some() {
                             bail!("Operator {op} must not be given a right-hand operand");
                         }
                         self._append(
@@ -288,25 +279,83 @@ macro_rules! php_sqlx_impl_query_builder {
                             None::<[(&str, ParameterValue); 0]>,
                             placeholder_prefix
                         )?;
-                    }
-                    "IN" | "NOT IN" => {
-                        let value = right_operand.ok_or_else(|| anyhow!("Operator {op} requires a right-hand operand"))?;
-                        self._append(
-                            &format!("{left_operand} {op} (?)"),
-                            Some([("0", value)]),
-                            placeholder_prefix
-                        )?;
-                    }
-                    _ => {
-                        let value = right_operand.ok_or_else(|| anyhow!("Operator {op} requires a right-hand operand"))?;
-                        self._append(
-                            &format!("{left_operand} {op} ?"),
-                            Some([("0", value)]),
-                            placeholder_prefix
-                        )?;
+                }
+                else {
+                    let value = right_operand.ok_or_else(|| anyhow!("Operator {op} requires a right-hand operand"))?;
+                    match op.as_str() {
+                        "=" | "!=" | ">" | ">=" | "<" | "<=" if !not => {
+                            self._append(
+                                &format!("{left_operand} {}{op} ?", if not {"NOT "} else {""}),
+                                Some([("0", value)]),
+                                placeholder_prefix
+                            )?;
+                        }
+                       "LIKE" | "ILIKE" => {
+                           self._append(
+                                &format!("{left_operand} {}{op} ?", if not {"NOT "} else {""}),
+                                Some([("0", value)]),
+                                placeholder_prefix
+                           )?;
+                        }
+                        "IN" => {
+                            self._append(
+                                &format!("{left_operand} {}{op} (?)", if not {"NOT "} else {""}),
+                                Some([("0", value)]),
+                                placeholder_prefix
+                            )?;
+                        }
+                        "IEQ" => {
+                            self._append(
+                                &format!("{left_operand} {}ILIKE ?", if not {"NOT "} else {""}),
+                                Some([("0", ParameterValue::String(format!("{}", value.meta_quote_like()?)))]),
+                                placeholder_prefix
+                            )?;
+                        }
+                       "CONTAINS" => {
+                            self._append(
+                                &format!("{left_operand} {}LIKE ?", if not {"NOT "} else {""}),
+                                Some([("0", ParameterValue::String(format!("%{}%", value.meta_quote_like()?)))]),
+                                placeholder_prefix
+                            )?;
+                        }
+                        "ICONTAINS" => {
+                            self._append(
+                                &format!("{left_operand} {}ILIKE ?", if not {"NOT "} else {""}),
+                                Some([("0", ParameterValue::String(format!("%{}%", value.meta_quote_like()?)))]),
+                                placeholder_prefix
+                            )?;
+                        }
+                        "STARTSWITH" => {
+                            self._append(
+                                &format!("{left_operand} {}LIKE ?", if not {"NOT "} else {""}),
+                                Some([("0", ParameterValue::String(format!("{}%", value.meta_quote_like()?)))]),
+                                placeholder_prefix
+                            )?;
+                        }
+                        "ISTARTSWITH" => {
+                            self._append(
+                                &format!("{left_operand} {}ILIKE ?", if not {"NOT "} else {""}),
+                                Some([("0", ParameterValue::String(format!("{}%", value.meta_quote_like()?)))]),
+                                placeholder_prefix
+                            )?;
+                        }
+                        "ENDSWITH" => {
+                            self._append(
+                                &format!("{left_operand} {}LIKE ?", if not {"NOT "} else {""}),
+                                Some([("0", ParameterValue::String(format!("%{}", value.meta_quote_like()?)))]),
+                                placeholder_prefix
+                            )?;
+                        }
+                        "IENDSWITH" => {
+                            self._append(
+                                &format!("{left_operand} ILIKE ?"),
+                                Some([("0", ParameterValue::String(format!("%{}", value.meta_quote_like()?)))]),
+                                placeholder_prefix
+                            )?;
+                        }
+                        _ => bail!("Operator {operator:?} is not supported"),
                     }
                 }
-
                 Ok(())
             }
 
@@ -560,6 +609,59 @@ macro_rules! php_sqlx_impl_query_builder {
                 $struct::new(self.driver_inner.clone())
             }
 
+            /// Quotes a single scalar value for safe embedding into SQL.
+            ///
+            /// This method renders the given `ParameterValue` into a properly escaped SQL literal,
+            /// using the driver's configuration (e.g., quoting style, encoding).
+            ///
+            /// ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+            /// This method should only be used for debugging or generating static fragments,
+            /// not for constructing dynamic SQL with user input.
+            ///
+            /// # Arguments
+            /// * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+            ///
+            /// # Returns
+            /// Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+            ///
+            /// # Errors
+            /// Returns an error if the parameter is not a scalar or if rendering fails.
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+            /// ```
+            pub fn quote(&self, param: ParameterValue) -> anyhow::Result<String> {
+                param.quote(&self.driver_inner.settings)
+            }
+
+            /// Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+            ///
+            /// This helper is designed for safely preparing user input for use with
+            /// pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+            ///
+            /// ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+            /// It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+            /// not interpolate it directly into the query string.
+            ///
+            /// # Arguments
+            /// * `param` – The parameter to escape (must be a string).
+            ///
+            /// # Returns
+            /// A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+            ///
+            /// # Errors
+            /// Returns an error if the input is not a string.
+            ///
+            /// # Example
+            /// ```php
+            /// $escaped = $builder->metaQuoteLike("100%_safe");
+            /// // Use like:
+            /// $builder->where([["name", "LIKE", "%$escaped%"]]);
+            /// ```
+            pub fn meta_quote_like(&self, param: ParameterValue) -> anyhow::Result<String> {
+                param.meta_quote_like()
+            }
 
             /// Appends an `ON CONFLICT` clause to the query.
             ///
@@ -2382,4 +2484,26 @@ macro_rules! php_sqlx_impl_query_builder {
             }
         }
     };
+}
+
+/// Represents the supported SQL `JOIN` types.
+#[derive(Debug, Clone, Copy, Display)]
+pub enum JoinType {
+    #[strum(to_string = "INNER")]
+    Inner,
+
+    #[strum(to_string = "LEFT")]
+    Left,
+
+    #[strum(to_string = "RIGHT")]
+    Right,
+
+    #[strum(to_string = "NATURAL")]
+    Natural,
+
+    #[strum(to_string = "FULL OUTER")]
+    FullOuter,
+
+    #[strum(to_string = "CROSS")]
+    Cross,
 }

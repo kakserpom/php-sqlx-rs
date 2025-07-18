@@ -1,5 +1,5 @@
 use crate::paramvalue::{ParamVecWriteSqlTo, ParameterValue, ParamsMap, Placeholder};
-use crate::utils::StripPrefixWordIgnoreAsciiCase;
+use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use std::collections::BTreeSet;
 use std::fmt::Debug;

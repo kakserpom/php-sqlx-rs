@@ -1,5 +1,5 @@
 use crate::ast::Settings;
-use crate::utils::is_valid_ident;
+use crate::utils::ident::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl, prelude::ModuleBuilder};
 use std::collections::HashMap;
