@@ -33,21 +33,17 @@ macro_rules! php_sqlx_impl_driver_inner {
 
         impl $struct {
             pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
-                let pool = RUNTIME.block_on(
-                    PoolOptions::<$database>::new()
+                let mut pool_options = PoolOptions::<$database>::new()
                         .max_connections(options.max_connections.into())
                         .min_connections(options.min_connections)
                         .max_lifetime(options.max_lifetime)
                         .idle_timeout(options.idle_timeout)
-                        .test_before_acquire(options.test_before_acquire)
-                        .connect(
-                            options
-                                .url
-                                .clone()
-                                .ok_or_else(|| anyhow!("URL must be set"))?
-                                .as_str(),
-                        ),
-                )?;
+                        .test_before_acquire(options.test_before_acquire);
+                if let Some(acquire_timeout) = options.acquire_timeout {
+                    pool_options = pool_options.acquire_timeout(acquire_timeout);
+                }
+                let url = options.url.clone().ok_or_else(|| anyhow!("URL must be set"))?;
+                let pool = RUNTIME.block_on(pool_options.connect(url.as_str()))?;
                 let mut settings = SETTINGS.clone();
                 settings.collapsible_in_enabled = options.collapsible_in_enabled;
                 Ok(Self {

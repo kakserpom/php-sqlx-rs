@@ -405,8 +405,29 @@ $driver = Sqlx\DriverFactory::make([
     Sqlx\DriverOptions::OPT_MIN_CONNECTIONS => 0,
     //Sqlx\DriverOptions::OPT_MAX_LIFETIME => "30 min",
     Sqlx\DriverOptions::OPT_IDLE_TIMEOUT => 120,
+    Sqlx\DriverOptions::OPT_ACQUIRE_TIMEOUT => 10,
 ]);
 ```
+
+<details>
+<summary>DriverOptions reference</summary>
+
+| Option                      | Type                    | Description                                                                         | Default      |
+|-----------------------------|-------------------------|-------------------------------------------------------------------------------------|--------------|
+| `OPT_URL`                   | `string`                | **Required.** Database connection URL. Example: `postgres://user:pass@localhost/db` | *(required)* |
+| `OPT_ASSOC_ARRAYS`          | `bool`                  | If true, rows are returned as associative arrays instead of objects                 | `false`      |
+| `OPT_PERSISTENT_NAME`       | `string \| null`        | Enables persistent connection pool reuse under a given name                         | `null`       |
+| `OPT_MAX_CONNECTIONS`       | `int > 0`               | Maximum number of connections in the pool                                           | `10`         |
+| `OPT_MIN_CONNECTIONS`       | `int ≥ 0`               | Minimum number of connections to keep alive                                         | `0`          |
+| `OPT_MAX_LIFETIME`          | `string \| int \| null` | Max lifetime of a pooled connection. Accepts `"30s"`, `"5 min"`, or seconds         | `null`       |
+| `OPT_IDLE_TIMEOUT`          | `string \| int \| null` | Idle timeout before closing pooled connections. Same format as above                | `null`       |
+| `OPT_ACQUIRE_TIMEOUT`       | `string \| int \| null` | Timeout to wait for a connection from the pool                                      | `null`       |
+| `OPT_TEST_BEFORE_ACQUIRE`   | `bool`                  | Whether to test connections before acquisition                                      | `false`      |
+| `OPT_COLLAPSIBLE_IN`        | `bool`                  | Enables automatic collapsing of `IN ()` / `NOT IN ()` into `FALSE` / `TRUE`         | `true`       |
+| `OPT_AST_CACHE_SHARD_COUNT` | `int > 0`               | Number of internal SQL AST cache shards (advanced tuning)                           | `8`          |
+| `OPT_AST_CACHE_SHARD_SIZE`  | `int > 0`               | Max number of entries per AST cache shard                                           | `256`        |
+
+</details>
 
 #### Basics
 

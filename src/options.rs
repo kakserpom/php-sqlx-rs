@@ -19,6 +19,7 @@ pub struct DriverInnerOptions {
     pub(crate) max_connections: NonZeroU32,
     pub(crate) min_connections: u32,
     pub(crate) max_lifetime: Option<Duration>,
+    pub(crate) acquire_timeout: Option<Duration>,
     pub(crate) idle_timeout: Option<Duration>,
     pub(crate) test_before_acquire: bool,
     pub(crate) collapsible_in_enabled: bool,
@@ -34,6 +35,7 @@ impl Default for DriverInnerOptions {
             max_connections: DEFAULT_MAX_CONNECTIONS,
             min_connections: DEFAULT_MIN_CONNECTIONS,
             max_lifetime: None,
+            acquire_timeout: None,
             idle_timeout: None,
             test_before_acquire: DEFAULT_TEST_BEFORE_ACQUIRE,
             collapsible_in_enabled: DEFAULT_COLLAPSIBLE_IN,
@@ -42,29 +44,58 @@ impl Default for DriverInnerOptions {
 }
 
 #[php_class]
+/// Represents the available options for SQLx drivers (`PgDriver`, `MySqlDriver`, `MssqlDriver`).
+///
+/// These constants are used as keys when constructing an options array passed to `DriverFactory::make(...)`.
 #[php(name = "Sqlx\\DriverOptions")]
 pub struct DriverOptions {}
 #[php_impl]
 impl DriverOptions {
+    /// Required database URL, such as `postgres://user:pass@localhost/db`.
     pub const OPT_URL: &'static str = "url";
+
+    /// Number of AST cache shards (advanced).
     pub const OPT_AST_CACHE_SHARD_COUNT: &'static str = "ast_cache_shard_count";
+
+    /// Max entries per AST cache shard (advanced).
     pub const OPT_AST_CACHE_SHARD_SIZE: &'static str = "ast_cache_shard_size";
+
+    /// Pool name to enable persistent connection reuse.
     pub const OPT_PERSISTENT_NAME: &'static str = "persistent_name";
+
+    /// Return rows as associative arrays instead of objects (default: false).
     pub const OPT_ASSOC_ARRAYS: &'static str = "assoc_arrays";
+
+    /// Maximum number of connections in the pool (default: 10).
     pub const OPT_MAX_CONNECTIONS: &'static str = "max_connections";
+
+    /// Minimum number of connections in the pool (default: 0).
     pub const OPT_MIN_CONNECTIONS: &'static str = "min_connections";
+
+    /// Enable automatic collapsing of `IN ()` clauses to `FALSE`/`TRUE`.
     pub const OPT_COLLAPSIBLE_IN: &'static str = "collapsible_in";
+
+    /// Maximum lifetime of a pooled connection. Accepts string (`"30s"`, `"5 min"`) or integer (seconds).
     pub const OPT_MAX_LIFETIME: &'static str = "max_lifetime";
+
+    /// Idle timeout for pooled connections. Accepts string or integer (seconds).
     pub const OPT_IDLE_TIMEOUT: &'static str = "idle_timeout";
+
+    /// Timeout when acquiring a connection from the pool. Accepts string or integer (seconds).
+    pub const OPT_ACQUIRE_TIMEOUT: &'static str = "_timeout";
+
+    /// Whether to validate connections before acquiring them from the pool.
     pub const OPT_TEST_BEFORE_ACQUIRE: &'static str = "test_before_acquire";
 }
 
+/// Represents either a simple URL string or a full associative array of driver options.
 #[derive(ZvalConvert)]
 pub enum DriverOptionsArg {
     Url(String),
     Options(HashMap<String, ParameterValue>),
 }
 impl DriverOptionsArg {
+    /// Converts the argument into a validated `DriverInnerOptions` instance.
     pub fn parse(self) -> anyhow::Result<DriverInnerOptions> {
         Ok(match self {
             Self::Url(url) => DriverInnerOptions {
@@ -123,7 +154,7 @@ impl DriverOptionsArg {
                     },
                 )?,
                 persistent_name: match kv.get(DriverOptions::OPT_PERSISTENT_NAME) {
-                    None => None,
+                    None | Some(ParameterValue::Null) => None,
                     Some(value) => {
                         if let ParameterValue::String(str) = value {
                             Some(str.clone())
@@ -162,7 +193,7 @@ impl DriverOptionsArg {
                     },
                 )?,
                 max_lifetime: match kv.get(DriverOptions::OPT_MAX_LIFETIME) {
-                    None => None,
+                    None | Some(ParameterValue::Null) => None,
                     Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)?),
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
@@ -173,7 +204,7 @@ impl DriverOptionsArg {
                     ),
                 },
                 idle_timeout: match kv.get(DriverOptions::OPT_IDLE_TIMEOUT) {
-                    None => None,
+                    None | Some(ParameterValue::Null) => None,
                     Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)?),
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
@@ -181,6 +212,17 @@ impl DriverOptionsArg {
                     _ => bail!(
                         "{} must be a string or a non-negative integer",
                         DriverOptions::OPT_IDLE_TIMEOUT
+                    ),
+                },
+                acquire_timeout: match kv.get(DriverOptions::OPT_ACQUIRE_TIMEOUT) {
+                    None | Some(ParameterValue::Null) => None,
+                    Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)?),
+                    Some(ParameterValue::Int(value)) => {
+                        Some(Duration::from_secs(u64::try_from(*value)?))
+                    }
+                    _ => bail!(
+                        "{} must be a string or a non-negative integer",
+                        DriverOptions::OPT_ACQUIRE_TIMEOUT
                     ),
                 },
                 test_before_acquire: kv.get(DriverOptions::OPT_TEST_BEFORE_ACQUIRE).map_or(
