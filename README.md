@@ -288,7 +288,7 @@ var_dump($driver->queryRow(
 // Output: string(3) "bar"
 ```
 
-## Query Builder overview
+## [Query Builder](QUERY-BUILDER.md) overview
 
 You can fluently build SQL queries using `$driver->builder()`:
 
