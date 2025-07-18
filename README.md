@@ -1,4 +1,4 @@
-# php-sqlx-rs
+# SQLx PHP Extension
 
 A PHP extension powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
 database access with additional SQL syntax. It's built using
@@ -285,6 +285,82 @@ var_dump($driver->queryRow(
 )->col->foo[0]);
 // Output: string(3) "bar"
 ```
+
+## Query Builder overview
+
+You can fluently build SQL queries using `$driver->builder()`:
+
+```php
+$query = $driver->builder()
+    ->select("*")
+    ->from("users")
+    ->where(["active" => true])
+    ->orderBy("created_at DESC")
+    ->limit(10);
+```
+
+The builder supports most SQL clauses:
+
+* `select()`, `from()`, `where()`, `groupBy()`, `orderBy()`, `having()`
+* `insert()`, `values()`, `valuesMany()`, `returning()`
+* `update()`, `set()`
+* `deleteFrom()`, `using()`
+* `with()`, `withRecursive()`
+* `join()`, `leftJoin()`, `rightJoin()`, `fullJoin()`, `naturalJoin()`, `crossJoin()`
+* `onConflict()`, `onDuplicateKeyUpdate()`
+* `limit()`, `offset()`, `paginate()`
+* `union()`, `unionAll()`
+* `forUpdate()`, `forShare()`
+* `truncateTable()`, `raw()`, `end()`
+
+Each method returns the builder itself, allowing fluent chaining.
+
+---
+
+### Insert: Multi-row Example
+
+Use `valuesMany()` to insert multiple rows in one statement:
+
+```php
+$driver->builder()->insert("users")->valuesMany([
+    ["Alice", "alice@example.com"],
+    ["Bob", "bob@example.com"]
+]);
+
+// or with named keys:
+$driver->builder()->insert("users")->valuesMany([
+    ["name" => "Alice", "email" => "alice@example.com"],
+    ["name" => "Bob",   "email" => "bob@example.com"]
+]);
+```
+
+---
+
+### Executing the Query
+
+After building the query, you can run it just like with prepared statements:
+
+```php
+$query->execute();
+// OR
+$row = $query->queryRow();
+// OR
+$rows = $query->queryAll();
+```
+
+You can also preview the rendered SQL and parameters without executing:
+
+```php
+var_dump((string) $query); // SQL with placeholders rendered
+```
+
+<br />
+
+### ❗️[Query Builder guide](QUERY-BUILDER.md)❗
+
+<br />
+
+---
 
 ## Installation
 

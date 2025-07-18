@@ -3,6 +3,7 @@ use crate::byclause::{ByClause, ByClauseColumnDefinition};
 use crate::mssql::inner::SETTINGS;
 use crate::paginateclause::PaginateClause;
 use crate::paramvalue::{ParameterValue, ParamsMap};
+use collapse::*;
 
 fn into_ast(sql: &str) -> Ast {
     Ast::parse(sql, &SETTINGS).expect("failed to parse SQL statement")
@@ -40,7 +41,10 @@ fn test_render_basic() {
     vals.insert("status".into(), "active".into());
     vals.insert("id".into(), "42".into());
     let (query, params) = ast.render(vals, &SETTINGS).expect("Rendering failed");
-    assert_eq!(query, "SELECT * FROM users WHERE status = @p1 AND id = @p2");
+    collapsed_eq!(
+        &query,
+        "SELECT * FROM users WHERE status = @p1 AND id = @p2"
+    );
     assert_eq!(params, vec!["active".into(), "42".into()]);
 }
 
@@ -51,7 +55,7 @@ fn test_render_optional_skip() {
     let (query, params) = ast
         .render([("id", 100)], &SETTINGS)
         .expect("Rendering failed");
-    assert_eq!(query, "SELECT * FROM users WHERE id = @p1");
+    collapsed_eq!(&query, "SELECT * FROM users WHERE id = @p1");
     assert_eq!(params, vec![100.into()]);
 }
 
@@ -70,8 +74,8 @@ fn test_render_var_types() {
     );
     vals.insert("data".into(), ParameterValue::Str("xyz".into()));
     let (q, params) = ast.render(vals, &SETTINGS).expect("Rendering failed");
-    assert_eq!(
-        q,
+    collapsed_eq!(
+        &q,
         "SELECT * FROM table WHERE id = @p1 AND active = @p2 AND scores IN (@p3, @p4) AND data = @p5"
     );
     assert_eq!(
@@ -109,8 +113,8 @@ fn test_render_order_by_apply() {
         )
         .expect("Rendering failed");
 
-    assert_eq!(
-        query,
+    collapsed_eq!(
+        &query,
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id ORDER BY users.name, COUNT(posts.id) DESC"
     );
     assert_eq!(params, vec![]);
@@ -137,8 +141,8 @@ fn test_render_order_by_apply_empty() {
         )
         .expect("Rendering failed");
 
-    assert_eq!(
-        query,
+    collapsed_eq!(
+        &query,
         "SELECT * FROM users LEFT JOIN posts ON posts.user_id = users.id"
     );
     assert_eq!(params, vec![]);
@@ -231,8 +235,8 @@ fn test_pagination() {
     );
     let (sql, values) = ast.render(vals, &SETTINGS).unwrap();
     println!("sql = {sql:#?}");
-    assert_eq!(
-        sql,
+    collapsed_eq!(
+        &sql,
         "SELECT * FROM users age ORDER BY id LIMIT @p1 OFFSET @p2"
     );
     assert_eq!(

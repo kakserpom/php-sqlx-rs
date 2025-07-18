@@ -184,7 +184,7 @@ namespace Sqlx {
          *
          * # Parameters and behavior are identical to `render`.
          */
-        public function apply(?int $page_number, ?int $per_page): \Sqlx\PaginateClauseRendered {}
+        public function input(?int $page_number, ?int $per_page): \Sqlx\PaginateClauseRendered {}
 
         /**
          * PHP constructor for `Sqlx\PaginateClause`.
@@ -1289,6 +1289,34 @@ namespace Sqlx {
         public function builder(): \Sqlx\MySqlQueryBuilder {}
 
         /**
+         * Appends an `ON CONFLICT` clause to the query.
+         *
+         * # Arguments
+         * * `target` – A string or array of column names to specify the conflict target.
+         * * `set` – Optional `SET` clause. If `null`, generates `DO NOTHING`; otherwise uses the `SET` values.
+         *
+         * # Example
+         * ```php
+         * $builder->onConflict("id", null);
+         * $builder->onConflict(["email", "tenant_id"], ["name" => "New"]);
+         * ```
+         */
+        public function onConflict(mixed $target, ?mixed $set): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         *
+         * # Arguments
+         * * `set` – An array representing fields and values to update.
+         *
+         * # Example
+         * ```php
+         * $builder->onDuplicateKeyUpdate(["email" => "new@example.com"]);
+         * ```
+         */
+        public function onDuplicateKeyUpdate(mixed $set): \Sqlx\MySqlQueryBuilder {}
+
+        /**
          * Appends an `INNER JOIN` clause to the query.
          */
         public function innerJoin(string $table, string $on, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
@@ -1355,6 +1383,122 @@ namespace Sqlx {
          * Throws an exception if the input is not valid.
          */
         public function where(mixed $r#where, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union("SELECT id FROM users");
+         * $builder->union($other_builder);
+         * ```
+         */
+        public function union(mixed $query, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION ALL` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union_all("SELECT id FROM users");
+         * $builder->union_all($other_builder);
+         * ```
+         */
+        public function unionAll(mixed $query, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `HAVING` clause to the query.
+         *
+         * # Arguments
+         * * `having` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function having(mixed $having, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `LIMIT` (and optional `OFFSET`) clause to the query.
+         *
+         * # Arguments
+         * * `limit` – Maximum number of rows to return.
+         * * `offset` – Optional number of rows to skip before starting to return rows.
+         *
+         * # Example
+         * ```php
+         * $builder->limit(10);
+         * $builder->limit(10, 20); // LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function limit(int $limit, ?int $offset): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `OFFSET` clause to the query independently.
+         *
+         * # Arguments
+         * * `offset` – Number of rows to skip before returning results.
+         *
+         * # Example
+         * ```php
+         * $builder->offset(30); // OFFSET 30
+         * ```
+         */
+        public function offset(int $offset): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `DELETE FROM` clause to the query.
+         *
+         * # Arguments
+         * * `from` - A string table name or a nested builder object.
+         * * `parameters` - Optional parameters if the `from` is a raw string.
+         *
+         * # Examples
+         * ```php
+         * $builder->deleteFrom("users");
+         * $builder->deleteFrom($builder->select("id")->from("temp_users"));
+         * ```
+         */
+        public function deleteFrom(mixed $from, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `USING` clause to the query.
+         *
+         * # Arguments
+         * * `from` - Either a string table name or a subquery builder.
+         * * `parameters` - Optional parameters if `from` is a string.
+         */
+        public function using(mixed $from, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `PAGINATE` clause to the query using a `PaginateClauseRendered` object.
+         *
+         * This expands into the appropriate SQL `LIMIT` and `OFFSET` syntax during rendering,
+         * using the values stored in the given `PaginateClauseRendered` instance.
+         *
+         * # Arguments
+         * * `paginate` – An instance of `Sqlx\PaginateClauseRendered`, produced by invoking a `PaginateClause`
+         *               (e.g., `$paginate = (new PaginateClause)($page, $perPage)`).
+         *
+         * # Errors
+         * Returns an error if the argument is not an instance of `PaginateClauseRendered`.
+         *
+         * # Example
+         * ```php
+         * $paginate = (new \Sqlx\PaginateClause())->__invoke(2, 10); // page 2, 10 per page
+         * $builder->select("*")->from("users")->paginate($paginate);
+         * // SELECT * FROM users LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function paginate(mixed $paginate): \Sqlx\MySqlQueryBuilder {}
 
         /**
          * Appends a `WITH RECURSIVE` clause to the query.
@@ -1484,15 +1628,167 @@ namespace Sqlx {
         public function groupBy(mixed $fields): \Sqlx\MySqlQueryBuilder {}
 
         /**
-         * Appends a `FROM` clause to the query.
+         * Appends a `FOR UPDATE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to lock the selected rows
+         * for update, preventing other transactions from modifying or acquiring
+         * locks on them until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->for_update();
+         * // SELECT * FROM users FOR UPDATE
+         * ```
+         *
+         * # Notes
+         * - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+         * - Useful for implementing pessimistic locking in concurrent systems.
+         *
+         * # Returns
+         * The query builder with `FOR UPDATE` appended.
+         */
+        public function forUpdate(): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `FOR SHARE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to acquire shared locks
+         * on the selected rows, allowing concurrent transactions to read but
+         * not modify the rows until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("documents")->for_share();
+         * // SELECT * FROM documents FOR SHARE
+         * ```
+         *
+         * # Notes
+         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Ensures rows cannot be updated or deleted by other transactions while locked.
+         *
+         * # Returns
+         * The query builder with `FOR SHARE` appended.
+         */
+        public function forShare(): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends an `INSERT INTO` clause to the query.
          *
          * # Arguments
-         * * `from` - A raw string representing the source table(s).
+         * * `table` - The name of the target table.
          *
-         * # Exceptions
-         * Throws an exception if the argument is not a string.
+         * # Example
+         * ```php
+         * $builder->insert("users");
+         * ```
          */
-        public function from(mixed $from): \Sqlx\MySqlQueryBuilder {}
+        public function insert(string $table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `VALUES` clause to the query.
+         *
+         * # Arguments
+         * * `values` - Can be:
+         *     - An associative array: `["name" => "John", "email" => "j@example.com"]`
+         *     - A list of `[column, value]` pairs: `[["name", "John"], ["email", "j@example.com"]]`
+         *     - A raw SQL string or a subquery builder
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values(["name" => "John", "email" => "j@example.com"]);
+         * ```
+         */
+        public function values(mixed $values): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `TRUNCATE TABLE` statement to the query.
+         *
+         * This command removes all rows from the specified table quickly and efficiently.
+         * It is faster than `DELETE FROM` and usually does not fire triggers or return affected row counts.
+         *
+         * # Arguments
+         * * `table` – The name of the table to truncate.
+         *
+         * # Example
+         * ```php
+         * $builder->truncate_table("users");
+         * // TRUNCATE TABLE users
+         * ```
+         *
+         * # Notes
+         * - May require elevated privileges depending on the database.
+         * - This method can be chained with other query builder methods.
+         *
+         * # Errors
+         * Returns an error if appending the SQL fragment fails (e.g., formatting error).
+         */
+        public function truncateTable(string $table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Finalizes the query by appending a semicolon (`;`).
+         *
+         * This method is optional. Most databases do not require semicolons in prepared queries,
+         * but you may use it to explicitly terminate a query string.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->end();
+         * // SELECT * FROM users;
+         * ```
+         *
+         * # Returns
+         * The builder instance after appending the semicolon.
+         *
+         * # Notes
+         * - Only appends the semicolon character; does not perform any execution.
+         * - Useful when exporting a full query string with a terminating symbol (e.g., for SQL scripts).
+         */
+        public function end(string $_table): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends multiple rows to the `VALUES` clause of an `INSERT` statement.
+         *
+         * Each row must be:
+         * - an ordered list of values (indexed array),
+         * - or a map of column names to values (associative array) — only for the first row, to infer column order.
+         *
+         * # Arguments
+         * * `rows` – A sequential array of rows (arrays of values).
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values_many([
+         *     ["Alice", "alice@example.com"],
+         *     ["Bob", "bob@example.com"]
+         * ]);
+         *
+         * $builder->insert("users")->values_many([
+         *     ["name" => "Alice", "email" => "alice@example.com"],
+         *     ["name" => "Bob",   "email" => "bob@example.com"]
+         * ]);
+         * ```
+         */
+        public function valuesMany(mixed $rows): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Appends a `RETURNING` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - A string or array of column names to return.
+         *
+         * # Supported formats
+         * ```php
+         * $builder->returning("id");
+         * $builder->returning(["id", "name"]);
+         * ```
+         *
+         * # Notes
+         * - This is mainly supported in PostgreSQL.
+         * - Use with `INSERT`, `UPDATE`, or `DELETE`.
+         */
+        public function returning(mixed $fields): \Sqlx\MySqlQueryBuilder {}
+
+        public function from(mixed $from, ?array $parameters): \Sqlx\MySqlQueryBuilder {}
 
         /**
          * Executes the prepared query and returns a dictionary mapping the first column to the second column.
@@ -2957,6 +3253,34 @@ namespace Sqlx {
         public function builder(): \Sqlx\PgQueryBuilder {}
 
         /**
+         * Appends an `ON CONFLICT` clause to the query.
+         *
+         * # Arguments
+         * * `target` – A string or array of column names to specify the conflict target.
+         * * `set` – Optional `SET` clause. If `null`, generates `DO NOTHING`; otherwise uses the `SET` values.
+         *
+         * # Example
+         * ```php
+         * $builder->onConflict("id", null);
+         * $builder->onConflict(["email", "tenant_id"], ["name" => "New"]);
+         * ```
+         */
+        public function onConflict(mixed $target, ?mixed $set): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         *
+         * # Arguments
+         * * `set` – An array representing fields and values to update.
+         *
+         * # Example
+         * ```php
+         * $builder->onDuplicateKeyUpdate(["email" => "new@example.com"]);
+         * ```
+         */
+        public function onDuplicateKeyUpdate(mixed $set): \Sqlx\PgQueryBuilder {}
+
+        /**
          * Appends an `INNER JOIN` clause to the query.
          */
         public function innerJoin(string $table, string $on, ?array $parameters): \Sqlx\PgQueryBuilder {}
@@ -3023,6 +3347,122 @@ namespace Sqlx {
          * Throws an exception if the input is not valid.
          */
         public function where(mixed $r#where, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `UNION` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union("SELECT id FROM users");
+         * $builder->union($other_builder);
+         * ```
+         */
+        public function union(mixed $query, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `UNION ALL` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union_all("SELECT id FROM users");
+         * $builder->union_all($other_builder);
+         * ```
+         */
+        public function unionAll(mixed $query, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `HAVING` clause to the query.
+         *
+         * # Arguments
+         * * `having` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function having(mixed $having, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `LIMIT` (and optional `OFFSET`) clause to the query.
+         *
+         * # Arguments
+         * * `limit` – Maximum number of rows to return.
+         * * `offset` – Optional number of rows to skip before starting to return rows.
+         *
+         * # Example
+         * ```php
+         * $builder->limit(10);
+         * $builder->limit(10, 20); // LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function limit(int $limit, ?int $offset): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `OFFSET` clause to the query independently.
+         *
+         * # Arguments
+         * * `offset` – Number of rows to skip before returning results.
+         *
+         * # Example
+         * ```php
+         * $builder->offset(30); // OFFSET 30
+         * ```
+         */
+        public function offset(int $offset): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `DELETE FROM` clause to the query.
+         *
+         * # Arguments
+         * * `from` - A string table name or a nested builder object.
+         * * `parameters` - Optional parameters if the `from` is a raw string.
+         *
+         * # Examples
+         * ```php
+         * $builder->deleteFrom("users");
+         * $builder->deleteFrom($builder->select("id")->from("temp_users"));
+         * ```
+         */
+        public function deleteFrom(mixed $from, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `USING` clause to the query.
+         *
+         * # Arguments
+         * * `from` - Either a string table name or a subquery builder.
+         * * `parameters` - Optional parameters if `from` is a string.
+         */
+        public function using(mixed $from, ?array $parameters): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `PAGINATE` clause to the query using a `PaginateClauseRendered` object.
+         *
+         * This expands into the appropriate SQL `LIMIT` and `OFFSET` syntax during rendering,
+         * using the values stored in the given `PaginateClauseRendered` instance.
+         *
+         * # Arguments
+         * * `paginate` – An instance of `Sqlx\PaginateClauseRendered`, produced by invoking a `PaginateClause`
+         *               (e.g., `$paginate = (new PaginateClause)($page, $perPage)`).
+         *
+         * # Errors
+         * Returns an error if the argument is not an instance of `PaginateClauseRendered`.
+         *
+         * # Example
+         * ```php
+         * $paginate = (new \Sqlx\PaginateClause())->__invoke(2, 10); // page 2, 10 per page
+         * $builder->select("*")->from("users")->paginate($paginate);
+         * // SELECT * FROM users LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function paginate(mixed $paginate): \Sqlx\PgQueryBuilder {}
 
         /**
          * Appends a `WITH RECURSIVE` clause to the query.
@@ -3152,15 +3592,167 @@ namespace Sqlx {
         public function groupBy(mixed $fields): \Sqlx\PgQueryBuilder {}
 
         /**
-         * Appends a `FROM` clause to the query.
+         * Appends a `FOR UPDATE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to lock the selected rows
+         * for update, preventing other transactions from modifying or acquiring
+         * locks on them until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->for_update();
+         * // SELECT * FROM users FOR UPDATE
+         * ```
+         *
+         * # Notes
+         * - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+         * - Useful for implementing pessimistic locking in concurrent systems.
+         *
+         * # Returns
+         * The query builder with `FOR UPDATE` appended.
+         */
+        public function forUpdate(): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `FOR SHARE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to acquire shared locks
+         * on the selected rows, allowing concurrent transactions to read but
+         * not modify the rows until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("documents")->for_share();
+         * // SELECT * FROM documents FOR SHARE
+         * ```
+         *
+         * # Notes
+         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Ensures rows cannot be updated or deleted by other transactions while locked.
+         *
+         * # Returns
+         * The query builder with `FOR SHARE` appended.
+         */
+        public function forShare(): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends an `INSERT INTO` clause to the query.
          *
          * # Arguments
-         * * `from` - A raw string representing the source table(s).
+         * * `table` - The name of the target table.
          *
-         * # Exceptions
-         * Throws an exception if the argument is not a string.
+         * # Example
+         * ```php
+         * $builder->insert("users");
+         * ```
          */
-        public function from(mixed $from): \Sqlx\PgQueryBuilder {}
+        public function insert(string $table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `VALUES` clause to the query.
+         *
+         * # Arguments
+         * * `values` - Can be:
+         *     - An associative array: `["name" => "John", "email" => "j@example.com"]`
+         *     - A list of `[column, value]` pairs: `[["name", "John"], ["email", "j@example.com"]]`
+         *     - A raw SQL string or a subquery builder
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values(["name" => "John", "email" => "j@example.com"]);
+         * ```
+         */
+        public function values(mixed $values): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `TRUNCATE TABLE` statement to the query.
+         *
+         * This command removes all rows from the specified table quickly and efficiently.
+         * It is faster than `DELETE FROM` and usually does not fire triggers or return affected row counts.
+         *
+         * # Arguments
+         * * `table` – The name of the table to truncate.
+         *
+         * # Example
+         * ```php
+         * $builder->truncate_table("users");
+         * // TRUNCATE TABLE users
+         * ```
+         *
+         * # Notes
+         * - May require elevated privileges depending on the database.
+         * - This method can be chained with other query builder methods.
+         *
+         * # Errors
+         * Returns an error if appending the SQL fragment fails (e.g., formatting error).
+         */
+        public function truncateTable(string $table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Finalizes the query by appending a semicolon (`;`).
+         *
+         * This method is optional. Most databases do not require semicolons in prepared queries,
+         * but you may use it to explicitly terminate a query string.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->end();
+         * // SELECT * FROM users;
+         * ```
+         *
+         * # Returns
+         * The builder instance after appending the semicolon.
+         *
+         * # Notes
+         * - Only appends the semicolon character; does not perform any execution.
+         * - Useful when exporting a full query string with a terminating symbol (e.g., for SQL scripts).
+         */
+        public function end(string $_table): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends multiple rows to the `VALUES` clause of an `INSERT` statement.
+         *
+         * Each row must be:
+         * - an ordered list of values (indexed array),
+         * - or a map of column names to values (associative array) — only for the first row, to infer column order.
+         *
+         * # Arguments
+         * * `rows` – A sequential array of rows (arrays of values).
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values_many([
+         *     ["Alice", "alice@example.com"],
+         *     ["Bob", "bob@example.com"]
+         * ]);
+         *
+         * $builder->insert("users")->values_many([
+         *     ["name" => "Alice", "email" => "alice@example.com"],
+         *     ["name" => "Bob",   "email" => "bob@example.com"]
+         * ]);
+         * ```
+         */
+        public function valuesMany(mixed $rows): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Appends a `RETURNING` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - A string or array of column names to return.
+         *
+         * # Supported formats
+         * ```php
+         * $builder->returning("id");
+         * $builder->returning(["id", "name"]);
+         * ```
+         *
+         * # Notes
+         * - This is mainly supported in PostgreSQL.
+         * - Use with `INSERT`, `UPDATE`, or `DELETE`.
+         */
+        public function returning(mixed $fields): \Sqlx\PgQueryBuilder {}
+
+        public function from(mixed $from, ?array $parameters): \Sqlx\PgQueryBuilder {}
 
         /**
          * Executes the prepared query and returns a dictionary mapping the first column to the second column.
@@ -4242,6 +4834,34 @@ namespace Sqlx {
         public function builder(): \Sqlx\MssqlQueryBuilder {}
 
         /**
+         * Appends an `ON CONFLICT` clause to the query.
+         *
+         * # Arguments
+         * * `target` – A string or array of column names to specify the conflict target.
+         * * `set` – Optional `SET` clause. If `null`, generates `DO NOTHING`; otherwise uses the `SET` values.
+         *
+         * # Example
+         * ```php
+         * $builder->onConflict("id", null);
+         * $builder->onConflict(["email", "tenant_id"], ["name" => "New"]);
+         * ```
+         */
+        public function onConflict(mixed $target, ?mixed $set): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         *
+         * # Arguments
+         * * `set` – An array representing fields and values to update.
+         *
+         * # Example
+         * ```php
+         * $builder->onDuplicateKeyUpdate(["email" => "new@example.com"]);
+         * ```
+         */
+        public function onDuplicateKeyUpdate(mixed $set): \Sqlx\MssqlQueryBuilder {}
+
+        /**
          * Appends an `INNER JOIN` clause to the query.
          */
         public function innerJoin(string $table, string $on, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
@@ -4308,6 +4928,122 @@ namespace Sqlx {
          * Throws an exception if the input is not valid.
          */
         public function where(mixed $r#where, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union("SELECT id FROM users");
+         * $builder->union($other_builder);
+         * ```
+         */
+        public function union(mixed $query, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `UNION ALL` clause to the query.
+         *
+         * # Arguments
+         * * `query` – A raw SQL string or another Builder instance (subquery).
+         * * `parameters` – Optional parameters to bind to the unioned subquery.
+         *
+         * # Example
+         * ```php
+         * $builder->union_all("SELECT id FROM users");
+         * $builder->union_all($other_builder);
+         * ```
+         */
+        public function unionAll(mixed $query, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `HAVING` clause to the query.
+         *
+         * # Arguments
+         * * `having` - Either a raw string, a structured array of conditions, or a disjunction (`OrClause`).
+         * * `parameters` - Optional parameters associated with the `WHERE` condition.
+         *
+         * # Exceptions
+         * Throws an exception if the input is not valid.
+         */
+        public function having(mixed $having, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `LIMIT` (and optional `OFFSET`) clause to the query.
+         *
+         * # Arguments
+         * * `limit` – Maximum number of rows to return.
+         * * `offset` – Optional number of rows to skip before starting to return rows.
+         *
+         * # Example
+         * ```php
+         * $builder->limit(10);
+         * $builder->limit(10, 20); // LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function limit(int $limit, ?int $offset): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `OFFSET` clause to the query independently.
+         *
+         * # Arguments
+         * * `offset` – Number of rows to skip before returning results.
+         *
+         * # Example
+         * ```php
+         * $builder->offset(30); // OFFSET 30
+         * ```
+         */
+        public function offset(int $offset): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `DELETE FROM` clause to the query.
+         *
+         * # Arguments
+         * * `from` - A string table name or a nested builder object.
+         * * `parameters` - Optional parameters if the `from` is a raw string.
+         *
+         * # Examples
+         * ```php
+         * $builder->deleteFrom("users");
+         * $builder->deleteFrom($builder->select("id")->from("temp_users"));
+         * ```
+         */
+        public function deleteFrom(mixed $from, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `USING` clause to the query.
+         *
+         * # Arguments
+         * * `from` - Either a string table name or a subquery builder.
+         * * `parameters` - Optional parameters if `from` is a string.
+         */
+        public function using(mixed $from, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `PAGINATE` clause to the query using a `PaginateClauseRendered` object.
+         *
+         * This expands into the appropriate SQL `LIMIT` and `OFFSET` syntax during rendering,
+         * using the values stored in the given `PaginateClauseRendered` instance.
+         *
+         * # Arguments
+         * * `paginate` – An instance of `Sqlx\PaginateClauseRendered`, produced by invoking a `PaginateClause`
+         *               (e.g., `$paginate = (new PaginateClause)($page, $perPage)`).
+         *
+         * # Errors
+         * Returns an error if the argument is not an instance of `PaginateClauseRendered`.
+         *
+         * # Example
+         * ```php
+         * $paginate = (new \Sqlx\PaginateClause())->__invoke(2, 10); // page 2, 10 per page
+         * $builder->select("*")->from("users")->paginate($paginate);
+         * // SELECT * FROM users LIMIT 10 OFFSET 20
+         * ```
+         */
+        public function paginate(mixed $paginate): \Sqlx\MssqlQueryBuilder {}
 
         /**
          * Appends a `WITH RECURSIVE` clause to the query.
@@ -4437,15 +5173,167 @@ namespace Sqlx {
         public function groupBy(mixed $fields): \Sqlx\MssqlQueryBuilder {}
 
         /**
-         * Appends a `FROM` clause to the query.
+         * Appends a `FOR UPDATE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to lock the selected rows
+         * for update, preventing other transactions from modifying or acquiring
+         * locks on them until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->for_update();
+         * // SELECT * FROM users FOR UPDATE
+         * ```
+         *
+         * # Notes
+         * - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+         * - Useful for implementing pessimistic locking in concurrent systems.
+         *
+         * # Returns
+         * The query builder with `FOR UPDATE` appended.
+         */
+        public function forUpdate(): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `FOR SHARE` locking clause to the query.
+         *
+         * This clause is used in `SELECT` statements to acquire shared locks
+         * on the selected rows, allowing concurrent transactions to read but
+         * not modify the rows until the current transaction completes.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("documents")->for_share();
+         * // SELECT * FROM documents FOR SHARE
+         * ```
+         *
+         * # Notes
+         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Ensures rows cannot be updated or deleted by other transactions while locked.
+         *
+         * # Returns
+         * The query builder with `FOR SHARE` appended.
+         */
+        public function forShare(): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends an `INSERT INTO` clause to the query.
          *
          * # Arguments
-         * * `from` - A raw string representing the source table(s).
+         * * `table` - The name of the target table.
          *
-         * # Exceptions
-         * Throws an exception if the argument is not a string.
+         * # Example
+         * ```php
+         * $builder->insert("users");
+         * ```
          */
-        public function from(mixed $from): \Sqlx\MssqlQueryBuilder {}
+        public function insert(string $table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `VALUES` clause to the query.
+         *
+         * # Arguments
+         * * `values` - Can be:
+         *     - An associative array: `["name" => "John", "email" => "j@example.com"]`
+         *     - A list of `[column, value]` pairs: `[["name", "John"], ["email", "j@example.com"]]`
+         *     - A raw SQL string or a subquery builder
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values(["name" => "John", "email" => "j@example.com"]);
+         * ```
+         */
+        public function values(mixed $values): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `TRUNCATE TABLE` statement to the query.
+         *
+         * This command removes all rows from the specified table quickly and efficiently.
+         * It is faster than `DELETE FROM` and usually does not fire triggers or return affected row counts.
+         *
+         * # Arguments
+         * * `table` – The name of the table to truncate.
+         *
+         * # Example
+         * ```php
+         * $builder->truncate_table("users");
+         * // TRUNCATE TABLE users
+         * ```
+         *
+         * # Notes
+         * - May require elevated privileges depending on the database.
+         * - This method can be chained with other query builder methods.
+         *
+         * # Errors
+         * Returns an error if appending the SQL fragment fails (e.g., formatting error).
+         */
+        public function truncateTable(string $table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Finalizes the query by appending a semicolon (`;`).
+         *
+         * This method is optional. Most databases do not require semicolons in prepared queries,
+         * but you may use it to explicitly terminate a query string.
+         *
+         * # Example
+         * ```php
+         * $builder->select("*")->from("users")->end();
+         * // SELECT * FROM users;
+         * ```
+         *
+         * # Returns
+         * The builder instance after appending the semicolon.
+         *
+         * # Notes
+         * - Only appends the semicolon character; does not perform any execution.
+         * - Useful when exporting a full query string with a terminating symbol (e.g., for SQL scripts).
+         */
+        public function end(string $_table): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends multiple rows to the `VALUES` clause of an `INSERT` statement.
+         *
+         * Each row must be:
+         * - an ordered list of values (indexed array),
+         * - or a map of column names to values (associative array) — only for the first row, to infer column order.
+         *
+         * # Arguments
+         * * `rows` – A sequential array of rows (arrays of values).
+         *
+         * # Example
+         * ```php
+         * $builder->insert("users")->values_many([
+         *     ["Alice", "alice@example.com"],
+         *     ["Bob", "bob@example.com"]
+         * ]);
+         *
+         * $builder->insert("users")->values_many([
+         *     ["name" => "Alice", "email" => "alice@example.com"],
+         *     ["name" => "Bob",   "email" => "bob@example.com"]
+         * ]);
+         * ```
+         */
+        public function valuesMany(mixed $rows): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Appends a `RETURNING` clause to the query.
+         *
+         * # Arguments
+         * * `fields` - A string or array of column names to return.
+         *
+         * # Supported formats
+         * ```php
+         * $builder->returning("id");
+         * $builder->returning(["id", "name"]);
+         * ```
+         *
+         * # Notes
+         * - This is mainly supported in PostgreSQL.
+         * - Use with `INSERT`, `UPDATE`, or `DELETE`.
+         */
+        public function returning(mixed $fields): \Sqlx\MssqlQueryBuilder {}
+
+        public function from(mixed $from, ?array $parameters): \Sqlx\MssqlQueryBuilder {}
 
         /**
          * Executes the prepared query and returns a dictionary mapping the first column to the second column.

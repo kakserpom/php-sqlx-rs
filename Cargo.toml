@@ -42,6 +42,7 @@ experimental = []
 mimalloc = ["dep:mimalloc"]
 
 [dev-dependencies]
+collapse = "0.1.2"
 criterion = "0.6.0"
 
 [[bench]]
