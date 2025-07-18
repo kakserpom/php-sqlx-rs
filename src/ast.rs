@@ -1,7 +1,6 @@
 use crate::paramvalue::{ParamVecWriteSqlTo, ParameterValue, ParamsMap, Placeholder};
 use crate::utils::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
-use itertools::Itertools;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::fmt::Write;
@@ -15,7 +14,7 @@ pub enum Ast {
     Nested(Vec<Ast>),
 
     /// A literal fragment of SQL text.
-    Sql(String),
+    Raw(String),
 
     /// A placeholder such as `$id`, `:param`, or `?` (converted to an ordinal).
     Placeholder(String),
@@ -96,9 +95,9 @@ impl Ast {
     pub fn has_placeholders(&self) -> bool {
         match self {
             Ast::Root { branches, .. } => {
-                branches.len() != 1 || !matches!(branches.first(), Some(Ast::Sql(_)))
+                branches.len() != 1 || !matches!(branches.first(), Some(Ast::Raw(_)))
             }
-            Ast::Nested(vec) => vec.len() == 1 && matches!(vec.first(), Some(Ast::Sql(_))),
+            Ast::Nested(vec) => vec.len() == 1 && matches!(vec.first(), Some(Ast::Raw(_))),
             _ => true,
         }
     }
@@ -190,7 +189,7 @@ impl Ast {
                 // Conditional block start
                 if let Some(r) = rest.strip_prefix("{{") {
                     if !buf.is_empty() {
-                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Raw(std::mem::take(&mut buf)));
                     }
                     let mut inner_branches = Vec::new();
                     let mut inner_placeholders = Vec::new();
@@ -211,7 +210,7 @@ impl Ast {
                 // Conditional block end
                 if let Some(r) = rest.strip_prefix("}}") {
                     if !buf.is_empty() {
-                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Raw(std::mem::take(&mut buf)));
                     }
                     return Ok(r);
                 }
@@ -241,7 +240,7 @@ impl Ast {
                         name_opt = Some(positional_counter.to_string());
                     }
                     if let Some(name) = name_opt {
-                        branches.push(Ast::Sql(format!("{buf} ")));
+                        branches.push(Ast::Raw(format!("{buf} ")));
                         buf.clear();
                         placeholders_out.push(name.to_string());
                         branches.push(Ast::PaginateClause { placeholder: name });
@@ -299,7 +298,7 @@ impl Ast {
                             buf.trim_end_in_place();
                             if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
                                 if !left.is_empty() {
-                                    branches.push(Ast::Sql(format!("{left} ")));
+                                    branches.push(Ast::Raw(format!("{left} ")));
                                 }
                                 branches.push(Ast::NotInClause {
                                     expr: expr.to_string(),
@@ -362,7 +361,7 @@ impl Ast {
                             buf.trim_end_in_place();
                             if let Some((left, expr)) = buf.rsplit_once(char::is_whitespace) {
                                 if !left.is_empty() {
-                                    branches.push(Ast::Sql(format!("{left} ")));
+                                    branches.push(Ast::Raw(format!("{left} ")));
                                 }
                                 branches.push(Ast::InClause {
                                     expr: expr.to_string(),
@@ -391,7 +390,7 @@ impl Ast {
                         .map(|i| after.split_at(i + 1))
                     {
                         if !buf.is_empty() {
-                            branches.push(Ast::Sql(std::mem::take(&mut buf)));
+                            branches.push(Ast::Raw(std::mem::take(&mut buf)));
                         }
                         branches.push(Ast::Placeholder(name.to_string()));
                         placeholders_out.push(name.to_string());
@@ -410,7 +409,7 @@ impl Ast {
                         .map(|i| after.split_at(i + 1))
                     {
                         if !buf.is_empty() {
-                            branches.push(Ast::Sql(std::mem::take(&mut buf)));
+                            branches.push(Ast::Raw(std::mem::take(&mut buf)));
                         }
                         branches.push(Ast::Placeholder(name.to_string()));
                         placeholders_out.push(name.to_string());
@@ -422,7 +421,7 @@ impl Ast {
                 // --- ? positional placeholder ---
                 if let Some(r) = rest.strip_prefix("?") {
                     if !buf.is_empty() {
-                        branches.push(Ast::Sql(std::mem::take(&mut buf)));
+                        branches.push(Ast::Raw(std::mem::take(&mut buf)));
                     }
                     *positional_counter += 1;
                     let name = positional_counter.to_string();
@@ -447,7 +446,7 @@ impl Ast {
             }
 
             if !buf.is_empty() {
-                branches.push(Ast::Sql(buf));
+                branches.push(Ast::Raw(buf));
             }
             Ok(rest)
         }
@@ -503,7 +502,7 @@ impl Ast {
                         walk(b, sql, placeholders, param_map, parameters_bucket, index)?;
                     }
                 }
-                Ast::Sql(s) => sql.push_str(s),
+                Ast::Raw(s) => sql.push_str(s),
                 Ast::Placeholder(name) => {
                     let new_name = resolve_placeholder_name(name, placeholders, index);
                     if let Some(value) = param_map.remove(name) {
@@ -631,7 +630,7 @@ impl Ast {
                         walk(n, values, sql, out_vals, settings)?;
                     }
                 }
-                Ast::Sql(s) => sql.push_str(s),
+                Ast::Raw(s) => sql.push_str(s),
                 Ast::Placeholder(name) => {
                     #[cfg(test)]
                     {
@@ -732,8 +731,6 @@ impl Ast {
             }
         }
         walk(self, &values, &mut sql, &mut out_vals, settings)?;
-        let sql = sql.split_whitespace().join(" ");
-
         #[cfg(test)]
         println!("SQL = {sql}");
         Ok((sql, out_vals))

@@ -159,7 +159,7 @@ fn test_parse_in_not_in_and_string() {
     assert!(required_placeholders.is_empty());
     // 0: Sql up to AND before IN
     match &branches[0] {
-        Ast::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
+        Ast::Raw(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
         _ => panic!("Expected Sql at branch 0"),
     }
     // 1: InClause
@@ -172,7 +172,7 @@ fn test_parse_in_not_in_and_string() {
     }
     // 2: Sql between clauses
     match &branches[2] {
-        Ast::Sql(s) => assert_eq!(s, " AND "),
+        Ast::Raw(s) => assert_eq!(s, " AND "),
         _ => panic!("Expected Sql at branch 2"),
     }
     // 3: NotInClause
@@ -209,7 +209,7 @@ fn test_pagination() {
         ast,
         Ast::Root {
             branches: vec![
-                Ast::Sql(String::from("SELECT * FROM users age ORDER BY id  "),),
+                Ast::Raw(String::from("SELECT * FROM users age ORDER BY id  "),),
                 Ast::PaginateClause {
                     placeholder: String::from("pagination"),
                 },

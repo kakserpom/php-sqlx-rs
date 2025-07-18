@@ -36,7 +36,7 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
             {
                 inner.push(OrClauseItem::Nested(or));
             } else {
-                bail!("element must be string or OrClause");
+                bail!("element must be a string or OrClause");
             }
         } else {
             let Some(parameters) = value.array() else {
@@ -73,6 +73,7 @@ macro_rules! php_sqlx_impl_query_builder {
         use $crate::utils::ColumnArgument;
         use ext_php_rs::convert::FromZval;
         use ext_php_rs::flags::DataType;
+        use crate::utils::IndentSql;
 
         /// A prepared SQL query builder.
         ///
@@ -96,7 +97,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
                     .and_then(|x| x.obj.as_ref())
                 {
-                    Some(Self(ParameterValue::Builder((builder.query.clone(), builder.parameters.clone()))))
+                    Some(Self(ParameterValue::Builder((builder.query.indent_sql(true), builder.parameters.clone()))))
                 } else if let Some(pv) = ParameterValue::from_zval(zval) {
                     Some(Self(pv))
                 } else {
@@ -283,7 +284,7 @@ macro_rules! php_sqlx_impl_query_builder {
                                 )?;
                             }
                         }
-                        Ast::Sql(s) => sql.push_str(s),
+                        Ast::Raw(s) => sql.push_str(s),
                         Ast::Placeholder(name) => {
                             let param = param_map.remove(name);
                             if let Some(ParameterValue::Builder((part, mut params))) = param {
@@ -298,7 +299,7 @@ macro_rules! php_sqlx_impl_query_builder {
                                     positional_index,
                                     prefix,
                                 )?;
-                                sql.push(')');
+                                sql.push_str("\n)");
                             } else {
                                 let new_name = resolve_placeholder_name(
                                     name,
@@ -457,22 +458,22 @@ macro_rules! php_sqlx_impl_query_builder {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
-                write!(self_.query, "WITH {table} AS (\n")?;
+                write!(self_.query, "WITH {table} AS (")?;
                 if let Some(part) = r#as.str() {
                      self_._append(
                         part,
                         parameters,
                         "with",
                     )?;
-                } else if let Some(builder) = r#as
+                } else if let Some($struct {query, parameters, ..}) = r#as
                     .object()
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
                     .and_then(|x| x.obj.as_ref())
                 {
-                    self_._append(builder.query.as_str(), Some(builder.parameters.clone()), "with")?;
+                    self_._append(&query.indent_sql(true), Some(parameters.clone()), "with")?;
                 }
                 else {
-
+                    bail!("`as` must be a string or Builder");
                 }
                 self_.query.push_str("\n)");
                 Ok(self_)
@@ -492,18 +493,29 @@ macro_rules! php_sqlx_impl_query_builder {
             fn with_recursive<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table_and_fields: &str,
-                r#as: &str,
+                r#as: &Zval,
                 parameters: Option<HashMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
                 write!(self_.query, "WITH RECURSIVE {table_and_fields} AS (\n")?;
-                self_._append(
-                    r#as,
-                    parameters,
-                    "with",
-                )?;
+                if let Some(part) = r#as.str() {
+                     self_._append(
+                        part,
+                        parameters,
+                        "with_recursive",
+                    )?;
+                } else if let Some($struct {query, parameters, ..}) = r#as
+                    .object()
+                    .and_then(ZendClassObject::<$struct>::from_zend_obj)
+                    .and_then(|x| x.obj.as_ref())
+                {
+                    self_._append(&query.indent_sql(true), Some(parameters.clone()), "with")?;
+                }
+                else {
+                    bail!("`as` must be a string or Builder");
+                }
                 self_.query.push_str("\n)");
                 Ok(self_)
             }
@@ -572,12 +584,12 @@ macro_rules! php_sqlx_impl_query_builder {
                                     let field = array
                                         .get_index(0)
                                         .and_then(Zval::str)
-                                        .ok_or_else(|| anyhow!("first element (field) must be string"))?;
+                                        .ok_or_else(|| anyhow!("first element (field) must be a string"))?;
 
                                     let param = array
                                         .get_index(1)
                                         .and_then(ParameterValue::from_zval)
-                                        .ok_or_else(|| anyhow!("second element (value) must be valid parameter value"))?;
+                                        .ok_or_else(|| anyhow!("second element (value) must be a valid parameter value"))?;
 
                                     self_._append_op(field, "=", Some(param), "set")?;
                                 } else {
@@ -636,6 +648,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// # Exceptions
             /// - If rendering or encoding of parameters fails.
             pub(crate) fn dry_inline(&self) -> anyhow::Result<String> {
+                println!("{:?}", self.query);
                 self.driver_inner.dry_inline(&self.query, Some(self.parameters.clone().into_iter().collect()))
             }
 
@@ -686,19 +699,38 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 fields: &Zval,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
                 if let Some(str) = fields.str() {
-                    if !self_.query.is_empty() {
-                        self_.query.push('\n');
-                    }
                     write!(self_.query, "SELECT {str}")?;
-                } else if let Some(scr) = fields
+                }
+                else if let Some(array) = fields.array() {
+                    write!(self_.query, "SELECT ")?;
+                    for (i, (key, value)) in array.iter().enumerate() {
+                        if i > 0 {
+                            self_.query.push_str(", ");
+                        }
+                        if let ArrayKey::Long(_) = key {
+                            if let Some(field) = value.str() {
+                                self_.query.push_str(field);
+                            } else {
+                                bail!("indexed element must be a string")
+                            }
+                        } else {
+                            let field = key.to_string();
+                            if let Some(expr) = value.str() {
+                                write!(self_.query, "{expr} AS {field}")?;
+                            } else {
+                                bail!("indexed element must be a string")
+                            }
+                        }
+                    }
+                }
+                else if let Some(scr) = fields
                     .object()
                     .and_then(ZendClassObject::<SelectClauseRendered>::from_zend_obj)
                 {
-                    if !self_.query.is_empty() {
-                        self_.query.push('\n');
-                    }
-
                     let mut clause = String::from("SELECT ");
                     scr.write_sql_to(&mut clause, &self_.driver_inner.settings)?;
                     self_.query.push_str(&clause);
@@ -745,12 +777,12 @@ macro_rules! php_sqlx_impl_query_builder {
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if let Some(part) = r#where.str() {
                     self_.query.push_str("\nWHERE ");
-                    self_._append(part, parameters, "where")?;
+                    self_._append(&part.indent_sql(false), parameters, "where")?;
                 } else if let Some(array) = r#where.array() {
                     self_.query.push_str("\nWHERE ");
                     for (i, (key, value)) in array.iter().enumerate() {
                         if i > 0 {
-                            self_.query.push_str(" AND ");
+                            self_.query.push_str("\n   AND ");
                         }
                         match key {
                             ArrayKey::Long(_) => {
@@ -768,9 +800,9 @@ macro_rules! php_sqlx_impl_query_builder {
                                         }
                                         let left_operand = array.get_index(0)
                                             .and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be string"))?;
+                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be a string"))?;
                                         let operator = array.get_index(1).and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be string"))?;
+                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be a string"))?;
                                         self_._append_op(left_operand, operator, if array_len > 2 {
                                             Some(
                                                 array.get_index(2)
@@ -780,6 +812,8 @@ macro_rules! php_sqlx_impl_query_builder {
                                         } else {
                                             None
                                         }, "where")?;
+                                    } else {
+                                        bail!("condition #{i}: array must be a list");
                                     }
                                 }
                                 else if let Some(or) = value
@@ -787,10 +821,9 @@ macro_rules! php_sqlx_impl_query_builder {
                                     .and_then(ZendClassObject::<OrClause>::from_zend_obj)
                                     .and_then(|x| x.obj.as_ref())
                                 {
-                                    //println!("{or:?}");
                                     self_._append_or(or, "where")?;
                                 } else {
-                                    bail!("element must be string or OrClause");
+                                    bail!("element must be a string or OrClause");
                                 }
                             }
                             _ => {
@@ -800,7 +833,7 @@ macro_rules! php_sqlx_impl_query_builder {
                                     let Some(parameters) = value.array() else {
                                         bail!("value must be array because the key string ({part:?}) contains placeholders: {ast:?}");
                                     };
-                                    let parameters: HashMap<String, ParameterValue> =
+                                    let parameters: HashMap<String, ParameterValueWrapper> =
                                         parameters.try_into().map_err(|err| anyhow!("{err}"))?;
                                     self_._append_ast(&ast, Some(parameters), "where")?;
                                 } else {

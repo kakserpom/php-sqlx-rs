@@ -208,7 +208,7 @@ fn test_parse_in_not_in_and_string() {
     //assert_eq!(branches.len(), 5);
     // Check sequence of branches
     match &branches[0] {
-        Ast::Sql(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
+        Ast::Raw(s) => assert!(s.ends_with("name = 'O''Reilly' AND ")),
         _ => panic!("Expected Sql at branch 0"),
     }
     match &branches[1] {
@@ -219,7 +219,7 @@ fn test_parse_in_not_in_and_string() {
         _ => panic!("Expected InClause at branch 1"),
     }
     match &branches[2] {
-        Ast::Sql(s) => assert_eq!(s, " AND "),
+        Ast::Raw(s) => assert_eq!(s, " AND "),
         _ => panic!("Expected Sql at branch 2"),
     }
     match &branches[3] {
@@ -271,7 +271,7 @@ fn test_pagination() {
         ast,
         Ast::Root {
             branches: vec![
-                Ast::Sql(String::from("SELECT * FROM users age ORDER BY id  "),),
+                Ast::Raw(String::from("SELECT * FROM users age ORDER BY id  "),),
                 Ast::PaginateClause {
                     placeholder: String::from("pagination"),
                 },
