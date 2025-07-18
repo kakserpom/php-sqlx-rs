@@ -82,7 +82,7 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
 
 #[macro_export]
 macro_rules! php_sqlx_impl_query_builder {
-    ( $struct:ident, $class:literal, $driver_inner: ident ) => {
+    ( $struct:ident, $class:literal, $driver: ident, $driver_inner: ident ) => {
         use $crate::ast::Ast;
         use $crate::paramvalue::ParamsMap;
         use $crate::query_builder::{OrClause, OrClauseItem};
@@ -107,8 +107,7 @@ macro_rules! php_sqlx_impl_query_builder {
         use ext_php_rs::convert::FromZval;
         use ext_php_rs::flags::DataType;
         use trim_in_place::TrimInPlace;
-        use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
-
+        use $crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
 
         /// A prepared SQL query builder.
         ///
@@ -140,9 +139,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 }
             }
         }
-        impl Into<ParameterValue> for ParameterValueWrapper {
-            fn into(self) -> ParameterValue {
-                self.0
+        impl From<ParameterValueWrapper> for ParameterValue {
+            fn from(wrapper: ParameterValueWrapper) -> Self {
+                wrapper.0
             }
         }
 
@@ -207,7 +206,7 @@ macro_rules! php_sqlx_impl_query_builder {
             ) -> anyhow::Result<()> {
                 use ext_php_rs::types::ZendClassObject;
 
-                self.query.push_str(&format!("\n{keyword}\n"));
+                write!(self.query, "\n{keyword}\n")?;
 
                 if let Some(part) = query.str() {
                     self._append(&part.indent_sql(true), parameters, "union")?;
@@ -432,6 +431,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 K: Into<String>,
                 V: Into<ParameterValue>,
             {
+                #[allow(clippy::too_many_arguments)]
                 fn walk(
                     driver_inner: &Arc<$driver_inner>,
                     node: &Ast,
@@ -607,6 +607,14 @@ macro_rules! php_sqlx_impl_query_builder {
             #[must_use]
             pub fn builder(&self,) -> $struct {
                 $struct::new(self.driver_inner.clone())
+            }
+
+            pub fn factory(driver: &ZendClassObject<$driver>) -> anyhow::Result<$struct> {
+                if let Some(obj) = driver.obj.as_ref() {
+                     Ok($struct::new(obj.driver_inner.clone()))
+                } else {
+                    bail!("You cannot do this now.");
+                }
             }
 
             /// Quotes a single scalar value for safe embedding into SQL.
@@ -1083,11 +1091,11 @@ macro_rules! php_sqlx_impl_query_builder {
             /// $builder->limit(10);
             /// $builder->limit(10, 20); // LIMIT 10 OFFSET 20
             /// ```
-            fn limit<'a>(
-                self_: &'a mut ZendClassObject<$struct>,
+            fn limit(
+                self_: &mut ZendClassObject<$struct>,
                 limit: i64,
                 offset: Option<i64>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
                 if limit < 0 {
                     bail!("LIMIT must be non-negative");
                 }
@@ -1113,10 +1121,10 @@ macro_rules! php_sqlx_impl_query_builder {
             /// ```php
             /// $builder->offset(30); // OFFSET 30
             /// ```
-            fn offset<'a>(
-                self_: &'a mut ZendClassObject<$struct>,
+            fn offset(
+                self_: &mut ZendClassObject<$struct>,
                 offset: i64,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
                 if offset < 0 {
                     bail!("OFFSET must be non-negative");
                 }
@@ -1306,7 +1314,6 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 set: &Zval,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
-                use ext_php_rs::types::ArrayKey;
 
                 self_.query.push_str("\nSET ");
                 let mut first = true;
@@ -1607,9 +1614,9 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// # Returns
             /// The query builder with `FOR UPDATE` appended.
-            fn for_update<'a>(
-                self_: &'a mut ZendClassObject<$struct>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            fn for_update(
+                self_: &mut ZendClassObject<$struct>,
+            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
                 self_.query.push_str("\nFOR UPDATE");
                 Ok(self_)
             }
@@ -1632,9 +1639,9 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// # Returns
             /// The query builder with `FOR SHARE` appended.
-            fn for_share<'a>(
-                self_: &'a mut ZendClassObject<$struct>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            fn for_share(
+                self_: &mut ZendClassObject<$struct>,
+            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
                 self_.query.push_str("\nFOR SHARE");
                 Ok(self_)
             }

@@ -7,7 +7,7 @@ macro_rules! php_sqlx_impl_driver {
         use inner::$inner;
         use query_builder::$query_builder;
         pub use prepared_query::$prepared_query;
-        use $crate::utils::types::ColumnArgument;
+
 
         use anyhow::anyhow;
         use dashmap::DashMap;
@@ -21,6 +21,8 @@ macro_rules! php_sqlx_impl_driver {
         use std::sync::LazyLock;
         use $crate::options::DriverOptionsArg;
         use $crate::paramvalue::ParameterValue;
+        use $crate::utils::types::ColumnArgument;
+        use $crate::options::DriverInnerOptions;
         pub mod inner;
 
         static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<$inner>>> =
@@ -41,20 +43,8 @@ macro_rules! php_sqlx_impl_driver {
                 .class::<$query_builder>()
         }
 
-        #[php_impl]
         impl $struct {
-            /// Constructs a new SQLx driver instance.
-            ///
-            /// # Arguments
-            /// - `options`: Connection URL as string or associative array with options:
-            ///   - `url`: (string) database connection string (required)
-            ///   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
-            ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
-            ///   - `persistent_name`: (string) name of persistent connection
-            ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
-            pub fn __construct(options: DriverOptionsArg) -> anyhow::Result<Self> {
-                let options = options.parse()?;
-
+            pub fn new(options: DriverInnerOptions)-> anyhow::Result<Self> {
                 if let Some(name) = options.persistent_name.as_ref() {
                     if let Some(driver_inner) = PERSISTENT_DRIVER_REGISTRY.get(name) {
                         return Ok(Self {
@@ -68,6 +58,22 @@ macro_rules! php_sqlx_impl_driver {
                     PERSISTENT_DRIVER_REGISTRY.insert(name, driver_inner.clone());
                 }
                 Ok(Self { driver_inner })
+            }
+        }
+
+        #[php_impl]
+        impl $struct {
+            /// Constructs a new SQLx driver instance.
+            ///
+            /// # Arguments
+            /// - `options`: Connection URL as string or associative array with options:
+            ///   - `url`: (string) database connection string (required)
+            ///   - `ast_cache_shard_count`: (int) number of AST cache shards (default: 8)
+            ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
+            ///   - `persistent_name`: (string) name of persistent connection
+            ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
+            pub fn __construct(url_or_options: DriverOptionsArg) -> anyhow::Result<Self> {
+                Self::new(url_or_options.parse()?)
             }
 
             /// Creates a prepared query object with the given SQL string.

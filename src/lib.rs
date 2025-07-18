@@ -30,6 +30,7 @@ pub mod selectclause;
 #[cfg(test)]
 mod tests;
 
+pub mod driver_factory;
 pub mod utils;
 
 use ext_php_rs::prelude::*;

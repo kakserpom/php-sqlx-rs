@@ -30,29 +30,26 @@ pub fn fold_into_zend_hashmap_grouped(
     item: anyhow::Result<(ArrayKey, Zval)>,
 ) -> anyhow::Result<ZBox<ZendHashTable>> {
     let (key, value) = item?;
-    let array_mut = &mut array;
     match key {
         ArrayKey::Long(_) | ArrayKey::Str(_) => {
-            if let Some(entry) = array_mut.get_mut(key.clone()) {
-                let entry_array = entry.array_mut().unwrap();
-                entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
+            if let Some(entry) = array.get_mut(key.clone()).and_then(Zval::array_mut) {
+                entry.push(value).map_err(|err| anyhow!("{err:?}"))?;
             } else {
                 let mut entry_array = zend_array::new();
                 entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-                array_mut
+                array
                     .insert(key, entry_array)
                     .map_err(|err| anyhow!("{err:?}"))?;
             }
         }
         ArrayKey::String(key) => {
             let key = key.as_str();
-            if let Some(entry) = array_mut.get_mut(key) {
-                let entry_array = entry.array_mut().unwrap();
-                entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
+            if let Some(entry) = array.get_mut(key).and_then(Zval::array_mut) {
+                entry.push(value).map_err(|err| anyhow!("{err:?}"))?;
             } else {
                 let mut entry_array = zend_array::new();
                 entry_array.push(value).map_err(|err| anyhow!("{err:?}"))?;
-                array_mut
+                array
                     .insert(key, entry_array)
                     .map_err(|err| anyhow!("{err:?}"))?;
             }

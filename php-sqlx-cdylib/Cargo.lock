@@ -1584,6 +1584,7 @@ dependencies = [
  "threadsafe-lru",
  "tokio",
  "trim-in-place",
+ "url",
 ]
 
 [[package]]

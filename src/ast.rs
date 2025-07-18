@@ -64,6 +64,7 @@ pub enum Ast {
 /// optional features like collapsible `IN` clauses.
 /// Settings that determine how placeholders and identifiers are rendered:
 /// whether to use backticks, dollar-sign placeholders, `@`-style, etc.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Settings {
     /// Enable special parsing for `IN` and `NOT IN` clauses.
@@ -87,7 +88,7 @@ pub struct Settings {
     pub strings_as_ntext: bool,
     /// JSON objects should be cast (e.g. `::jsonb` or `AS JSON`)
     pub cast_json: Option<&'static str>, // e.g. Some("::jsonb") or Some("AS JSON")
-    /// Escape `\` in strings (MySQL legacy)
+    /// Escape `\` in strings (`MySQL` legacy)
     pub escape_backslash: bool,
 }
 

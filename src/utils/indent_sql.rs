@@ -31,9 +31,8 @@ impl<T: AsRef<str>> IndentSql for T {
         if line_count == 1 {
             if query {
                 return format!("\n{}{s}", " ".repeat(indent));
-            } else {
-                return s.to_string();
             }
+            return s.to_string();
         }
 
         // Calculate capacity: original length + (indent * number of non-empty lines) + potential newlines
@@ -53,7 +52,7 @@ impl<T: AsRef<str>> IndentSql for T {
             // Only add indentation to non-empty lines
             let line = line.trim_end();
             if !line.is_empty() && (i > 0 || query) {
-                result.extend(std::iter::repeat(' ').take(indent));
+                result.extend(std::iter::repeat_n(' ', indent));
             }
 
             // Add the line content

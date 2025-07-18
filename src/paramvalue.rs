@@ -95,9 +95,9 @@ impl ParameterValue {
             | Self::Float(_)
             | Self::Bool(_)
             | Self::Object(_)
-            | Self::PaginateClauseRendered(_) => false,
+            | Self::PaginateClauseRendered(_)
+            | Self::Builder(_) => false,
             Self::Null => true,
-            Self::Builder(_) => false,
         }
     }
 
@@ -161,8 +161,10 @@ impl ParameterValue {
 
             Self::Bool(b) => String::from(if settings.booleans_as_literals {
                 if *b { "TRUE" } else { "FALSE" }
+            } else if *b {
+                "1"
             } else {
-                if *b { "1" } else { "0" }
+                "0"
             }),
 
             Self::String(s) => escape_sql_string(s, settings),

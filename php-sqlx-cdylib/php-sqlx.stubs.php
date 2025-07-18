@@ -230,6 +230,60 @@ namespace Sqlx {
         public function builder(): \Sqlx\MySqlQueryBuilder {}
 
         /**
+         * Quotes a single scalar value for safe embedding into SQL.
+         *
+         * This method renders the given `ParameterValue` into a properly escaped SQL literal,
+         * using the driver's configuration (e.g., quoting style, encoding).
+         *
+         * ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+         * This method should only be used for debugging or generating static fragments,
+         * not for constructing dynamic SQL with user input.
+         *
+         * # Arguments
+         * * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+         *
+         * # Returns
+         * Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+         *
+         * # Errors
+         * Returns an error if the parameter is not a scalar or if rendering fails.
+         *
+         * # Example
+         * ```php
+         * $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+         * ```
+         */
+        public function quote(mixed $param): string {}
+
+        /**
+         * Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+         *
+         * This helper is designed for safely preparing user input for use with
+         * pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+         *
+         * ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+         * It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+         * not interpolate it directly into the query string.
+         *
+         * # Arguments
+         * * `param` – The parameter to escape (must be a string).
+         *
+         * # Returns
+         * A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+         *
+         * # Errors
+         * Returns an error if the input is not a string.
+         *
+         * # Example
+         * ```php
+         * $escaped = $builder->metaQuoteLike("100%_safe");
+         * // Use like:
+         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * ```
+         */
+        public function metaQuoteLike(mixed $param): string {}
+
+        /**
          * Returns whether results are returned as associative arrays.
          *
          * If true, result rows are returned as PHP associative arrays (key-value pairs).
@@ -1288,6 +1342,62 @@ namespace Sqlx {
          */
         public function builder(): \Sqlx\MySqlQueryBuilder {}
 
+        public static function factory(\Sqlx\MySqlDriver $driver): \Sqlx\MySqlQueryBuilder {}
+
+        /**
+         * Quotes a single scalar value for safe embedding into SQL.
+         *
+         * This method renders the given `ParameterValue` into a properly escaped SQL literal,
+         * using the driver's configuration (e.g., quoting style, encoding).
+         *
+         * ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+         * This method should only be used for debugging or generating static fragments,
+         * not for constructing dynamic SQL with user input.
+         *
+         * # Arguments
+         * * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+         *
+         * # Returns
+         * Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+         *
+         * # Errors
+         * Returns an error if the parameter is not a scalar or if rendering fails.
+         *
+         * # Example
+         * ```php
+         * $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+         * ```
+         */
+        public function quote(mixed $param): string {}
+
+        /**
+         * Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+         *
+         * This helper is designed for safely preparing user input for use with
+         * pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+         *
+         * ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+         * It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+         * not interpolate it directly into the query string.
+         *
+         * # Arguments
+         * * `param` – The parameter to escape (must be a string).
+         *
+         * # Returns
+         * A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+         *
+         * # Errors
+         * Returns an error if the input is not a string.
+         *
+         * # Example
+         * ```php
+         * $escaped = $builder->metaQuoteLike("100%_safe");
+         * // Use like:
+         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * ```
+         */
+        public function metaQuoteLike(mixed $param): string {}
+
         /**
          * Appends an `ON CONFLICT` clause to the query.
          *
@@ -2192,6 +2302,60 @@ namespace Sqlx {
          * Query builder object
          */
         public function builder(): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Quotes a single scalar value for safe embedding into SQL.
+         *
+         * This method renders the given `ParameterValue` into a properly escaped SQL literal,
+         * using the driver's configuration (e.g., quoting style, encoding).
+         *
+         * ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+         * This method should only be used for debugging or generating static fragments,
+         * not for constructing dynamic SQL with user input.
+         *
+         * # Arguments
+         * * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+         *
+         * # Returns
+         * Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+         *
+         * # Errors
+         * Returns an error if the parameter is not a scalar or if rendering fails.
+         *
+         * # Example
+         * ```php
+         * $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+         * ```
+         */
+        public function quote(mixed $param): string {}
+
+        /**
+         * Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+         *
+         * This helper is designed for safely preparing user input for use with
+         * pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+         *
+         * ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+         * It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+         * not interpolate it directly into the query string.
+         *
+         * # Arguments
+         * * `param` – The parameter to escape (must be a string).
+         *
+         * # Returns
+         * A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+         *
+         * # Errors
+         * Returns an error if the input is not a string.
+         *
+         * # Example
+         * ```php
+         * $escaped = $builder->metaQuoteLike("100%_safe");
+         * // Use like:
+         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * ```
+         */
+        public function metaQuoteLike(mixed $param): string {}
 
         /**
          * Returns whether results are returned as associative arrays.
@@ -3252,6 +3416,62 @@ namespace Sqlx {
          */
         public function builder(): \Sqlx\PgQueryBuilder {}
 
+        public static function factory(\Sqlx\PgDriver $driver): \Sqlx\PgQueryBuilder {}
+
+        /**
+         * Quotes a single scalar value for safe embedding into SQL.
+         *
+         * This method renders the given `ParameterValue` into a properly escaped SQL literal,
+         * using the driver's configuration (e.g., quoting style, encoding).
+         *
+         * ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+         * This method should only be used for debugging or generating static fragments,
+         * not for constructing dynamic SQL with user input.
+         *
+         * # Arguments
+         * * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+         *
+         * # Returns
+         * Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+         *
+         * # Errors
+         * Returns an error if the parameter is not a scalar or if rendering fails.
+         *
+         * # Example
+         * ```php
+         * $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+         * ```
+         */
+        public function quote(mixed $param): string {}
+
+        /**
+         * Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+         *
+         * This helper is designed for safely preparing user input for use with
+         * pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+         *
+         * ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+         * It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+         * not interpolate it directly into the query string.
+         *
+         * # Arguments
+         * * `param` – The parameter to escape (must be a string).
+         *
+         * # Returns
+         * A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+         *
+         * # Errors
+         * Returns an error if the input is not a string.
+         *
+         * # Example
+         * ```php
+         * $escaped = $builder->metaQuoteLike("100%_safe");
+         * // Use like:
+         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * ```
+         */
+        public function metaQuoteLike(mixed $param): string {}
+
         /**
          * Appends an `ON CONFLICT` clause to the query.
          *
@@ -4158,6 +4378,60 @@ namespace Sqlx {
         public function builder(): \Sqlx\MssqlQueryBuilder {}
 
         /**
+         * Quotes a single scalar value for safe embedding into SQL.
+         *
+         * This method renders the given `ParameterValue` into a properly escaped SQL literal,
+         * using the driver's configuration (e.g., quoting style, encoding).
+         *
+         * ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+         * This method should only be used for debugging or generating static fragments,
+         * not for constructing dynamic SQL with user input.
+         *
+         * # Arguments
+         * * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+         *
+         * # Returns
+         * Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+         *
+         * # Errors
+         * Returns an error if the parameter is not a scalar or if rendering fails.
+         *
+         * # Example
+         * ```php
+         * $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+         * ```
+         */
+        public function quote(mixed $param): string {}
+
+        /**
+         * Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+         *
+         * This helper is designed for safely preparing user input for use with
+         * pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+         *
+         * ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+         * It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+         * not interpolate it directly into the query string.
+         *
+         * # Arguments
+         * * `param` – The parameter to escape (must be a string).
+         *
+         * # Returns
+         * A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+         *
+         * # Errors
+         * Returns an error if the input is not a string.
+         *
+         * # Example
+         * ```php
+         * $escaped = $builder->metaQuoteLike("100%_safe");
+         * // Use like:
+         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * ```
+         */
+        public function metaQuoteLike(mixed $param): string {}
+
+        /**
          * Returns whether results are returned as associative arrays.
          *
          * If true, result rows are returned as PHP associative arrays (key-value pairs).
@@ -4832,6 +5106,62 @@ namespace Sqlx {
          * Query builder object
          */
         public function builder(): \Sqlx\MssqlQueryBuilder {}
+
+        public static function factory(\Sqlx\MssqlDriver $driver): \Sqlx\MssqlQueryBuilder {}
+
+        /**
+         * Quotes a single scalar value for safe embedding into SQL.
+         *
+         * This method renders the given `ParameterValue` into a properly escaped SQL literal,
+         * using the driver's configuration (e.g., quoting style, encoding).
+         *
+         * ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
+         * This method should only be used for debugging or generating static fragments,
+         * not for constructing dynamic SQL with user input.
+         *
+         * # Arguments
+         * * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
+         *
+         * # Returns
+         * Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
+         *
+         * # Errors
+         * Returns an error if the parameter is not a scalar or if rendering fails.
+         *
+         * # Example
+         * ```php
+         * $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
+         * ```
+         */
+        public function quote(mixed $param): string {}
+
+        /**
+         * Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+         *
+         * This helper is designed for safely preparing user input for use with
+         * pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
+         *
+         * ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
+         * It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
+         * not interpolate it directly into the query string.
+         *
+         * # Arguments
+         * * `param` – The parameter to escape (must be a string).
+         *
+         * # Returns
+         * A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+         *
+         * # Errors
+         * Returns an error if the input is not a string.
+         *
+         * # Example
+         * ```php
+         * $escaped = $builder->metaQuoteLike("100%_safe");
+         * // Use like:
+         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * ```
+         */
+        public function metaQuoteLike(mixed $param): string {}
 
         /**
          * Appends an `ON CONFLICT` clause to the query.

@@ -53,8 +53,8 @@ $builder = $driver->builder()
         ['comments.created_at', '>', '2024-01-01'],
         ['comments.status', '=', 'published'],
         OR_([
-            ['active_users.name', 'LIKE', '%john%'],
-            ['active_users.name', 'LIKE', '%jane%'],
+            ['active_users.name', 'ILIKE', '%john%'],
+            ['active_users.name', 'ICONTAINS', 'jane'],
         ]),
     ])
     ->orderBy(['comments.created_at' => 'DESC']);
