@@ -1,8 +1,7 @@
 # SQLx PHP Extension
 
-A PHP extension powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
-database access with additional SQL syntax. It's built using
-the [ext-php-rs](https://github.com/davidcole1340/ext-php-rs) crate.
+The extension is powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
+database access with additional SQL syntax. Bundled with a [**query builder**](QUERY-BUILDER.md).
 
 **Postgres**, **MySQL** and **Mssql** are supported.
 
@@ -12,6 +11,8 @@ necessity of modernizing the toolkit of great many PHP developers. The idea came
 weekends later the project was all but done. More to come.
 
 The project is still kind of experimental, so any feedback/ideas will be greatly appreciated!
+
+It's built using [ext-php-rs](https://github.com/davidcole1340/ext-php-rs).
 
 ## Features
 
@@ -23,6 +24,7 @@ The project is still kind of experimental, so any feedback/ideas will be greatly
 - Pagination with `PAGINATE`
 - Safe and robust `SELECT`
 - SQL transactions are supported in full
+- Powerful Query Builder.
 - Native JSON and bigint support
 - Optional persistent connections (with connection pooling)
 
