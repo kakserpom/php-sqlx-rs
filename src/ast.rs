@@ -109,7 +109,7 @@ impl Ast {
     /// # Arguments
     ///
     /// * `input` – The raw SQL text to parse.
-    /// * `parsing_settings` – Controls comment syntax, escaping, and `IN` support.
+    /// * `settings` – Controls comment syntax, escaping, and `IN` support.
     ///
     /// # Returns
     ///
@@ -595,7 +595,7 @@ impl Ast {
     /// # Arguments
     ///
     /// * `values` – An iterator of `(key, value)` pairs for all placeholders.
-    /// * `rendering_settings` – Controls identifier quoting and placeholder style.
+    /// * `settings` – Controls identifier quoting and placeholder style.
     ///
     /// # Returns
     ///

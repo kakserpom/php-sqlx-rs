@@ -1,19 +1,21 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use php_sqlx::ast::{Ast, Settings, RenderingSettings};
+use php_sqlx::ast::{Ast, Settings};
 use std::collections::HashMap;
 use std::hint::black_box;
 
 // Postgres settings
-const PARSING_SETTINGS: Settings = Settings {
+const SETTINGS: Settings = Settings {
     collapsible_in_enabled: true,
     escaping_double_single_quotes: false,
     comment_hash: false,
-};
-const RENDERING_SETTINGS: RenderingSettings = RenderingSettings {
     column_backticks: false,
     placeholder_dollar_sign: true,
     placeholder_at_sign: false,
-    max_placeholders: u16::MAX as usize,
+    max_placeholders: 65535,
+    booleans_as_literals: false,
+    strings_as_ntext: false,
+    cast_json: None,
+    escape_backslash: false,
 };
 
 const QUERY_SMALL: &str = "SELECT id, name, meta
@@ -48,17 +50,17 @@ GROUP BY u.id
 fn bench_ast(c: &mut Criterion) {
     c.bench_function("Ast::parse_small", |b| {
         b.iter(|| {
-            let _res = black_box(Ast::parse(QUERY_SMALL, &PARSING_SETTINGS));
+            let _res = black_box(Ast::parse(QUERY_SMALL, &SETTINGS));
         })
     });
     c.bench_function("Ast::parse_big", |b| {
         b.iter(|| {
-            let _res = black_box(Ast::parse(QUERY_BIG, &PARSING_SETTINGS));
+            let _res = black_box(Ast::parse(QUERY_BIG, &SETTINGS));
         })
     });
 
     c.bench_function("Ast::render_big", |b| {
-        let ast = Ast::parse(QUERY_BIG, &PARSING_SETTINGS).unwrap();
+        let ast = Ast::parse(QUERY_BIG, &SETTINGS).unwrap();
         b.iter(|| {
             let _res = black_box(ast.render(
                 HashMap::from([
@@ -66,7 +68,7 @@ fn bench_ast(c: &mut Criterion) {
                     ("created_after", "1111111"),
                     ("limit", "10"),
                 ]),
-                &RENDERING_SETTINGS,
+                &SETTINGS,
             ));
         })
     });
