@@ -24,6 +24,28 @@ pub enum OrClauseItem {
     Item((String, Option<ParamsMap>)),
 }
 
+/// Represents the supported SQL `JOIN` types.
+#[derive(Debug, Clone, Copy, Display)]
+pub enum JoinType {
+    #[strum(to_string = "INNER")]
+    Inner,
+
+    #[strum(to_string = "LEFT")]
+    Left,
+
+    #[strum(to_string = "RIGHT")]
+    Right,
+
+    #[strum(to_string = "NATURAL")]
+    Natural,
+
+    #[strum(to_string = "FULL OUTER")]
+    FullOuter,
+
+    #[strum(to_string = "CROSS")]
+    Cross,
+}
+
 #[php_function]
 #[php(name = "Sqlx\\OR_")]
 pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
@@ -86,8 +108,8 @@ macro_rules! php_sqlx_impl_query_builder {
         use $crate::ast::Ast;
         use $crate::paramvalue::ParamsMap;
         use $crate::query_builder::{OrClause, OrClauseItem};
-        use $crate::selectclause::SelectClauseRendered;
-        use $crate::byclause::ByClauseRendered;
+        use $crate::select_clause::SelectClauseRendered;
+        use $crate::by_clause::ByClauseRendered;
         use $crate::paramvalue::ParameterValue;
         use $crate::utils::types::ColumnArgument;
         use $crate::utils::indent_sql::IndentSql;
@@ -2491,26 +2513,4 @@ macro_rules! php_sqlx_impl_query_builder {
             }
         }
     };
-}
-
-/// Represents the supported SQL `JOIN` types.
-#[derive(Debug, Clone, Copy, Display)]
-pub enum JoinType {
-    #[strum(to_string = "INNER")]
-    Inner,
-
-    #[strum(to_string = "LEFT")]
-    Left,
-
-    #[strum(to_string = "RIGHT")]
-    Right,
-
-    #[strum(to_string = "NATURAL")]
-    Natural,
-
-    #[strum(to_string = "FULL OUTER")]
-    FullOuter,
-
-    #[strum(to_string = "CROSS")]
-    Cross,
 }

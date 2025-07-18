@@ -31,3 +31,103 @@ impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
         Some(s)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::StripPrefixWordIgnoreAsciiCase;
+
+    #[test]
+    pub fn test_strip_prefix_word_ignore_ascii_case() {
+        use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
+        "NOT IN (:ph)"
+            .strip_prefix_word_ignore_ascii_case(&["NOT", "IN"])
+            .unwrap();
+    }
+
+    #[test]
+    fn test_single_word_exact() {
+        assert_eq!(
+            "SELECT * FROM users".strip_prefix_word_ignore_ascii_case(&["SELECT"]),
+            Some(" * FROM users")
+        );
+    }
+
+    #[test]
+    fn test_single_word_with_case_variants() {
+        assert_eq!(
+            "select *".strip_prefix_word_ignore_ascii_case(&["SELECT"]),
+            Some(" *")
+        );
+        assert_eq!(
+            "SeLeCt *".strip_prefix_word_ignore_ascii_case(&["SELECT"]),
+            Some(" *")
+        );
+    }
+
+    #[test]
+    fn test_multi_word_exact() {
+        assert_eq!(
+            "NOT IN (1, 2, 3)".strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]),
+            Some(" (1, 2, 3)")
+        );
+    }
+
+    #[test]
+    fn test_multi_word_case_variants() {
+        assert_eq!(
+            "not in (1, 2, 3)".strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]),
+            Some(" (1, 2, 3)")
+        );
+        assert_eq!(
+            "Not In (1)".strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]),
+            Some(" (1)")
+        );
+    }
+
+    #[test]
+    fn test_no_match_due_to_partial_word() {
+        assert_eq!(
+            "SELECTED *".strip_prefix_word_ignore_ascii_case(&["SELECT"]),
+            None
+        );
+        assert_eq!(
+            "NOTIFY something".strip_prefix_word_ignore_ascii_case(&["NOT"]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_no_match_due_to_wrong_order() {
+        assert_eq!(
+            "IN NOT (...)".strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_leading_whitespace_skipped_only_after_first_word() {
+        assert_eq!(
+            "NOT    IN (1)".strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]),
+            Some(" (1)")
+        );
+        assert_eq!(
+            "NOTIN (1)".strip_prefix_word_ignore_ascii_case(&["NOT", "IN"]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_empty_prefix_list() {
+        assert_eq!(
+            "SELECT *".strip_prefix_word_ignore_ascii_case(&[]),
+            Some("SELECT *")
+        );
+    }
+
+    #[test]
+    fn test_exact_prefix_only() {
+        assert_eq!("IN".strip_prefix_word_ignore_ascii_case(&["IN"]), Some(""));
+        assert_eq!("in".strip_prefix_word_ignore_ascii_case(&["IN"]), Some(""));
+        assert_eq!("index".strip_prefix_word_ignore_ascii_case(&["IN"]), None); // should fail
+    }
+}

@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::Ast;
-use crate::byclause::{ByClause, ByClauseColumnDefinition};
-use crate::paginateclause::PaginateClause;
+use crate::by_clause::{ByClause, ByClauseColumnDefinition};
+use crate::paginate_clause::PaginateClause;
 use crate::paramvalue::ParamsMap;
 use crate::postgres::inner::SETTINGS;
 use collapse::*;
@@ -122,7 +122,7 @@ fn test_render_order_by_input() {
 
 #[test]
 fn test_render_order_by_apply_empty() {
-    use crate::byclause::ByClause;
+    use crate::by_clause::ByClause;
 
     let ob = ByClause::allowed([
         ("name", "users.name"),

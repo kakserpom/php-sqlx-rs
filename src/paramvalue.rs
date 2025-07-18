@@ -1,7 +1,7 @@
 use crate::ast::Settings;
-use crate::byclause::ByClauseRendered;
-use crate::paginateclause::PaginateClauseRendered;
-use crate::selectclause::SelectClauseRendered;
+use crate::by_clause::ByClauseRendered;
+use crate::paginate_clause::PaginateClauseRendered;
+use crate::select_clause::SelectClauseRendered;
 use anyhow::bail;
 use ext_php_rs::convert::{FromZval, IntoZval};
 use ext_php_rs::flags::DataType;

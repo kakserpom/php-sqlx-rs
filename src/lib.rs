@@ -9,7 +9,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub mod ast;
-pub mod byclause;
+pub mod by_clause;
 pub mod conversion;
 mod driver;
 mod inner_driver;
@@ -20,15 +20,13 @@ pub mod mssql;
 #[cfg(feature = "mysql")]
 pub mod mysql;
 pub mod options;
-pub mod paginateclause;
+pub mod paginate_clause;
 pub mod paramvalue;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 mod prepared_query;
 pub mod query_builder;
-pub mod selectclause;
-#[cfg(test)]
-mod tests;
+pub mod select_clause;
 
 pub mod driver_factory;
 pub mod utils;
@@ -56,9 +54,9 @@ pub use mysql::{MySqlDriver, MySqlPreparedQuery};
 
 #[php_module]
 pub fn module(module: ModuleBuilder) -> ModuleBuilder {
-    let module = selectclause::build(module);
-    let module = byclause::build(module);
-    let module = paginateclause::build(module);
+    let module = select_clause::build(module);
+    let module = by_clause::build(module);
+    let module = paginate_clause::build(module);
     let module = query_builder::build(module);
     let module = driver_factory::build(module);
 

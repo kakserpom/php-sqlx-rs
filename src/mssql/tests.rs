@@ -1,7 +1,7 @@
 use crate::ast::Ast;
-use crate::byclause::{ByClause, ByClauseColumnDefinition};
+use crate::by_clause::{ByClause, ByClauseColumnDefinition};
 use crate::mssql::inner::SETTINGS;
-use crate::paginateclause::PaginateClause;
+use crate::paginate_clause::PaginateClause;
 use crate::paramvalue::{ParameterValue, ParamsMap};
 use collapse::*;
 
