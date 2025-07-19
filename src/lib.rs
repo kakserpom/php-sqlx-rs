@@ -17,7 +17,7 @@ mod inner_driver;
 mod lazy_row;
 pub mod options;
 pub mod paginate_clause;
-pub mod paramvalue;
+pub mod param_value;
 mod prepared_query;
 pub mod query_builder;
 pub mod select_clause;

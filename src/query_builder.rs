@@ -1,4 +1,4 @@
-use crate::paramvalue::{ParameterValue, ParamsMap};
+use crate::param_value::{ParameterValue, ParamsMap};
 use anyhow::{anyhow, bail};
 use ext_php_rs::convert::FromZval;
 use ext_php_rs::prelude::*;
@@ -106,11 +106,11 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
 macro_rules! php_sqlx_impl_query_builder {
     ( $struct:ident, $class:literal, $driver: ident, $driver_inner: ident ) => {
         use $crate::ast::Ast;
-        use $crate::paramvalue::ParamsMap;
+        use $crate::param_value::ParamsMap;
         use $crate::query_builder::{OrClause, OrClauseItem};
         use $crate::select_clause::SelectClauseRendered;
         use $crate::by_clause::ByClauseRendered;
-        use $crate::paramvalue::ParameterValue;
+        use $crate::param_value::ParameterValue;
         use $crate::utils::types::ColumnArgument;
         use $crate::utils::indent_sql::IndentSql;
         use $crate::query_builder::JoinType;

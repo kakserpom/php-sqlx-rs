@@ -20,7 +20,7 @@ macro_rules! php_sqlx_impl_driver {
         use std::sync::Arc;
         use std::sync::LazyLock;
         use $crate::options::DriverOptionsArg;
-        use $crate::paramvalue::ParameterValue;
+        use $crate::param_value::ParameterValue;
         use $crate::utils::types::ColumnArgument;
         use $crate::options::DriverInnerOptions;
         pub mod inner;

@@ -1,9 +1,8 @@
-use super::*;
 use crate::ast::Ast;
 use crate::by_clause::{ByClause, ByClauseColumnDefinition};
 use crate::dbms::postgres::inner::SETTINGS;
 use crate::paginate_clause::PaginateClause;
-use crate::param_value::ParamsMap;
+use crate::param_value::{ParameterValue, ParamsMap};
 use collapse::*;
 
 fn into_ast(sql: &str) -> Ast {

@@ -1,10 +1,12 @@
-use crate::paramvalue::{ParamVecWriteSqlTo, ParameterValue, ParamsMap, Placeholder};
+use crate::param_value::{write::ParamVecWriteSqlTo, ParameterValue, ParamsMap, Placeholder};
 use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
+#[cfg(test)]
+mod tests;
 
 /// An Abstract Syntax Tree representation of a parameterized SQL query,
 /// allowing for nested conditional blocks, placeholders, and special clauses.
@@ -65,7 +67,7 @@ pub enum Ast {
 /// Settings that determine how placeholders and identifiers are rendered:
 /// whether to use backticks, dollar-sign placeholders, `@`-style, etc.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Settings {
     /// Enable special parsing for `IN` and `NOT IN` clauses.
     pub collapsible_in_enabled: bool,

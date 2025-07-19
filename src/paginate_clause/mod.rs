@@ -1,5 +1,5 @@
 use crate::ast::Settings;
-use crate::paramvalue::ParameterValue;
+use crate::param_value::ParameterValue;
 use anyhow::bail;
 use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 
