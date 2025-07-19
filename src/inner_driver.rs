@@ -58,6 +58,11 @@ macro_rules! php_sqlx_impl_driver_inner {
                 })
             }
 
+            #[inline]
+            pub fn is_readonly(&self) -> bool {
+                self.options.readonly
+            }
+
             /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
             ///
             /// # Arguments

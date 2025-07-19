@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests;
-
 use crate::php_sqlx_impl_driver;
 
 php_sqlx_impl_driver!(
@@ -8,5 +7,6 @@ php_sqlx_impl_driver!(
     "Sqlx\\PgDriver",
     PgDriverInner,
     PgPreparedQuery,
-    PgQueryBuilder
+    PgReadQueryBuilder,
+    PgWriteQueryBuilder,
 );

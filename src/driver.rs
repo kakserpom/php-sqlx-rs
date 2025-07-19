@@ -1,28 +1,27 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
-    ( $struct:ident, $className:literal, $inner:ident, $prepared_query:ident, $query_builder:ident $(,)? ) => {
+    ( $struct:ident, $class:literal, $inner:ident, $prepared_query:ident, $read_query_builder:ident, $write_query_builder:ident $(,)? ) => {
         mod conversion;
         pub mod prepared_query;
-        pub mod query_builder;
-        use inner::$inner;
-        use query_builder::$query_builder;
-        pub use prepared_query::$prepared_query;
-
-
+        pub mod read_query_builder;
+        pub mod write_query_builder;
         use anyhow::anyhow;
         use dashmap::DashMap;
         use ext_php_rs::builders::ModuleBuilder;
         use ext_php_rs::prelude::*;
         use ext_php_rs::types::Zval;
         use ext_php_rs::{php_class, php_impl};
+        use inner::$inner;
         use itertools::Itertools;
+        pub use prepared_query::$prepared_query;
+        use read_query_builder::$read_query_builder;
         use std::collections::HashMap;
-        use std::sync::Arc;
-        use std::sync::LazyLock;
+        use std::sync::{Arc, LazyLock, Once};
+        use write_query_builder::$write_query_builder;
+        use $crate::options::DriverInnerOptions;
         use $crate::options::DriverOptionsArg;
         use $crate::param_value::ParameterValue;
         use $crate::utils::types::ColumnArgument;
-        use $crate::options::DriverInnerOptions;
         pub mod inner;
 
         static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<$inner>>> =
@@ -30,7 +29,7 @@ macro_rules! php_sqlx_impl_driver {
 
         /// This class supports prepared queries, persistent connections, and augmented SQL.
         #[php_class]
-        #[php(name = $className)]
+        #[php(name = $class)]
         #[derive(Clone)]
         pub struct $struct {
             pub driver_inner: Arc<$inner>,
@@ -40,11 +39,17 @@ macro_rules! php_sqlx_impl_driver {
             module
                 .class::<$struct>()
                 .class::<$prepared_query>()
-                .class::<$query_builder>()
+                .class::<$read_query_builder>()
+                .class::<$write_query_builder>()
         }
 
         impl $struct {
-            pub fn new(options: DriverInnerOptions)-> anyhow::Result<Self> {
+            pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
+                static INIT: Once = Once::new();
+                INIT.call_once(|| {
+                    $crate::utils::adhoc_php_class_implements($class, "Sqlx\\DriverInterface");
+                });
+
                 if let Some(name) = options.persistent_name.as_ref() {
                     if let Some(driver_inner) = PERSISTENT_DRIVER_REGISTRY.get(name) {
                         return Ok(Self {
@@ -85,10 +90,7 @@ macro_rules! php_sqlx_impl_driver {
             /// Prepared query object
             #[must_use]
             pub fn prepare(&self, query: &str) -> $prepared_query {
-                $prepared_query {
-                    driver_inner: self.driver_inner.clone(),
-                    query: query.to_owned(),
-                }
+                $prepared_query::new(query, self.driver_inner.clone())
             }
 
             /// Creates a query builder object
@@ -97,8 +99,18 @@ macro_rules! php_sqlx_impl_driver {
             /// # Returns
             /// Query builder object
             #[must_use]
-            pub fn builder(&self,) -> $query_builder {
-                $query_builder::new(self.driver_inner.clone()) 
+            pub fn builder(&self) -> $write_query_builder {
+                $write_query_builder::new(self.driver_inner.clone())
+            }
+
+            /// Creates a query builder object
+            ///
+            ///
+            /// # Returns
+            /// Query builder object
+            #[must_use]
+            pub fn read_builder(&self) -> $write_query_builder {
+                $write_query_builder::new(self.driver_inner.clone())
             }
 
             /// Quotes a single scalar value for safe embedding into SQL.
@@ -1009,8 +1021,8 @@ macro_rules! php_sqlx_impl_driver {
 
     ( $( $t:tt )* ) => {
         compile_error!(
-            "php_sqlx_impl_driver! accepts 4 arguments: \
-             (DriverType, $className, InnerDriverType, PreparedQueryType)"
+            "php_sqlx_impl_driver! accepts 6 arguments: \
+             (DriverType, $className, InnerDriverType, PreparedQueryType, ReadQueryBuilder, WriteQueryBuilder)"
         );
     };
 }

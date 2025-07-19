@@ -8,5 +8,6 @@ php_sqlx_impl_driver!(
     "Sqlx\\MssqlDriver",
     MssqlDriverInner,
     MssqlPreparedQuery,
-    MssqlQueryBuilder
+    MssqlReadQueryBuilder,
+    MssqlWriteQueryBuilder
 );

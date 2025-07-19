@@ -23,6 +23,7 @@ pub struct DriverInnerOptions {
     pub(crate) idle_timeout: Option<Duration>,
     pub(crate) test_before_acquire: bool,
     pub(crate) collapsible_in_enabled: bool,
+    pub(crate) readonly: bool,
 }
 impl Default for DriverInnerOptions {
     fn default() -> Self {
@@ -39,6 +40,7 @@ impl Default for DriverInnerOptions {
             idle_timeout: None,
             test_before_acquire: DEFAULT_TEST_BEFORE_ACQUIRE,
             collapsible_in_enabled: DEFAULT_COLLAPSIBLE_IN,
+            readonly: false,
         }
     }
 }
@@ -75,6 +77,9 @@ impl DriverOptions {
     /// Enable automatic collapsing of `IN ()` clauses to `FALSE`/`TRUE`.
     pub const OPT_COLLAPSIBLE_IN: &'static str = "collapsible_in";
 
+    /// Enable read-only mode (useful for replicas).
+    pub const OPT_READONLY: &'static str = "readonly";
+
     /// Maximum lifetime of a pooled connection. Accepts string (`"30s"`, `"5 min"`) or integer (seconds).
     pub const OPT_MAX_LIFETIME: &'static str = "max_lifetime";
 
@@ -105,12 +110,12 @@ impl DriverOptionsArg {
             Self::Options(kv) => DriverInnerOptions {
                 url: Some(
                     kv.get(DriverOptions::OPT_URL)
-                        .ok_or_else(|| anyhow!("missing {}", DriverOptions::OPT_URL))
+                        .ok_or_else(|| anyhow!("missing OPT_URL"))
                         .and_then(|value| {
                             if let ParameterValue::String(str) = value {
                                 Ok(str.clone())
                             } else {
-                                Err(anyhow!("{} must be a string", DriverOptions::OPT_URL))
+                                Err(anyhow!("OPT_URL must be a string"))
                             }
                         })?,
                 ),
@@ -120,10 +125,7 @@ impl DriverOptionsArg {
                         if let ParameterValue::Bool(bool) = value {
                             Ok(*bool)
                         } else {
-                            Err(anyhow!(
-                                "{} must be a string",
-                                DriverOptions::OPT_ASSOC_ARRAYS
-                            ))
+                            Err(anyhow!("OPT_ASSOC_ARRAYS must be a string"))
                         }
                     },
                 )?,
@@ -133,10 +135,7 @@ impl DriverOptionsArg {
                         if let ParameterValue::Int(n) = value {
                             Ok(usize::try_from(*n)?)
                         } else {
-                            Err(anyhow!(
-                                "{} must be an integer",
-                                DriverOptions::OPT_AST_CACHE_SHARD_COUNT
-                            ))
+                            Err(anyhow!("OPT_AST_CACHE_SHARD_COUNT must be an integer"))
                         }
                     },
                 )?,
@@ -146,10 +145,7 @@ impl DriverOptionsArg {
                         if let ParameterValue::Int(n) = value {
                             Ok(usize::try_from(*n)?)
                         } else {
-                            Err(anyhow!(
-                                "{} must be an integer",
-                                DriverOptions::OPT_AST_CACHE_SHARD_SIZE
-                            ))
+                            Err(anyhow!("OPT_AST_CACHE_SHARD_SIZE must be an integer"))
                         }
                     },
                 )?,
@@ -159,10 +155,7 @@ impl DriverOptionsArg {
                         if let ParameterValue::String(str) = value {
                             Some(str.clone())
                         } else {
-                            return Err(anyhow!(
-                                "{} must be an integer",
-                                DriverOptions::OPT_PERSISTENT_NAME
-                            ));
+                            bail!("OPT_PERSISTENT_NAME must be an integer");
                         }
                     }
                 },
@@ -172,10 +165,7 @@ impl DriverOptionsArg {
                         if let ParameterValue::Int(n) = value {
                             Ok(NonZeroU32::try_from(u32::try_from(*n)?)?)
                         } else {
-                            Err(anyhow!(
-                                "{} must be a positive integer",
-                                DriverOptions::OPT_MAX_CONNECTIONS
-                            ))
+                            Err(anyhow!("OPT_MAX_CONNECTIONS must be a positive integer"))
                         }
                     },
                 )?,
@@ -186,8 +176,7 @@ impl DriverOptionsArg {
                             Ok(u32::try_from(*n)?)
                         } else {
                             Err(anyhow!(
-                                "{} must be a non-negative integer",
-                                DriverOptions::OPT_MIN_CONNECTIONS
+                                "OPT_MIN_CONNECTIONS must be a non-negative integer"
                             ))
                         }
                     },
@@ -198,10 +187,7 @@ impl DriverOptionsArg {
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }
-                    _ => bail!(
-                        "{} must be a string or a non-negative integer",
-                        DriverOptions::OPT_MAX_LIFETIME
-                    ),
+                    _ => bail!("OPT_MAX_LIFETIME must be a string or a non-negative integer"),
                 },
                 idle_timeout: match kv.get(DriverOptions::OPT_IDLE_TIMEOUT) {
                     None | Some(ParameterValue::Null) => None,
@@ -209,10 +195,7 @@ impl DriverOptionsArg {
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }
-                    _ => bail!(
-                        "{} must be a string or a non-negative integer",
-                        DriverOptions::OPT_IDLE_TIMEOUT
-                    ),
+                    _ => bail!("OPT_IDLE_TIMEOUT must be a string or a non-negative integer"),
                 },
                 acquire_timeout: match kv.get(DriverOptions::OPT_ACQUIRE_TIMEOUT) {
                     None | Some(ParameterValue::Null) => None,
@@ -220,10 +203,7 @@ impl DriverOptionsArg {
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }
-                    _ => bail!(
-                        "{} must be a string or a non-negative integer",
-                        DriverOptions::OPT_ACQUIRE_TIMEOUT
-                    ),
+                    _ => bail!("OPT_ACQUIRE_TIMEOUT must be a string or a non-negative integer"),
                 },
                 test_before_acquire: kv.get(DriverOptions::OPT_TEST_BEFORE_ACQUIRE).map_or(
                     Ok(DEFAULT_TEST_BEFORE_ACQUIRE),
@@ -231,10 +211,7 @@ impl DriverOptionsArg {
                         if let ParameterValue::Bool(bool) = value {
                             Ok(*bool)
                         } else {
-                            Err(anyhow!(
-                                "{} must be a boolean",
-                                DriverOptions::OPT_TEST_BEFORE_ACQUIRE
-                            ))
+                            Err(anyhow!("OPT_TEST_BEFORE_ACQUIRE must be a boolean"))
                         }
                     },
                 )?,
@@ -244,13 +221,19 @@ impl DriverOptionsArg {
                         if let ParameterValue::Bool(bool) = value {
                             Ok(*bool)
                         } else {
-                            Err(anyhow!(
-                                "{} must be a boolean",
-                                DriverOptions::OPT_COLLAPSIBLE_IN
-                            ))
+                            Err(anyhow!("OPT_COLLAPSIBLE_IN must be a boolean"))
                         }
                     },
                 )?,
+                readonly: kv
+                    .get(DriverOptions::OPT_READONLY)
+                    .map_or(Ok(false), |value| {
+                        if let ParameterValue::Bool(bool) = value {
+                            Ok(*bool)
+                        } else {
+                            Err(anyhow!("OPT_READONLY must be a boolean"))
+                        }
+                    })?,
             },
         })
     }

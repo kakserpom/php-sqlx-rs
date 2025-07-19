@@ -104,7 +104,7 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
 
 #[macro_export]
 macro_rules! php_sqlx_impl_query_builder {
-    ( $struct:ident, $class:literal, $driver: ident, $driver_inner: ident ) => {
+    ( $struct:ident, $class:literal, $interface:literal, $driver: ident, $driver_inner: ident ) => {
         use $crate::ast::Ast;
         use $crate::param_value::ParamsMap;
         use $crate::query_builder::{OrClause, OrClauseItem};
@@ -114,22 +114,18 @@ macro_rules! php_sqlx_impl_query_builder {
         use $crate::utils::types::ColumnArgument;
         use $crate::utils::indent_sql::IndentSql;
         use $crate::query_builder::JoinType;
+        use $crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
         use anyhow::anyhow;
         use anyhow::bail;
         use ext_php_rs::php_impl;
         use ext_php_rs::prelude::*;
-        use ext_php_rs::types::ArrayKey;
-        use ext_php_rs::types::ZendClassObject;
-        use ext_php_rs::types::Zval;
-        use std::collections::BTreeMap;
-        use std::collections::BTreeSet;
-        use std::collections::HashMap;
+        use ext_php_rs::types::{ArrayKey, ZendClassObject, Zval};
+        use std::collections::{BTreeSet, BTreeMap, HashMap};
         use std::fmt::Write;
-        use std::sync::Arc;
+        use std::sync::{Once, Arc};
         use ext_php_rs::convert::FromZval;
         use ext_php_rs::flags::DataType;
         use trim_in_place::TrimInPlace;
-        use $crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
 
         /// A prepared SQL query builder.
         ///
@@ -180,6 +176,10 @@ macro_rules! php_sqlx_impl_query_builder {
             /// # Returns
             /// A new instance of the prepared query builder.
             pub(crate) fn new(driver_inner: Arc<$driver_inner>) -> Self {
+                static INIT: Once = Once::new();
+                INIT.call_once(|| {
+                    $crate::utils::adhoc_php_class_implements($class, $interface);
+                });
                 Self {
                     driver_inner,
                     placeholders: Default::default(),

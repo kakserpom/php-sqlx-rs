@@ -1,13 +1,13 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_prepared_query {
     ( $struct:ident, $class:literal, $driver_inner: ident ) => {
-        use $crate::param_value::ParameterValue;
-        use $crate::utils::types::ColumnArgument;
         use ext_php_rs::php_impl;
         use ext_php_rs::prelude::*;
         use ext_php_rs::types::Zval;
         use std::collections::HashMap;
-        use std::sync::Arc;
+        use std::sync::{Arc, Once};
+        use $crate::param_value::ParameterValue;
+        use $crate::utils::types::ColumnArgument;
 
         /// A reusable prepared SQL query with parameter support. Created using `PgDriver::prepare()`, shares context with original driver.
         #[php_class]
@@ -17,6 +17,21 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub(crate) driver_inner: Arc<$driver_inner>,
         }
 
+        impl $struct {
+            pub fn new(query: &str, driver_inner: Arc<$driver_inner>) -> Self {
+                static INIT: Once = Once::new();
+                INIT.call_once(|| {
+                    $crate::utils::adhoc_php_class_implements(
+                        $class,
+                        "Sqlx\\PreparedQueryInterface",
+                    );
+                });
+                Self {
+                    query: query.to_owned(),
+                    driver_inner,
+                }
+            }
+        }
         #[php_impl]
         impl $struct {
             /// Executes the prepared query and returns a dictionary mapping the first column to the second column.
