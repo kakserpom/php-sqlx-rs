@@ -3,6 +3,14 @@ use crate::param_value::ParameterValue;
 use anyhow::bail;
 use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 
+/// Registers the `PaginateClause` and `PaginateClauseRendered` classes
+/// with the provided PHP module builder.
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module
+        .class::<PaginateClause>()
+        .class::<PaginateClauseRendered>()
+}
+
 /// The `Sqlx\PaginateClause` class represents pagination settings
 /// and provides methods to compute the appropriate SQL `LIMIT` and `OFFSET`
 /// based on a given page number and items-per-page values.
@@ -170,11 +178,4 @@ impl PaginateClauseRendered {
         sql.push_str(" OFFSET ");
         ParameterValue::Int(self.offset).write_sql_to(sql, out_vals, settings)
     }
-}
-/// Registers the `PaginateClause` and `PaginateClauseRendered` classes
-/// with the provided PHP module builder.
-pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module
-        .class::<PaginateClause>()
-        .class::<PaginateClauseRendered>()
 }

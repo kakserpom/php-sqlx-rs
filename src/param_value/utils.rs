@@ -1,8 +1,8 @@
+use crate::param_value::ParameterValue;
 use anyhow::bail;
-use sqlx_oldapi::{Database, Encode, Type};
 use sqlx_oldapi::database::HasArguments;
 use sqlx_oldapi::query::Query;
-use crate::param_value::ParameterValue;
+use sqlx_oldapi::{Database, Encode, Type};
 
 /// Binds a list of `ParameterValue` items to an `SQLx` query.
 ///
@@ -57,6 +57,7 @@ where
         String: Encode<'a, D>,
     {
         Ok(match value {
+            ParameterValue::Json(pv) => q.bind(pv.to_json()?),
             ParameterValue::String(s) => q.bind(s),
             ParameterValue::Int(s) => q.bind(s),
             ParameterValue::Bool(s) => q.bind(s),

@@ -6,6 +6,14 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
 
+/// Registers the `SelectClause` and `SelectClauseRendered`
+/// classes with the given PHP module builder.
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module
+        .class::<SelectClause>()
+        .class::<SelectClauseRendered>()
+}
+
 /// The `Sqlx\\SelectClause` class manages a set of allowed
 /// columns for SQL SELECT operations and provides methods
 /// to render validated column clauses from user input.
@@ -149,11 +157,7 @@ impl SelectClauseRendered {
     }
 
     #[inline]
-    pub(crate) fn write_sql_to(
-        &self,
-        sql: &mut String,
-        settings: &Settings,
-    ) -> anyhow::Result<()> {
+    pub(crate) fn write_sql_to(&self, sql: &mut String, settings: &Settings) -> anyhow::Result<()> {
         for (
             i,
             SelectClauseRenderedColumn {
@@ -180,12 +184,4 @@ impl SelectClauseRendered {
 
         Ok(())
     }
-}
-
-/// Registers the `SelectClause` and `SelectClauseRendered`
-/// classes with the given PHP module builder.
-pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module
-        .class::<SelectClause>()
-        .class::<SelectClauseRendered>()
 }

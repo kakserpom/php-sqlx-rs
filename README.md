@@ -25,7 +25,7 @@ It's built using [ext-php-rs](https://github.com/davidcole1340/ext-php-rs).
 - Safe and robust `SELECT`
 - SQL transactions are supported in full
 - Powerful Query Builder.
-- Native JSON and bigint support
+- Native JSON support (with lazy decoding and [SIMD](https://docs.rs/simd-json/latest/simd_json/) 🚀)
 - Optional persistent connections (with connection pooling)
 
 ---
@@ -33,7 +33,8 @@ It's built using [ext-php-rs](https://github.com/davidcole1340/ext-php-rs).
 ## Augmented SQL Syntax
 
 This extension introduces a powerful SQL preprocessor that supports conditional blocks, optional fragments, and named
-parameters.
+parameters. Both positional (`?`, `$1`, `:1`) and named (`$param`, `:param`) placeholders are supported. All can be used
+interchangeably.
 
 ---
 
@@ -261,7 +262,25 @@ Additional supported methods to be called from inside a closure:
 
 ---
 
-## JSON Support
+## Parameter types
+
+Supported parameter types:
+
+```php
+"text"
+123
+3.14
+true
+[1, 2, 3]
+```
+
+> ✅ PostgreSQL `BIGINT` values are safely mapped to PHP integers:
+> ```php
+>  var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
+>  // Output: int(9223372036854775807)
+>```
+
+Nested arrays are automatically flattened and bound in order.
 
 PostgreSQL/MySQL JSON types are automatically decoded into PHP arrays or objects.
 
@@ -593,45 +612,17 @@ array(1) {
 
 ---
 
-## Data Binding
-
-Supported parameter types:
-
-```php
-"text"
-123
-3.14
-true
-[1, 2, 3]
-```
-
-Nested arrays are automatically flattened and bound in order.
-
----
-
-## BigInt Support
-
-PostgreSQL `BIGINT` values are safely mapped to PHP integers:
-
-```php
-var_dump($driver->queryValue('SELECT ((1::BIGINT << 62) - 1) * 2 + 1');
-// Output: int(9223372036854775807)
-```
-
----
-
-## Notes
-
-- The AST cache reduces repeated parsing overhead and speeds up query rendering.
-- Supports both positional `?`, `$1`, `:1` and named `$param`, `:param` placeholders interchangeably.
-
----
-
 ## Performance
 
-### Rust benchmarks
+Well, it's blazingly fast. Nothing like similar projects written in userland PHP.
 
-Benchmarking pure Rust performance is more useful for optimizing the backend.
+The AST cache eliminates repeated parsing overhead and speeds up query rendering.
+
+JSON is handled with SIMD.
+
+### Rust benchmark suite
+
+It is useful for measuring the performance of backend parts such as AST parsing/rendering.
 
 Command:
 
@@ -639,7 +630,7 @@ Command:
 cargo bench
 ```
 
-Here are M1 Max results for parsing and rendering a hefty query. No caching involved.
+Here are M1 Max results for parsing and rendering a hefty query. No caching, naturally.
 
 ```
      Running benches/benchmark.rs (target/release/deps/benchmark-eaed67cfaa034b35)

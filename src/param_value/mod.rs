@@ -1,4 +1,5 @@
 mod conversion;
+mod json;
 mod quote;
 pub mod utils;
 pub mod write;
@@ -28,6 +29,7 @@ pub enum ParameterValue {
     Bool(bool),
     Array(Vec<ParameterValue>),
     Object(HashMap<String, ParameterValue>),
+    Json(Box<ParameterValue>),
     ByClauseRendered(ByClauseRendered),
     SelectClauseRendered(SelectClauseRendered),
     PaginateClauseRendered(PaginateClauseRendered),
@@ -54,6 +56,7 @@ impl ParameterValue {
             | Self::PaginateClauseRendered(_)
             | Self::Builder(_) => false,
             Self::Null => true,
+            Self::Json(inner) => inner.is_empty(),
         }
     }
 }

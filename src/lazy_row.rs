@@ -1,9 +1,10 @@
 use crate::conversion::json_into_zval;
 
 use ext_php_rs::boxed::ZBox;
+use ext_php_rs::convert::FromZval;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::prelude::*;
-use ext_php_rs::types::{ZendClassObject, Zval};
+use ext_php_rs::types::{ArrayKey, ZendClassObject, Zval};
 use ext_php_rs::zend::ce;
 use ext_php_rs::{php_class, php_impl};
 use std::cell::RefCell;
@@ -91,9 +92,9 @@ impl LazyRow {
     /// Performs the same lazy JSON decoding logic as `__get`.
     pub fn offset_get(&self, offset: &'_ Zval) -> PhpResult<Zval> {
         let mut ht = self.array.borrow_mut();
-        let key = offset.str().ok_or("Expected string offset")?;
+        let key = ArrayKey::from_zval(offset).ok_or("Illegal offset")?;
         let value = ht
-            .get_mut(key)
+            .get_mut(key.clone())
             .ok_or_else(|| PhpException::from("column not found"))?;
 
         if let Some(obj) = value.object() {
@@ -118,7 +119,7 @@ impl LazyRow {
     ///
     /// Throws an exception if insertion fails or if the offset isn't a string.
     pub fn offset_set(&mut self, offset: &'_ Zval, value: &'_ Zval) -> PhpResult {
-        let key = offset.str().ok_or("Expected string offset")?;
+        let key = ArrayKey::from_zval(offset).ok_or("Illegal offset")?;
         self.array
             .borrow_mut()
             .insert(key, value.shallow_clone())
@@ -128,8 +129,10 @@ impl LazyRow {
     /// ArrayAccess unsetter (`unset($row[$key])`).
     ///
     /// Unsetting values is not supported and always returns an error.
-    pub fn offset_unset(&mut self, _offset: &'_ Zval) -> PhpResult {
-        Err("Setting values is not supported".into())
+    pub fn offset_unset(&mut self, offset: &'_ Zval) -> PhpResult {
+        let key = ArrayKey::from_zval(offset).ok_or("Illegal offset")?;
+        let _ = self.array.borrow_mut().remove(key);
+        Ok(())
     }
 }
 
@@ -170,7 +173,7 @@ impl LazyRowJson {
     pub fn take_zval(self_: &ZendClassObject<LazyRowJson>) -> anyhow::Result<Zval> {
         #[cfg(feature = "simd-json")]
         return json_into_zval(
-            simd_json::from_slice::<serde_json::Value>(&mut self_.raw.borrow().to_owned())?,
+            simd_json::from_slice::<serde_json::Value>(self_.raw.borrow_mut().as_mut_slice())?,
             self_.assoc,
         );
         #[cfg(not(feature = "simd-json"))]

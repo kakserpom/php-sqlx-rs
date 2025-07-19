@@ -5,7 +5,7 @@ use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable, Zval};
 use strum_macros::Display;
 
-/// Registers the `PaginateClause` and `PaginateClauseRendered` classes
+/// Registers the `OrClause` class and `OR_` function
 /// with the provided PHP module builder.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module.class::<OrClause>().function(wrap_function!(or_))
@@ -25,7 +25,7 @@ pub enum OrClauseItem {
 }
 
 /// Represents the supported SQL `JOIN` types.
-#[derive(Debug, Clone, Copy, Display)]
+#[derive(Debug, Clone, Display)]
 pub enum JoinType {
     #[strum(to_string = "INNER")]
     Inner,

@@ -22,17 +22,18 @@ mod prepared_query;
 pub mod query_builder;
 pub mod select_clause;
 
-pub mod driver_factory;
-pub mod utils;
 mod dbms;
+pub mod driver_factory;
+mod types;
+pub mod utils;
 
+use dbms::{mssql, mysql, postgres};
 use ext_php_rs::prelude::*;
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
-use dbms::{mssql, mysql, postgres};
 
 /// Global runtime for executing async `SQLx` queries from sync context.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
@@ -49,24 +50,33 @@ const DEFAULT_TEST_BEFORE_ACQUIRE: bool = false;
 pub use dbms::mysql::{MySqlDriver, MySqlPreparedQuery};
 
 #[php_module]
-pub fn module(module: ModuleBuilder) -> ModuleBuilder {
-    let module = select_clause::build(module);
-    let module = by_clause::build(module);
-    let module = paginate_clause::build(module);
-    let module = query_builder::build(module);
-    let module = driver_factory::build(module);
+pub fn module(mut module: ModuleBuilder) -> ModuleBuilder {
+    module = select_clause::build(module);
+    module = by_clause::build(module);
+    module = paginate_clause::build(module);
+    module = query_builder::build(module);
+    module = driver_factory::build(module);
+    module = types::build(module);
 
     #[cfg(feature = "mysql")]
-    let module = mysql::build(module);
+    {
+        module = mysql::build(module);
+    }
 
     #[cfg(feature = "postgres")]
-    let module = postgres::build(module);
+    {
+        module = postgres::build(module);
+    }
 
     #[cfg(feature = "mssql")]
-    let module = mssql::build(module);
+    {
+        module = mssql::build(module);
+    }
 
     #[cfg(feature = "lazy-row")]
-    let module = lazy_row::build(module);
+    {
+        module = lazy_row::build(module);
+    }
 
     module
 }

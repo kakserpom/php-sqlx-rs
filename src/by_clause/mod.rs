@@ -1,3 +1,4 @@
+use crate::ast::Settings;
 use crate::utils::ident::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::builders::ModuleBuilder;
@@ -5,7 +6,11 @@ use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::HashMap;
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
-use crate::ast::Settings;
+
+/// Registers `ByClause` and `ByClauseRendered` with the PHP module.
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<ByClause>().class::<ByClauseRendered>()
+}
 
 /// Represents a dynamic ORDER BY / GROUP BY clause generator.
 ///
@@ -191,11 +196,7 @@ impl ByClauseRendered {
     }
 
     #[inline]
-    pub(crate) fn write_sql_to(
-        &self,
-        sql: &mut String,
-        settings: &Settings,
-    ) -> anyhow::Result<()> {
+    pub(crate) fn write_sql_to(&self, sql: &mut String, settings: &Settings) -> anyhow::Result<()> {
         for (
             i,
             ByClauseRenderedField {
@@ -221,9 +222,4 @@ impl ByClauseRendered {
         }
         Ok(())
     }
-}
-
-/// Registers `ByClause` and `ByClauseRendered` with the PHP module.
-pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<ByClause>().class::<ByClauseRendered>()
 }

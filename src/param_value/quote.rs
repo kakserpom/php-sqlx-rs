@@ -61,6 +61,7 @@ impl ParameterValue {
 
             Self::Int(i) => i.to_string(),
             Self::Float(f) => f.to_string(),
+            Self::Json(pv) => escape_sql_string(pv.to_json()?.as_str(), settings),
 
             Self::Bool(b) => String::from(if settings.booleans_as_literals {
                 if *b { "TRUE" } else { "FALSE" }

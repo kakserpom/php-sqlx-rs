@@ -8,6 +8,10 @@ use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ZendClassObject, Zval};
 use url::Url;
 
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<DriverFactory>().class::<DriverOptions>()
+}
+
 #[php_class]
 #[php(name = "Sqlx\\DriverFactory")]
 pub struct DriverFactory;
@@ -56,8 +60,4 @@ impl DriverFactory {
             }
         }
     }
-}
-
-pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<DriverFactory>().class::<DriverOptions>()
 }

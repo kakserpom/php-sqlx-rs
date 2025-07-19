@@ -2,6 +2,7 @@ use crate::by_clause::ByClauseRendered;
 use crate::paginate_clause::PaginateClauseRendered;
 use crate::param_value::ParameterValue;
 use crate::select_clause::SelectClauseRendered;
+use crate::types::JsonWrapper;
 use ext_php_rs::convert::{FromZval, IntoZval};
 use ext_php_rs::flags::DataType;
 use ext_php_rs::types::{ZendClassObject, ZendHashTable, Zval};
@@ -49,6 +50,7 @@ impl IntoZval for ParameterValue {
     /// Returns an error if value insertion fails.
     fn set_zval(self, zv: &mut Zval, persistent: bool) -> ext_php_rs::error::Result<()> {
         match self {
+            Self::Json(pv) => Self::set_zval(*pv, zv, persistent)?,
             Self::String(str) => zv.set_string(str.as_str(), persistent)?,
             Self::Int(i64) => zv.set_long(i64),
             Self::Float(f64) => zv.set_double(f64),
@@ -135,6 +137,11 @@ impl FromZval<'_> for ParameterValue {
                             .and_then(|x| x.obj.as_ref())?
                             .to_owned(),
                     )),
+                    "Sqlx\\JsonWrapper" => Some(Self::Json(
+                        ZendClassObject::<JsonWrapper>::from_zend_obj(obj)
+                            .and_then(|x| x.obj.as_ref())
+                            .map(|x| Box::new(x.pv.clone()))?,
+                    )),
                     "stdClass" => Some(Self::Object(
                         obj.get_properties()
                             .ok()?
@@ -169,6 +176,7 @@ impl Serialize for ParameterValue {
         S: Serializer,
     {
         match self {
+            Self::Json(pv) => pv.serialize(serializer),
             Self::Null => serializer.serialize_none(),
             Self::String(s) => serializer.serialize_str(s),
             Self::Int(i) => serializer.serialize_i64(*i),
