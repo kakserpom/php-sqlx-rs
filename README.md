@@ -609,7 +609,7 @@ array(1) {
 
 ## Performance
 
-Well, it's blazingly fast. Nothing like similar projects written in userland PHP.
+Well, it's fast. Nothing like similar projects written in userland PHP.
 
 The AST cache eliminates repeated parsing overhead and speeds up query rendering.
 
@@ -625,7 +625,7 @@ Command:
 cargo bench
 ```
 
-Here are M1 Max results for parsing and rendering a hefty query. No caching, naturally.
+M1 Max results for parsing and rendering **without** AST caching:
 
 ```
 Ast::parse_small        time:   [2.2591 µs 2.2661 µs 2.2744 µs]
@@ -646,7 +646,7 @@ Found 8 outliers among 100 measurements (8.00%)
 
 ### PHP benchmarks
 
-Command:
+Run:
 
 ```shell
 cd benches
@@ -662,13 +662,21 @@ docker build . -t php-sqlx-benches
 docker run php-sqlx-benches
 ```
 
-M1 Max results:
+M1 Max results for parsing and rendering **with** AST caching:
 
 ```
     benchDrySmall...........................I0 - Mo1.246μs (±0.00%)
     benchDryBig.............................I0 - Mo2.906μs (±0.00%)
     benchSelect1kRows.......................I0 - Mo2.126ms (±0.00%)
 ```
+
+## Running Tests
+
+```bash
+cargo test
+```
+
+---
 
 ## License
 
