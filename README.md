@@ -1,18 +1,13 @@
 # SQLx PHP Extension
 
-The extension is powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), enabling safe, fast, and expressive
-database access with additional SQL syntax. Bundled with a [**query builder**](QUERY-BUILDER.md).
+The extension is powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), built
+using [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It enables safe, fast, and expressive
+database access with additional SQL syntax. It comes with a powerful [query builder](QUERY-BUILDER.md).
 
-**Postgres**, **MySQL** and **Mssql** are supported.
+**Postgres**, **MySQL** and **Mssql** protocols are natively supported. Other protocols may require a custom wrapper.
 
-The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBM systems
-without any compromise on performance. The author's not big on PHP, but as a security researcher he understood the
-necessity of modernizing the toolkit of great many PHP developers. The idea came up, and bish bash bosh, a couple of
-weekends later the project was all but done. More to come.
-
-The project is still kind of experimental, so any feedback/ideas will be greatly appreciated!
-
-It's built using [ext-php-rs](https://github.com/davidcole1340/ext-php-rs).
+The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
+without any compromise on performance.
 
 ## Features
 
@@ -633,27 +628,23 @@ cargo bench
 Here are M1 Max results for parsing and rendering a hefty query. No caching, naturally.
 
 ```
-     Running benches/benchmark.rs (target/release/deps/benchmark-eaed67cfaa034b35)
+
+     Running benches/benchmark.rs (target/release/deps/benchmark-df0bed6edcff8267)
 Gnuplot not found, using plotters backend
-Ast::parse_small        time:   [2.5877 µs 2.5928 µs 2.5981 µs]
-                        change: [−0.4151% −0.0902% +0.2146%] (p = 0.57 > 0.05)
-                        No change in performance detected.
-Found 3 outliers among 100 measurements (3.00%)
-  1 (1.00%) low mild
-  1 (1.00%) high mild
-  1 (1.00%) high severe
-
-Ast::parse_big          time:   [7.2626 µs 7.2785 µs 7.2958 µs]
-                        change: [+0.1364% +0.4485% +0.7694%] (p = 0.00 < 0.05)
-                        Change within noise threshold.
-Found 3 outliers among 100 measurements (3.00%)
-  2 (2.00%) high mild
-  1 (1.00%) high severe
-
-Ast::render_big         time:   [1.9188 µs 1.9215 µs 1.9243 µs]
+Ast::parse_small        time:   [2.2591 µs 2.2661 µs 2.2744 µs]
 Found 5 outliers among 100 measurements (5.00%)
-  5 (5.00%) high mild
+  3 (3.00%) high mild
+  2 (2.00%) high severe
 
+Ast::parse_big          time:   [6.6006 µs 6.6175 µs 6.6361 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+
+Ast::render_big         time:   [607.02 ns 608.43 ns 610.11 ns]
+Found 8 outliers among 100 measurements (8.00%)
+  4 (4.00%) high mild
+  4 (4.00%) high severe
 ```
 
 ### PHP benchmarks
