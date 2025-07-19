@@ -4,6 +4,7 @@
 #![allow(clippy::must_use_candidate)]
 #![cfg_attr(windows, feature(abi_vectorcall))]
 
+#[cfg(not(debug_assertions))]
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
