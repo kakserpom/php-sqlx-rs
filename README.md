@@ -613,7 +613,7 @@ Well, it's blazingly fast. Nothing like similar projects written in userland PHP
 
 The AST cache eliminates repeated parsing overhead and speeds up query rendering.
 
-JSON is handled with SIMD.
+JSON decoding is lazy (on-demand) with optional [SIMD](https://docs.rs/simd-json/latest/simd_json/) support.
 
 ### Rust benchmark suite
 
