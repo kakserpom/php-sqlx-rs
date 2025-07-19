@@ -323,7 +323,7 @@ $query = $driver->builder()
 The builder supports most SQL clauses:
 
 * `select()`, `from()`, `where()`, `groupBy()`, `orderBy()`, `having()`
-* `insert()`, `values()`, `valuesMany()`, `returning()`
+* `insertInto()`, `values()`, `valuesMany()`, `returning()`
 * `update()`, `set()`
 * `deleteFrom()`, `using()`
 * `with()`, `withRecursive()`

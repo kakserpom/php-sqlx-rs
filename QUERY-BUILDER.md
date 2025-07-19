@@ -19,7 +19,10 @@ Use `builder()` to start a fluent query. Every method returns the builder instan
 $builder->select("*")->from("users")->where(["active" => true]);
 ```
 
-Note: `builder()` creates a fresh new query builder instance (not a clone), useful for building subqueries.
+`$builder->builder()` creates a fresh new query builder instance (not a clone), useful for building subqueries.
+
+Keep in mind that the query builder does not guarantee correctness of your query, every method you call just appends 
+a piece to your query. You need to call them in the right order.
 
 ---
 
@@ -242,4 +245,92 @@ $builder->forUpdate();
 $builder->forShare();
 ```
 
-...
+---
+
+## INSERT / REPLACE / UPDATE / DELETE Queries
+
+### insertInto()
+
+```php
+$builder->insertInto("users");
+```
+
+Appends an `INSERT INTO` clause to the query.
+
+You can follow it with `set()` or `values()` to define inserted values.
+
+---
+
+### replaceInto()
+
+```php
+$builder->replaceInto("users");
+```
+
+Appends a `REPLACE INTO` clause (MySQL-specific). Use `set()` or `values()` afterward.
+
+---
+
+### deleteFrom()
+
+```php
+$builder->deleteFrom("users");
+```
+
+Starts a `DELETE FROM` clause. Can be used with `where()` and `using()` (for PostgreSQL-style joins):
+
+```php
+$builder->deleteFrom("sessions")->using("users")->where([
+    "sessions.user_id = users.id",
+    ["users.active", "=", false],
+]);
+```
+
+---
+
+### update()
+
+```php
+$builder->update("users");
+```
+
+Starts an `UPDATE` statement targeting the given table.
+
+Use in combination with `set()` and `where()`:
+
+```php
+$builder->update("users")
+  ->set(["name" => "John", "active" => true])
+  ->where(["id" => 123]);
+```
+
+---
+
+### set()
+
+```php
+$builder->set(["column" => "value"]);
+```
+
+Specifies column-value pairs for `UPDATE` or `INSERT`:
+
+* Keys are column names
+* Values are literals, placeholders, or subqueries
+
+Example:
+
+```php
+$builder->insertInto("users")->set([
+  "name" => "Alice",
+  "created_at" => new Sqlx\Now()
+]);
+```
+
+---
+
+Let me know if you want to also document:
+
+* `values()` for insert
+* `onConflictDoUpdate()` and `onDuplicateKeyUpdate()`
+* `returning()` for PostgreSQL / MSSQL inserts/updates/deletes
+  ...
