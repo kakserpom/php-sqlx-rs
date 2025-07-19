@@ -665,9 +665,9 @@ docker run php-sqlx-benches
 M1 Max results:
 
 ```
-    benchDrySmall...........................I0 - Mo2.009μs (±0.00%)
-    benchDryBig.............................I0 - Mo5.105μs (±0.00%)
-    benchSelect1kRows.......................I0 - Mo927.888μs (±0.00%)
+    benchDrySmall...........................I0 - Mo1.246μs (±0.00%)
+    benchDryBig.............................I0 - Mo2.906μs (±0.00%)
+    benchSelect1kRows.......................I0 - Mo2.126ms (±0.00%)
 ```
 
 ## License

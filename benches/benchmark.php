@@ -16,7 +16,7 @@ class BasicBenchmark
     }
 
 /**
-     * @Revs(100000)
+     * @Revs(1000000)
      */
     public function benchDrySmall(): void
     {
@@ -30,7 +30,7 @@ LIMIT :limit',
     }
 
     /**
-     * @Revs(100000)
+     * @Revs(1000000)
      */
     public function benchDryBig(): void
     {
