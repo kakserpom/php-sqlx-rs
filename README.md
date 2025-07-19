@@ -628,9 +628,6 @@ cargo bench
 Here are M1 Max results for parsing and rendering a hefty query. No caching, naturally.
 
 ```
-
-     Running benches/benchmark.rs (target/release/deps/benchmark-df0bed6edcff8267)
-Gnuplot not found, using plotters backend
 Ast::parse_small        time:   [2.2591 µs 2.2661 µs 2.2744 µs]
 Found 5 outliers among 100 measurements (5.00%)
   3 (3.00%) high mild
