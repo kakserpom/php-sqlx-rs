@@ -135,6 +135,7 @@ macro_rules! php_sqlx_impl_query_builder {
         #[php(name = $class)]
         pub struct $struct {
             pub(crate) query: String,
+            pub(crate) readonly: bool,
             pub(crate) driver_inner: Arc<$driver_inner>,
             pub(crate) placeholders: BTreeSet<String>,
             pub(crate) parameters: BTreeMap<String, ParameterValue>,
@@ -181,11 +182,19 @@ macro_rules! php_sqlx_impl_query_builder {
                     $crate::utils::adhoc_php_class_implements($class, $interface);
                 });
                 Self {
+                    readonly: driver_inner.is_readonly(),
                     driver_inner,
                     placeholders: Default::default(),
                     parameters: Default::default(),
                     query: Default::default(),
                 }
+            }
+
+            fn _write_op_guard(&self) -> anyhow::Result<()> {
+                if self.readonly {
+                    bail!("You cannot write to a replica.");
+                }
+                Ok(())
             }
 
             /// Appends a SQL `JOIN` clause to the query with an `ON` condition.
@@ -1174,6 +1183,8 @@ macro_rules! php_sqlx_impl_query_builder {
                 from: &Zval,
                 parameters: Option<HashMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
+
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
@@ -1306,6 +1317,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &Zval,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
                 if let Some(str) = table.str() {
                     if !self_.query.is_empty() {
                         self_.query.push('\n');
@@ -1336,7 +1348,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 set: &Zval,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
-
+                self_._write_op_guard()?;
                 self_.query.push_str("\nSET ");
                 let mut first = true;
 
@@ -1443,11 +1455,42 @@ macro_rules! php_sqlx_impl_query_builder {
                 self.parameters.clone()
             }
 
-            /// Appends a raw SQL fragment to the query without validation.
+            /// Appends a raw SQL fragment to the query without structural validation.
+            ///
+            /// This method allows injecting raw SQL clauses directly into the query. It's intended
+            /// for advanced use cases such as vendor-specific syntax, subqueries, or complex expressions
+            /// not yet supported by the structured builder methods.
             ///
             /// # Arguments
-            /// * `part` - The SQL string to append.
-            /// * `parameters` - Optional parameters to associate with the fragment.
+            ///
+            /// * `part` - A raw SQL string to append to the query. It is inserted **verbatim** into the
+            ///   final SQL output, so it must be syntactically correct and complete.
+            /// * `parameters` - An optional map of named parameters to bind to placeholders within the SQL string.
+            ///   These values **are safely escaped and bound** according to the driver’s placeholder style.
+            ///
+            /// # Returns
+            ///
+            /// Returns a mutable reference to the builder for fluent method chaining.
+            ///
+            /// # Example (PHP)
+            ///
+            /// ```php
+            /// $builder
+            ///     ->select("*")
+            ///     ->from("users")
+            ///     ->raw("WHERE created_at > :after", ["after" => "2024-01-01"]);
+            /// ```
+            ///
+            /// The `:after` placeholder will be safely bound to the provided value,
+            /// using the correct placeholder format for your database (e.g. `$1`, `?`, `@p1`).
+            ///
+            /// # Safety
+            ///
+            /// While `raw()` allows bypassing structural checks, **it remains safe when placeholders are used properly**.
+            /// However, avoid interpolating raw user input directly into the SQL string — prefer bound parameters to
+            /// protect against SQL injection.
+            ///
+            /// Prefer using structured methods like `where()`, `join()`, or `select()` where possible for readability and safety.
             fn raw<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 part: &str,
@@ -1639,6 +1682,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn for_update(
                 self_: &mut ZendClassObject<$struct>,
             ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
                 self_.query.push_str("\nFOR UPDATE");
                 Ok(self_)
             }
@@ -1664,6 +1708,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn for_share(
                 self_: &mut ZendClassObject<$struct>,
             ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
                 self_.query.push_str("\nFOR SHARE");
                 Ok(self_)
             }
@@ -1675,16 +1720,39 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// # Example
             /// ```php
-            /// $builder->insert("users");
+            /// $builder->insertInto("users");
             /// ```
-            fn insert<'a>(
+            fn insert_into<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
                 write!(self_.query, "INSERT INTO {table}")?;
+                Ok(self_)
+            }
+
+
+            /// Appends an `REPLACE INTO` clause to the query.
+            ///
+            /// # Arguments
+            /// * `table` - The name of the target table.
+            ///
+            /// # Example
+            /// ```php
+            /// $builder->insertInto("users");
+            /// ```
+            fn replace_into<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                table: &str,
+            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
+                if !self_.query.is_empty() {
+                    self_.query.push('\n');
+                }
+                write!(self_.query, "REPLACE INTO {table}")?;
                 Ok(self_)
             }
 
@@ -1797,6 +1865,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
