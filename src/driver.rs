@@ -161,7 +161,7 @@ macro_rules! php_sqlx_impl_driver {
             /// ```php
             /// $escaped = $builder->metaQuoteLike("100%_safe");
             /// // Use like:
-            /// $builder->where([["name", "LIKE", "%$escaped%"]]);
+            /// $builder->where([["name", "LIKE", "%{$escaped}%"]]);
             /// ```
             pub fn meta_quote_like(&self, param: ParameterValue) -> anyhow::Result<String> {
                 param.meta_quote_like()

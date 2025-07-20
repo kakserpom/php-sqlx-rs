@@ -21,7 +21,7 @@ $builder->select("*")->from("users")->where(["active" => true]);
 
 `$builder->builder()` creates a fresh new query builder instance (not a clone), useful for building subqueries.
 
-Keep in mind that the query builder does not guarantee correctness of your query, every method you call just appends 
+Keep in mind that the query builder does not guarantee correctness of your query, every method you call just appends
 a piece to your query. You need to call them in the right order.
 
 ---
@@ -322,7 +322,7 @@ Example:
 ```php
 $builder->insertInto("users")->set([
   "name" => "Alice",
-  "created_at" => new Sqlx\Now()
+  "created_at = NOW()",
 ]);
 ```
 
