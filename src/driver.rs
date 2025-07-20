@@ -109,8 +109,8 @@ macro_rules! php_sqlx_impl_driver {
             /// # Returns
             /// Query builder object
             #[must_use]
-            pub fn read_builder(&self) -> $write_query_builder {
-                $write_query_builder::new(self.driver_inner.clone())
+            pub fn read_builder(&self) -> $read_query_builder {
+                $read_query_builder::new(self.driver_inner.clone())
             }
 
             /// Quotes a single scalar value for safe embedding into SQL.

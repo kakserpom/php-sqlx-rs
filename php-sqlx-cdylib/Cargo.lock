@@ -617,7 +617,6 @@ dependencies = [
 [[package]]
 name = "ext-php-rs"
 version = "0.14.2"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=pending_mrs#0d385a4c4b116adca89a1bde2bf78042b75578fc"
 dependencies = [
  "anyhow",
  "bindgen 0.70.1",
@@ -636,11 +635,11 @@ dependencies = [
 [[package]]
 name = "ext-php-rs-derive"
 version = "0.11.2"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=pending_mrs#0d385a4c4b116adca89a1bde2bf78042b75578fc"
 dependencies = [
  "anyhow",
  "convert_case",
  "darling",
+ "itertools 0.14.0",
  "lazy_static",
  "proc-macro2",
  "quote",
