@@ -15,7 +15,7 @@ class BasicBenchmark
       ]);;
     }
 
-/**
+    /**
      * @Revs(1000000)
      */
     public function benchDrySmall(): void
@@ -55,15 +55,5 @@ LIMIT :limit',
          {{ LIMIT :limit }}
          {{ OFFSET :offset }}",
          ["status" => "accepted", "created_after" => "1111111", "order_by" => ($this->byClause)(["name", "desc"]), "limit" => "10"]);
-    }
-    /**
-     * @Revs(1000)
-     */
-    public function benchSelect1kRows(): void
-    {
-        $this->driver->queryColumnDictionary("SELECT
-            gs AS id,
-            md5(random()::TEXT) AS random_string
-          FROM generate_series(1, 1000) AS gs");
     }
 }

@@ -607,6 +607,101 @@ array(1) {
 
 ---
 
+## Interfaces
+
+> ⚠️ **Note:** Due to current limitations in [ext-php-rs](https://github.com/davidcole1340/ext-php-rs),
+> it is not yet possible to declare PHP interfaces directly from within a Rust extension.
+> This feature is [actively being developed](https://github.com/davidcole1340/ext-php-rs/issues/527).
+
+Until this is resolved, you can still benefit from type hints, auto-completion, and `instanceof` checks
+by including the `interfaces.php` stub early in your PHP application:
+
+```php
+require_once '/path/to/sqlx/interfaces.php';
+````
+
+This stub defines the expected interfaces and registers them before any classes from the extension are loaded.
+The extension will **automatically associate** its internal classes with these interfaces at runtime when
+they get instantiated for the first time.
+
+---
+
+### Available Interfaces
+
+```php
+namespace Sqlx;
+
+/**
+ * Represents a database driver (e.g. PostgreSQL, MySQL, SQL Server).
+ *
+ * Drivers expose methods to create builders and manage connections.
+ */
+interface DriverInterface {}
+
+/**
+ * Represents a prepared SQL query that can be executed or fetched.
+ *
+ * Allows safe parameter binding and controlled query execution.
+ */
+interface PreparedQueryInterface {}
+
+/**
+ * Factory for creating query builders and managing connections.
+ *
+ * Handles master/slave configuration and provides both read and write builders.
+ */
+interface FactoryInterface {}
+
+/**
+ * Base interface for fluent SQL query builders.
+ *
+ * Includes methods like `from()`, `where()`, `groupBy()`, `orderBy()`, etc.
+ * Suitable for generic query construction.
+ */
+interface QueryBuilderInterface {}
+
+/**
+ * Interface for read-only query builders.
+ *
+ * Adds `select()`, `limit()`, `offset()`, `forUpdate()`, and other non-mutating clauses.
+ */
+interface ReadQueryBuilderInterface extends QueryBuilderInterface {}
+
+/**
+ * Interface for builders that support INSERT/UPDATE/DELETE queries.
+ *
+ * Extends the read builder with methods like `insertInto()`, `update()`, `deleteFrom()`, and `set()`.
+ */
+interface WriteQueryBuilderInterface extends ReadQueryBuilderInterface {}
+```
+
+---
+
+### Design Philosophy
+
+These interfaces follow the [SOLID principles](https://en.wikipedia.org/wiki/SOLID), particularly:
+
+* **Interface Segregation Principle** – Read and write operations are clearly separated.
+* **Liskov Substitution Principle** – Code working with `ReadQueryBuilderInterface` doesn’t require awareness of
+  mutation.
+* **Dependency Inversion Principle** – You can depend on high-level interfaces (e.g. for mocking or type-constrained
+  injection).
+
+This structure makes it easier to write generic code that works across multiple database types and capabilities.
+For example:
+
+```php
+function exportAsCsv(Sqlx\ReadQueryBuilderInterface $builder): void {
+    $builder->select("*")->from("users");
+    $rows = $builder->fetchAll();
+    // ...
+}
+```
+
+You can later swap in a full `WriteQueryBuilderInterface` without changing the contract.
+
+---
+
 ## Performance
 
 Well, it's fast. Nothing like similar projects written in userland PHP.
@@ -667,7 +762,6 @@ M1 Max results for parsing and rendering **with** AST caching:
 ```
     benchDrySmall...........................I0 - Mo1.246μs (±0.00%)
     benchDryBig.............................I0 - Mo2.906μs (±0.00%)
-    benchSelect1kRows.......................I0 - Mo2.126ms (±0.00%)
 ```
 
 ## Running Tests

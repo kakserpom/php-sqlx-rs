@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::time::Duration;
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct DriverInnerOptions {
     pub(crate) url: Option<String>,
     pub(crate) ast_cache_shard_count: usize,
