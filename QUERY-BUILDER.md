@@ -207,9 +207,17 @@ Additional `LIKE`/`ILIKE` derivatives with auto-escaping of meta-characters (`%`
 | `ENDSWITH` / `NOT ENDSWITH`       | `LIKE %value` / `NOT LIKE %value`     |
 | `IENDSWITH` / `NOT IENDSWITH`     | `ILIKE %value` / `NOT ILIKE %value`   |
 
----
+Example:
 
-Would you like this inserted under the `where()` section or moved into its own "Operators" section in the guide?
+```php
+$driver->builder()
+  ->select('*')
+  ->from('users')->where([
+    ['phone', 'startswith', '+7']
+  ]);
+```
+
+---
 
 ### groupBy()
 
