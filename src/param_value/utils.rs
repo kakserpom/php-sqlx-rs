@@ -63,8 +63,7 @@ where
             ParameterValue::Bool(s) => q.bind(s),
             ParameterValue::Float(s) => q.bind(s),
             ParameterValue::Array(s) => s.iter().try_fold(q, walker)?,
-            // @TODO: values()?
-            ParameterValue::Object(s) => s.values().try_fold(q, walker)?,
+            ParameterValue::Object(_) => q.bind(value.to_json()?),
             ParameterValue::ByClauseRendered(_)
             | ParameterValue::SelectClauseRendered(_)
             | ParameterValue::PaginateClauseRendered(_)

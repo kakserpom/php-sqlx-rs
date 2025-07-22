@@ -1,28 +1,25 @@
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
-        use $crate::ast::{Ast, Settings};
-        use $crate::conversion::Conversion;
-        use $crate::utils::ident::is_valid_ident;
-        use $crate::options::DriverInnerOptions;
-        use $crate::param_value::{ParameterValue, utils::bind_values};
-        use sqlx_oldapi::$database;
-        use sqlx_oldapi::pool::PoolOptions;
-        use $crate::utils::{types::ColumnArgument, hashmap_fold::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped}};
-        use $crate::RUNTIME;
         use anyhow::{anyhow, bail};
-        use ext_php_rs::convert::IntoZval;
-        use ext_php_rs::ffi::zend_array;
-        use ext_php_rs::types::Zval;
+        use ext_php_rs::{convert::IntoZval, ffi::zend_array, types::Zval};
         use itertools::Itertools;
-        use sqlx_oldapi::Error;
-        use sqlx_oldapi::Row;
-        use sqlx_oldapi::pool::Pool;
-        use sqlx_oldapi::Column;
-        use std::collections::HashMap;
-        use threadsafe_lru::LruCache;
-        use sqlx_oldapi::Transaction;
+        use sqlx_oldapi::{$database, Error, Column, Row, Transaction, pool::{Pool, PoolOptions}};
+        use std::collections::BTreeMap;
         use std::sync::RwLock;
+        use threadsafe_lru::LruCache;
+        use $crate::{
+            RUNTIME,
+            ast::{Ast, Settings},
+            conversion::Conversion,
+            options::DriverInnerOptions,
+            param_value::{ParameterValue, utils::bind_values},
+            utils::{
+                ident::is_valid_ident,
+                hashmap_fold::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped},
+                types::ColumnArgument,
+            }
+        };
         pub struct $struct {
             pub pool: Pool<$database>,
             pub ast_cache: LruCache<String, Ast>,
@@ -34,15 +31,18 @@ macro_rules! php_sqlx_impl_driver_inner {
         impl $struct {
             pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
                 let mut pool_options = PoolOptions::<$database>::new()
-                        .max_connections(options.max_connections.into())
-                        .min_connections(options.min_connections)
-                        .max_lifetime(options.max_lifetime)
-                        .idle_timeout(options.idle_timeout)
-                        .test_before_acquire(options.test_before_acquire);
+                    .max_connections(options.max_connections.into())
+                    .min_connections(options.min_connections)
+                    .max_lifetime(options.max_lifetime)
+                    .idle_timeout(options.idle_timeout)
+                    .test_before_acquire(options.test_before_acquire);
                 if let Some(acquire_timeout) = options.acquire_timeout {
                     pool_options = pool_options.acquire_timeout(acquire_timeout);
                 }
-                let url = options.url.clone().ok_or_else(|| anyhow!("URL must be set"))?;
+                let url = options
+                    .url
+                    .clone()
+                    .ok_or_else(|| anyhow!("URL must be set"))?;
                 let pool = RUNTIME.block_on(pool_options.connect(url.as_str()))?;
                 let mut settings = SETTINGS.clone();
                 settings.collapsible_in_enabled = options.collapsible_in_enabled;
@@ -80,29 +80,30 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn execute(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<u64> {
                 let (query, values) = self.render_query(query, parameters)?;
 
                 Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                    let val = RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *tx));
+                    let val = RUNTIME.block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *tx),
+                    );
                     self.place_ongoing_transaction(tx);
                     val
                 } else {
-                    RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.execute(&self.pool))
+                    RUNTIME.block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.execute(&self.pool),
+                    )
                 }
-                    .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
-                    .rows_affected())
-
+                .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
+                .rows_affected())
             }
 
             /// Render the final SQL query and parameters using the AST cache.
             fn render_query(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<(String, Vec<ParameterValue>)> {
                 let parameters = parameters.unwrap_or_default();
                 if let Some(ast) = self.ast_cache.get(query) {
@@ -118,7 +119,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             fn render_query_inline(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<String> {
                 let parameters = parameters.unwrap_or_default();
 
@@ -162,13 +163,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_value(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let row = RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
+                    )
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?;
                 let column_idx: usize = match column {
                     Some(ColumnArgument::Index(i)) => i,
@@ -208,13 +211,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_column(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let mut it = RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
+                    )
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .peekable();
@@ -267,13 +272,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_maybe_value(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 #[allow(clippy::needless_pass_by_value)] column: Option<ColumnArgument>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
+                    )
                     .map(Some)
                     .or_else(|err: Error| match err {
                         Error::RowNotFound => Ok(None),
@@ -322,12 +329,14 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_row(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))?
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
+                    )?
                     .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
             }
 
@@ -350,12 +359,14 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_maybe_row(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool))
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
+                    )
                     .map(Some)
                     .or_else(|err: Error| match err {
                         Error::RowNotFound => Ok(None),
@@ -386,13 +397,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_all(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
+                    )
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| row.into_zval(assoc))
@@ -417,7 +430,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn dry(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(vec![
@@ -429,7 +442,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn dry_inline(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<String> {
                 self.render_query_inline(query, parameters)
             }
@@ -462,13 +475,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))?
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
+                    )?
                     .into_iter()
                     .map(|row| {
                         Ok((
@@ -522,20 +537,22 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_grouped_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
 
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                    let val = RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx));
+                    let val = RUNTIME.block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                    );
                     self.place_ongoing_transaction(tx);
                     val
                 } else {
-                    RUNTIME
-                        .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
+                    RUNTIME.block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
+                    )
                 }
                 .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                 .into_iter()
@@ -588,13 +605,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_grouped_column_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
+                    )
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| {
@@ -638,13 +657,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub fn query_column_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> anyhow::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 RUNTIME
-                    .block_on(bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool))
+                    .block_on(
+                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
+                    )
                     .map_err(|err| anyhow!("{err}\n\nQuery: {query}\n\nValues: {values:?}\n\n"))?
                     .into_iter()
                     .map(|row| {
@@ -664,11 +685,12 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// such as savepoints or commit/rollback. If a transaction is already ongoing,
             /// the behavior depends on the SQL backend (may error or allow nesting).
             pub fn begin(&self) -> anyhow::Result<()> {
-                self.place_ongoing_transaction(RUNTIME
-                    .block_on(self.pool.begin())
-                    .map_err(|err| anyhow!("{err}"))?);
+                self.place_ongoing_transaction(
+                    RUNTIME
+                        .block_on(self.pool.begin())
+                        .map_err(|err| anyhow!("{err}"))?,
+                );
                 Ok(())
-
             }
 
             /// Savepoints allow partial rollbacks without aborting the entire transaction.
@@ -682,7 +704,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(sqlx_oldapi::query(&format!("SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .block_on(
+                            sqlx_oldapi::query(&format!("SAVEPOINT {savepoint}")).execute(&mut *tx),
+                        )
                         .map_err(|err| anyhow!("{err}"));
                     self.place_ongoing_transaction(tx);
                     val?;
@@ -705,7 +729,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(sqlx_oldapi::query(&format!("ROLLBACK TO SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .block_on(
+                            sqlx_oldapi::query(&format!("ROLLBACK TO SAVEPOINT {savepoint}"))
+                                .execute(&mut *tx),
+                        )
                         .map_err(|err| anyhow!("{err}"));
                     self.place_ongoing_transaction(tx);
                     val?;
@@ -728,7 +755,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
-                        .block_on(sqlx_oldapi::query(&format!("RELEASE SAVEPOINT {savepoint}")).execute(&mut *tx))
+                        .block_on(
+                            sqlx_oldapi::query(&format!("RELEASE SAVEPOINT {savepoint}"))
+                                .execute(&mut *tx),
+                        )
                         .map_err(|err| anyhow!("{err}"));
                     self.place_ongoing_transaction(tx);
                     val?;
@@ -761,5 +791,4 @@ macro_rules! php_sqlx_impl_driver_inner {
              ($struct, $database)"
         );
     };
-
 }

@@ -105,26 +105,29 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
 #[macro_export]
 macro_rules! php_sqlx_impl_query_builder {
     ( $struct:ident, $class:literal, $interface:literal, $driver: ident, $driver_inner: ident ) => {
-        use $crate::ast::Ast;
-        use $crate::param_value::ParamsMap;
-        use $crate::query_builder::{OrClause, OrClauseItem};
-        use $crate::select_clause::SelectClauseRendered;
-        use $crate::by_clause::ByClauseRendered;
-        use $crate::param_value::ParameterValue;
-        use $crate::utils::types::ColumnArgument;
-        use $crate::utils::indent_sql::IndentSql;
-        use $crate::query_builder::JoinType;
-        use $crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
-        use anyhow::anyhow;
-        use anyhow::bail;
-        use ext_php_rs::php_impl;
-        use ext_php_rs::prelude::*;
-        use ext_php_rs::types::{ArrayKey, ZendClassObject, Zval};
+
+      use $crate::{
+            ast::Ast,
+            param_value::ParamsMap,
+            query_builder::{OrClause, OrClauseItem},
+            select_clause::SelectClauseRendered,
+            by_clause::ByClauseRendered,
+            param_value::ParameterValue,
+            utils::types::ColumnArgument,
+            utils::indent_sql::IndentSql,
+            query_builder::JoinType,
+            utils::strip_prefix::StripPrefixWordIgnoreAsciiCase
+        };
+        use anyhow::{anyhow, bail};
+        use ext_php_rs::{
+          prelude::*,
+          types::{ArrayKey, ZendClassObject, Zval},
+          convert::FromZval,
+          flags::DataType
+      };
         use std::collections::{BTreeSet, BTreeMap, HashMap};
         use std::fmt::Write;
         use std::sync::{Once, Arc};
-        use ext_php_rs::convert::FromZval;
-        use ext_php_rs::flags::DataType;
         use trim_in_place::TrimInPlace;
 
         /// A prepared SQL query builder.
@@ -212,7 +215,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 join_type: JoinType,
                 table: &str,
                 on: &str,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<()> {
                 if !self.query.is_empty() {
                     self.query.push('\n');
@@ -233,7 +236,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 &mut self,
                 keyword: &str,
                 query: &Zval,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<()> {
                 use ext_php_rs::types::ZendClassObject;
 
@@ -765,7 +768,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
                 on: &str,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Inner, table, on, parameters)?;
                 Ok(self_)
@@ -777,7 +780,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
                 on: &str,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Inner, table, on, parameters)?;
                 Ok(self_)
@@ -788,7 +791,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
                 on: &str,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Left, table, on, parameters)?;
                 Ok(self_)
@@ -799,7 +802,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
                 on: &str,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Right, table, on, parameters)?;
                 Ok(self_)
@@ -810,7 +813,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
                 on: &str,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::FullOuter, table, on, parameters)?;
                 Ok(self_)
@@ -821,7 +824,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
                 on: &str,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Cross, table, on, parameters)?;
                 Ok(self_)
@@ -856,7 +859,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
                 r#as: &Zval,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
@@ -893,7 +896,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn _where<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 r#where: &Zval,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if let Some(part) = r#where.str() {
                     self_.query.push_str("\nWHERE ");
@@ -949,12 +952,12 @@ macro_rules! php_sqlx_impl_query_builder {
                             _ => {
                                 let part = key.to_string();
                                 let ast = self_.driver_inner.parse_query(&part)?;
-                                if ast.has_placeholders() {
+                                if let Some(placeholders) = ast.get_placeholders_if_any() {
                                     let Some(parameters) = value.array() else {
-                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {ast:?}");
+                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {placeholders:?}");
                                     };
                                     let parameters: HashMap<String, ParameterValueWrapper> =
-                                        parameters.try_into().map_err(|err| anyhow!("{err}"))?;
+                                        parameters.try_into().map_err(|err| anyhow!("Conversion error: {err}"))?;
                                     self_._append_ast(&ast, Some(parameters), "where")?;
                                 } else {
                                     self_._append(
@@ -991,7 +994,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn union<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 query: &Zval,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._append_union_clause("UNION", query, parameters)?;
                 Ok(self_)
@@ -1011,7 +1014,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn union_all<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 query: &Zval,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._append_union_clause("UNION ALL", query, parameters)?;
                 Ok(self_)
@@ -1028,7 +1031,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn having<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 having: &Zval,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if let Some(part) = having.str() {
                     self_.query.push_str("\nHAVING ");
@@ -1084,9 +1087,9 @@ macro_rules! php_sqlx_impl_query_builder {
                             _ => {
                                 let part = key.to_string();
                                 let ast = self_.driver_inner.parse_query(&part)?;
-                                if ast.has_placeholders() {
+                                if let Some(placeholders) = ast.get_placeholders_if_any() {
                                     let Some(parameters) = value.array() else {
-                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {ast:?}");
+                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {placeholders:?}");
                                     };
                                     let parameters: HashMap<String, ParameterValueWrapper> =
                                         parameters.try_into().map_err(|err| anyhow!("{err}"))?;
@@ -1181,7 +1184,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn delete_from<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 from: &Zval,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
 
@@ -1213,7 +1216,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn using<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 from: &Zval,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_.query.push_str("\nUSING ");
 
@@ -1280,7 +1283,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 table_and_fields: &str,
                 r#as: &Zval,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
@@ -1494,7 +1497,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn raw<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 part: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 self_._append(
                     part,
@@ -2051,7 +2054,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn from<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 from: &Zval,
-                parameters: Option<HashMap<String, ParameterValueWrapper>>,
+                parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 use ext_php_rs::types::ArrayKey;
 
@@ -2122,7 +2125,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - The query must return at least two columns per row.
             pub fn query_column_dictionary(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, None)
@@ -2143,7 +2146,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Same as `query_column_dictionary`.
             pub fn query_column_dictionary_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, Some(true))
@@ -2164,7 +2167,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Same as `query_column_dictionary`.
             pub fn query_column_dictionary_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, Some(false))
@@ -2191,7 +2194,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - The iteration order of the returned map is **not** guaranteed.
             pub fn query_dictionary(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, None)
@@ -2216,7 +2219,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - The iteration order of the returned map is **not** guaranteed.
             pub fn query_dictionary_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, Some(true))
@@ -2241,7 +2244,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - The iteration order of the returned map is **not** guaranteed.
             pub fn query_dictionary_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, Some(false))
@@ -2258,7 +2261,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Fails if the query fails, or the first column is not scalar.
             pub fn query_grouped_dictionary(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, None)
@@ -2267,7 +2270,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
             pub fn query_grouped_dictionary_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, Some(true))
@@ -2276,7 +2279,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
             pub fn query_grouped_dictionary_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, Some(false))
@@ -2292,7 +2295,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Returns an error if the first column is not convertible to a string.
             pub fn query_grouped_column_dictionary(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(&self.query, parameters, None)
@@ -2305,7 +2308,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Returns an error if the first column is not convertible to a string.
             pub fn query_grouped_column_dictionary_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
@@ -2321,7 +2324,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Returns an error if the first column is not convertible to a string.
             pub fn query_grouped_column_dictionary_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
@@ -2345,7 +2348,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - the runtime fails to execute the query (e.g., task panic or timeout).
             pub fn execute(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<u64> {
                 self.driver_inner.execute(self.query.as_str(), parameters)
             }
@@ -2366,7 +2369,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - conversion to PHP object fails.
             pub fn query_row(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_row(&self.query, parameters, None)
             }
@@ -2377,7 +2380,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - `parameters`: Optional array of indexed/named parameters to bind.
             pub fn query_row_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_row(&self.query, parameters, Some(true))
@@ -2389,7 +2392,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - `parameters`: Optional array of indexed/named parameters to bind.
             pub fn query_row_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_row(&self.query, parameters, Some(false))
@@ -2408,7 +2411,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// For example, syntax errors, type mismatches, or database connection issues.
             pub fn query_maybe_row(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, None)
@@ -2430,7 +2433,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - the row contains unsupported or unconvertible data types.
             pub fn query_maybe_row_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, Some(true))
@@ -2451,7 +2454,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - the row contains unsupported or unconvertible data types.
             pub fn query_maybe_row_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, Some(false))
@@ -2474,7 +2477,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - a column value cannot be converted to PHP.
             pub fn query_column(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
@@ -2495,7 +2498,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Same as `query_column`.
             pub fn query_column_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
@@ -2515,7 +2518,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Same as `query_column`.
             pub fn query_column_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
@@ -2538,7 +2541,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
             pub fn query_all(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner.query_all(&self.query, parameters, None)
             }
@@ -2556,7 +2559,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
             pub fn query_all_assoc(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_all(&self.query, parameters, Some(true))
@@ -2575,7 +2578,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
             pub fn query_all_obj(
                 &self,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_all(&self.query, parameters, Some(false))

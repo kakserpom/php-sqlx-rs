@@ -13,6 +13,23 @@ namespace Sqlx {
      * to render validated column clauses from user input.
      */
     class SelectClause {
+        /**
+         * Cnstructor for `Sqlx\\SelectClause`.
+         *
+         * # Arguments
+         * - `allowed_columns`: Associative array of allowed columns:
+         *    - Numeric keys map to simple column names
+         *    - String keys map to SQL expressions
+         *
+         * # Example
+         * ```php
+         * $select = new Sqlx\\SelectClause([
+         *     "id",
+         *     "name",
+         *     "full_name" => "CONCAT(first, ' ', last)"
+         * ]);
+         * ```
+         */
         public static function allowed(array $allowed_columns): \Sqlx\SelectClause {}
 
         /**
@@ -340,7 +357,7 @@ namespace Sqlx {
          * # Returns
          * Query builder object
          */
-        public function readBuilder(): \Sqlx\MySqlWriteQueryBuilder {}
+        public function readBuilder(): \Sqlx\MySqlReadQueryBuilder {}
 
         /**
          * Quotes a single scalar value for safe embedding into SQL.
@@ -391,7 +408,7 @@ namespace Sqlx {
          * ```php
          * $escaped = $builder->metaQuoteLike("100%_safe");
          * // Use like:
-         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * $builder->where([["name", "LIKE", "%{$escaped}%"]]);
          * ```
          */
         public function metaQuoteLike(mixed $param): string {}
@@ -3464,7 +3481,7 @@ namespace Sqlx {
          * # Returns
          * Query builder object
          */
-        public function readBuilder(): \Sqlx\PgWriteQueryBuilder {}
+        public function readBuilder(): \Sqlx\PgReadQueryBuilder {}
 
         /**
          * Quotes a single scalar value for safe embedding into SQL.
@@ -3515,7 +3532,7 @@ namespace Sqlx {
          * ```php
          * $escaped = $builder->metaQuoteLike("100%_safe");
          * // Use like:
-         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * $builder->where([["name", "LIKE", "%{$escaped}%"]]);
          * ```
          */
         public function metaQuoteLike(mixed $param): string {}
@@ -6588,7 +6605,7 @@ namespace Sqlx {
          * # Returns
          * Query builder object
          */
-        public function readBuilder(): \Sqlx\MssqlWriteQueryBuilder {}
+        public function readBuilder(): \Sqlx\MssqlReadQueryBuilder {}
 
         /**
          * Quotes a single scalar value for safe embedding into SQL.
@@ -6639,7 +6656,7 @@ namespace Sqlx {
          * ```php
          * $escaped = $builder->metaQuoteLike("100%_safe");
          * // Use like:
-         * $builder->where([["name", "LIKE", "%$escaped%"]]);
+         * $builder->where([["name", "LIKE", "%{$escaped}%"]]);
          * ```
          */
         public function metaQuoteLike(mixed $param): string {}

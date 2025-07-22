@@ -3,7 +3,8 @@ use crate::utils::ident::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
-use std::collections::HashMap;
+use itertools::Itertools;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
 
@@ -25,7 +26,7 @@ pub fn build(module: ModuleBuilder) -> ModuleBuilder {
 #[php_class]
 #[php(name = "Sqlx\\ByClause")]
 pub struct ByClause {
-    pub(crate) allowed_columns: HashMap<String, Option<String>>,
+    pub(crate) allowed_columns: BTreeMap<String, Option<String>>,
 }
 
 /// A user-defined ORDER BY column configuration.
@@ -60,22 +61,21 @@ impl ByClause {
         V: Into<String>,
     {
         Ok(Self {
-            allowed_columns: allowed_columns.into_iter().try_fold(
-                HashMap::<String, Option<String>>::new(),
-                |mut map, (key, value)| -> anyhow::Result<_> {
+            allowed_columns: allowed_columns
+                .into_iter()
+                .map(|(key, value)| -> anyhow::Result<_> {
                     let key: String = key.into();
                     let value: String = value.into();
                     if key.parse::<u32>().is_ok() {
                         if !is_valid_ident(&value) {
                             bail!("Invalid identifier: {}", value);
                         }
-                        map.insert(value, None);
+                        Ok((value, None))
                     } else {
-                        map.insert(key, Some(value));
+                        Ok((key, Some(value)))
                     }
-                    Ok(map)
-                },
-            )?,
+                })
+                .try_collect()?,
         })
     }
 

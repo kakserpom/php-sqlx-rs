@@ -1,4 +1,4 @@
-use crate::param_value::{write::ParamVecWriteSqlTo, ParameterValue, ParamsMap, Placeholder};
+use crate::param_value::{ParameterValue, ParamsMap, Placeholder, write::ParamVecWriteSqlTo};
 use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
 use std::collections::BTreeSet;
@@ -95,13 +95,14 @@ pub struct Settings {
 }
 
 impl Ast {
-    pub fn has_placeholders(&self) -> bool {
+    pub fn get_placeholders_if_any(&self) -> Option<&Vec<Placeholder>> {
         match self {
-            Ast::Root { branches, .. } => {
-                branches.len() != 1 || !matches!(branches.first(), Some(Ast::Raw(_)))
-            }
-            Ast::Nested(vec) => vec.len() == 1 && matches!(vec.first(), Some(Ast::Raw(_))),
-            _ => true,
+            Ast::Root {
+                required_placeholders,
+                ..
+            } if !required_placeholders.is_empty() => Some(required_placeholders),
+            Ast::Root { .. } => None,
+            _ => unimplemented!("get_root_placeholders_if_any may only be called on Ast::Root"),
         }
     }
 

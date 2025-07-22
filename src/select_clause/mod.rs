@@ -2,7 +2,8 @@ use crate::ast::Settings;
 use crate::utils::ident::is_valid_ident;
 use anyhow::bail;
 use ext_php_rs::{ZvalConvert, php_class, php_impl, prelude::ModuleBuilder};
-use std::collections::HashMap;
+use itertools::Itertools;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
 
@@ -21,7 +22,7 @@ pub fn build(module: ModuleBuilder) -> ModuleBuilder {
 #[php(name = "Sqlx\\SelectClause")]
 pub struct SelectClause {
     /// Mapping of allowed column names to optional SQL expressions.
-    pub(crate) allowed_columns: HashMap<String, Option<String>>,
+    pub(crate) allowed_columns: BTreeMap<String, Option<String>>,
 }
 
 impl SelectClause {
@@ -40,26 +41,24 @@ impl SelectClause {
         K: Into<String>,
         V: Into<String>,
     {
-        let map = allowed_columns.into_iter().try_fold(
-            HashMap::<String, Option<String>>::new(),
-            |mut map, (key, value)| -> anyhow::Result<_> {
-                let key: String = key.into();
-                let value: String = value.into();
-                // Numeric keys mean value is the column name
-                if key.parse::<u32>().is_ok() {
-                    if !is_valid_ident(&value) {
-                        bail!("Invalid identifier: {}", value);
-                    }
-                    map.insert(value, None);
-                } else {
-                    // Key is column alias, value is SQL expression
-                    map.insert(key, Some(value));
-                }
-                Ok(map)
-            },
-        )?;
         Ok(Self {
-            allowed_columns: map,
+            allowed_columns: allowed_columns
+                .into_iter()
+                .map(|(key, value)| -> anyhow::Result<_> {
+                    let key: String = key.into();
+                    let value: String = value.into();
+                    // Numeric keys mean value is the column name
+                    if key.parse::<u32>().is_ok() {
+                        if !is_valid_ident(&value) {
+                            bail!("Invalid identifier: {}", value);
+                        }
+                        Ok((value, None))
+                    } else {
+                        // Key is column alias, value is SQL expression
+                        Ok((key, Some(value)))
+                    }
+                })
+                .try_collect()?,
         })
     }
 
@@ -101,11 +100,25 @@ impl SelectClause {
     ///     "full_name" => "CONCAT(first, ' ', last)"
     /// ]);
     /// ```
-    pub fn __construct(allowed_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+    pub fn __construct(allowed_columns: BTreeMap<String, String>) -> anyhow::Result<Self> {
         Self::_new(allowed_columns)
     }
-
-    pub fn allowed(allowed_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+    /// Cnstructor for `Sqlx\\SelectClause`.
+    ///
+    /// # Arguments
+    /// - `allowed_columns`: Associative array of allowed columns:
+    ///    - Numeric keys map to simple column names
+    ///    - String keys map to SQL expressions
+    ///
+    /// # Example
+    /// ```php
+    /// $select = new Sqlx\\SelectClause([
+    ///     "id",
+    ///     "name",
+    ///     "full_name" => "CONCAT(first, ' ', last)"
+    /// ]);
+    /// ```
+    pub fn allowed(allowed_columns: BTreeMap<String, String>) -> anyhow::Result<Self> {
         Self::_new(allowed_columns)
     }
 

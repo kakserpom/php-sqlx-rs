@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::time::Duration;
 
@@ -98,7 +98,7 @@ impl DriverOptions {
 #[derive(ZvalConvert)]
 pub enum DriverOptionsArg {
     Url(String),
-    Options(HashMap<String, ParameterValue>),
+    Options(BTreeMap<String, ParameterValue>),
 }
 impl DriverOptionsArg {
     /// Converts the argument into a validated `DriverInnerOptions` instance.
@@ -243,9 +243,9 @@ impl DriverOptionsArg {
 #[test]
 fn test_driver_options() {
     use crate::options::{DriverOptions, DriverOptionsArg};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::time::Duration;
-    let driver_options = DriverOptionsArg::Options(HashMap::from_iter([
+    let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
         (
             DriverOptions::OPT_URL.into(),
             "postgres://user:pass@host/database".into(),

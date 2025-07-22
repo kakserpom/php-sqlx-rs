@@ -7,7 +7,7 @@ pub mod write;
 use crate::by_clause::ByClauseRendered;
 use crate::paginate_clause::PaginateClauseRendered;
 use crate::select_clause::SelectClauseRendered;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// A type alias representing the name of a placeholder in SQL templates.
 pub type Placeholder = String;
@@ -28,7 +28,7 @@ pub enum ParameterValue {
     Float(f64),
     Bool(bool),
     Array(Vec<ParameterValue>),
-    Object(HashMap<String, ParameterValue>),
+    Object(BTreeMap<String, ParameterValue>),
     Json(Box<ParameterValue>),
     ByClauseRendered(ByClauseRendered),
     SelectClauseRendered(SelectClauseRendered),

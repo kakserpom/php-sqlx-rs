@@ -15,7 +15,7 @@ macro_rules! php_sqlx_impl_driver {
         use itertools::Itertools;
         pub use prepared_query::$prepared_query;
         use read_query_builder::$read_query_builder;
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
         use std::sync::{Arc, LazyLock, Once};
         use write_query_builder::$write_query_builder;
         use $crate::options::DriverInnerOptions;
@@ -194,7 +194,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_row(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_row(query, parameters, None)
             }
@@ -217,7 +217,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_value(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
@@ -227,7 +227,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_value_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
@@ -256,7 +256,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_value_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
@@ -281,7 +281,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_maybe_value(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
@@ -305,7 +305,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_maybe_value_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
@@ -329,7 +329,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_maybe_value_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
@@ -351,7 +351,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_row_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_row(query, parameters, Some(true))
             }
@@ -371,7 +371,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_row_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_row(query, parameters, Some(false))
             }
@@ -391,7 +391,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_maybe_row(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_maybe_row(query, parameters, None)
             }
@@ -413,7 +413,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_maybe_row_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(query, parameters, Some(true))
@@ -436,7 +436,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_maybe_row_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(query, parameters, Some(false))
@@ -460,7 +460,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_column(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
@@ -482,7 +482,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_column_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
@@ -504,7 +504,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_column_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner
@@ -529,7 +529,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_all(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner.query_all(query, parameters, None)
             }
@@ -549,7 +549,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_all_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner.query_all(query, parameters, Some(true))
             }
@@ -569,7 +569,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_all_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner.query_all(query, parameters, Some(false))
             }
@@ -599,7 +599,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner.query_dictionary(query, parameters, None)
             }
@@ -624,7 +624,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_dictionary_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(query, parameters, Some(true))
@@ -650,7 +650,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_dictionary_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(query, parameters, Some(false))
@@ -696,7 +696,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_grouped_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(query, parameters, None)
@@ -712,7 +712,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_grouped_dictionary_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(query, parameters, Some(true))
@@ -728,7 +728,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_grouped_dictionary_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(query, parameters, Some(false))
@@ -759,7 +759,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_column_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(query, parameters, None)
@@ -782,7 +782,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_column_dictionary_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(query, parameters, Some(true))
@@ -805,7 +805,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_column_dictionary_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(query, parameters, Some(false))
@@ -816,7 +816,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_grouped_column_dictionary_assoc(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(query, parameters, Some(true))
@@ -827,7 +827,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_grouped_column_dictionary_obj(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(query, parameters, Some(false))
@@ -853,7 +853,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn query_grouped_column_dictionary(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(query, parameters, None)
@@ -876,7 +876,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn execute(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<u64> {
                 self.driver_inner.execute(query, parameters)
             }
@@ -898,7 +898,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn insert(
                 &self,
                 table: &str,
-                row: HashMap<String, ParameterValue>,
+                row: BTreeMap<String, ParameterValue>,
             ) -> anyhow::Result<u64> {
                 self.execute(
                     &format!(
@@ -928,7 +928,7 @@ macro_rules! php_sqlx_impl_driver {
             pub fn dry(
                 &self,
                 query: &str,
-                parameters: Option<HashMap<String, ParameterValue>>,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<Vec<Zval>> {
                 self.driver_inner.dry(query, parameters)
             }
