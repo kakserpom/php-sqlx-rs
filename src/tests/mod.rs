@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 /// Runs the given PHP script via the `php` CLI and returns an error if it fails.
+#[allow(dead_code)]
 fn run_php_file(php_file: PathBuf) -> Result<String> {
     use anyhow::{anyhow, bail};
     use std::process::Command;
@@ -37,6 +38,7 @@ fn run_php_file(php_file: PathBuf) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).parse()?)
 }
 
+#[allow(dead_code)]
 fn run_php_example(name: &str) -> Result<String> {
     run_php_file(
         Path::new(
@@ -47,6 +49,7 @@ fn run_php_example(name: &str) -> Result<String> {
     )
 }
 
+#[allow(dead_code)]
 fn run_php_test(name: &str) -> Result<String> {
     run_php_file(
         Path::new(

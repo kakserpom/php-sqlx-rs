@@ -617,7 +617,7 @@ dependencies = [
 [[package]]
 name = "ext-php-rs"
 version = "0.14.2"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=pending_mrs#48e8a95581d77ef9326f8bf8bd840080eda3ab55"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=pending_mrs#8b09bb8857f1f2c18077ea23fdd8b66947f113fa"
 dependencies = [
  "anyhow",
  "bindgen 0.70.1",
@@ -636,7 +636,7 @@ dependencies = [
 [[package]]
 name = "ext-php-rs-derive"
 version = "0.11.2"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=pending_mrs#48e8a95581d77ef9326f8bf8bd840080eda3ab55"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=pending_mrs#8b09bb8857f1f2c18077ea23fdd8b66947f113fa"
 dependencies = [
  "anyhow",
  "convert_case",

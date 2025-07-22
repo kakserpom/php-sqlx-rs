@@ -102,7 +102,7 @@ impl ParameterValue {
 mod tests {
     use crate::ast::Settings;
     use crate::param_value::ParameterValue;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_meta_quote_like() {
@@ -184,7 +184,7 @@ mod tests {
     fn test_quote_json_object() {
         let settings = Settings::default();
 
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("key".into(), ParameterValue::String("val".into()));
         let value = ParameterValue::Object(map);
         let quoted = value.quote(&settings).unwrap();
