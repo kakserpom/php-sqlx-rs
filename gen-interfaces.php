@@ -90,5 +90,4 @@ PHP;
     $out .= "}\n";
 }
 
-file_put_contents('interfaces.generated.php', $out);
-echo "Generated interfaces.generated.php\n";
+file_put_contents('interfaces.php', $out);

@@ -858,20 +858,20 @@ macro_rules! php_sqlx_impl_query_builder {
             fn with<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
-                r#as: &Zval,
+                as_: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
                 write!(self_.query, "WITH {table} AS (")?;
-                if let Some(part) = r#as.str() {
+                if let Some(part) = as_.str() {
                      self_._append(
                         part,
                         parameters,
                         "with",
                     )?;
-                } else if let Some($struct {query, parameters, ..}) = r#as
+                } else if let Some($struct {query, parameters, ..}) = as_
                     .object()
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
                     .and_then(|x| x.obj.as_ref())
@@ -895,13 +895,13 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Throws an exception if the input is not valid.
             fn _where<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
-                r#where: &Zval,
+                where_: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
-                if let Some(part) = r#where.str() {
+                if let Some(part) = where_.str() {
                     self_.query.push_str("\nWHERE ");
                     self_._append(&part.indent_sql(false), parameters, "where")?;
-                } else if let Some(array) = r#where.array() {
+                } else if let Some(array) = where_.array() {
                     self_.query.push_str("\nWHERE ");
                     for (i, (key, value)) in array.iter().enumerate() {
                         if i > 0 {
@@ -1282,20 +1282,20 @@ macro_rules! php_sqlx_impl_query_builder {
             fn with_recursive<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table_and_fields: &str,
-                r#as: &Zval,
+                as_: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
                 write!(self_.query, "WITH RECURSIVE {table_and_fields} AS (\n")?;
-                if let Some(part) = r#as.str() {
+                if let Some(part) = as_.str() {
                      self_._append(
                         part,
                         parameters,
                         "with_recursive",
                     )?;
-                } else if let Some($struct {query, parameters, ..}) = r#as
+                } else if let Some($struct {query, parameters, ..}) = as_
                     .object()
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
                     .and_then(|x| x.obj.as_ref())

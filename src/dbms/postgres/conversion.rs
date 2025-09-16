@@ -109,10 +109,10 @@ impl Conversion for PgRow {
             "_JSON" | "_JSONB" => self
                 .try_get::<Vec<serde_json::Value>, _>(column_ordinal)
                 .map_err(|err| anyhow!("{err:?}"))
-                .map(|x| {
+                .map(|x| -> Vec<_> {
                     x.into_iter()
                         .map(|x| json_into_zval(x, associative_arrays))
-                        .collect::<Vec<_>>()
+                        .collect()
                 })?
                 .into_zval(false)
                 .map_err(|err| anyhow!("{err:?}"))?,
