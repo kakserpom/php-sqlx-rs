@@ -745,7 +745,7 @@ macro_rules! php_sqlx_impl_query_builder {
             }
 
 
-            /// Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+            /// Appends an `ON DUPLICATE KEY UPDATE` clause to the query (`MySQL`).
             ///
             /// # Arguments
             /// * `set` – An array representing fields and values to update.
@@ -1703,7 +1703,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// ```
             ///
             /// # Notes
-            /// - Supported in PostgreSQL and some MySQL configurations.
+            /// - Supported in `PostgreSQL` and some `MySQ`L configurations.
             /// - Ensures rows cannot be updated or deleted by other transactions while locked.
             ///
             /// # Returns
@@ -2007,7 +2007,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// ```
             ///
             /// # Notes
-            /// - This is mainly supported in PostgreSQL.
+            /// - This is mainly supported in `PostgreSQL`.
             /// - Use with `INSERT`, `UPDATE`, or `DELETE`.
             fn returning<'a>(
                 self_: &'a mut ZendClassObject<$struct>,

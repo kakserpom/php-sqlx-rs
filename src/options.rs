@@ -47,7 +47,7 @@ impl Default for DriverInnerOptions {
 }
 
 #[php_class]
-/// Represents the available options for SQLx drivers (`PgDriver`, `MySqlDriver`, `MssqlDriver`).
+/// Represents the available options for `SQLx` drivers (`PgDriver`, `MySqlDriver`, `MssqlDriver`).
 ///
 /// These constants are used as keys when constructing an options array passed to `DriverFactory::make(...)`.
 #[php(name = "Sqlx\\DriverOptions")]

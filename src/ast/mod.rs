@@ -345,20 +345,19 @@ impl Ast {
                             *positional_counter += 1;
                             consumed_len = original_len - rest_after_in.len() + 1;
                             name_opt = Some(positional_counter.to_string());
-                        } else if let Some(stripped) = rest_after_in.strip_prefix("(") {
-                            if let Some(close_idx) = stripped.find(')') {
-                                let inside = &stripped[..close_idx].trim();
-                                if let Some(id) = inside.strip_prefix(':') {
-                                    name_opt = Some(id.to_string());
-                                } else if let Some(id) = inside.strip_prefix('$') {
-                                    name_opt = Some(id.to_string());
-                                } else if *inside == "?" {
-                                    *positional_counter += 1;
-                                    name_opt = Some(positional_counter.to_string());
-                                }
-                                consumed_len =
-                                    original_len - rest_after_in.len() + 1 + close_idx + 1;
+                        } else if let Some(stripped) = rest_after_in.strip_prefix("(")
+                            && let Some(close_idx) = stripped.find(')')
+                        {
+                            let inside = &stripped[..close_idx].trim();
+                            if let Some(id) = inside.strip_prefix(':') {
+                                name_opt = Some(id.to_string());
+                            } else if let Some(id) = inside.strip_prefix('$') {
+                                name_opt = Some(id.to_string());
+                            } else if *inside == "?" {
+                                *positional_counter += 1;
+                                name_opt = Some(positional_counter.to_string());
                             }
+                            consumed_len = original_len - rest_after_in.len() + 1 + close_idx + 1;
                         }
 
                         if let Some(name) = name_opt {
@@ -385,41 +384,39 @@ impl Ast {
                 }
 
                 // --- :named placeholder ---
-                if let Some(after) = rest.strip_prefix(":") {
-                    if let Some((name, rem)) = after
+                if let Some(after) = rest.strip_prefix(":")
+                    && let Some((name, rem)) = after
                         .char_indices()
                         .take_while(|(_, c)| c.is_alphanumeric() || *c == '_')
                         .map(|(i, _)| i)
                         .last()
                         .map(|i| after.split_at(i + 1))
-                    {
-                        if !buf.is_empty() {
-                            branches.push(Ast::Raw(std::mem::take(&mut buf)));
-                        }
-                        branches.push(Ast::Placeholder(name.to_string()));
-                        placeholders_out.push(name.to_string());
-                        rest = rem;
-                        continue;
+                {
+                    if !buf.is_empty() {
+                        branches.push(Ast::Raw(std::mem::take(&mut buf)));
                     }
+                    branches.push(Ast::Placeholder(name.to_string()));
+                    placeholders_out.push(name.to_string());
+                    rest = rem;
+                    continue;
                 }
 
                 // --- $named placeholder ---
-                if let Some(after) = rest.strip_prefix("$") {
-                    if let Some((name, rem)) = after
+                if let Some(after) = rest.strip_prefix("$")
+                    && let Some((name, rem)) = after
                         .char_indices()
                         .take_while(|(_, c)| c.is_alphanumeric() || *c == '_')
                         .map(|(i, _)| i)
                         .last()
                         .map(|i| after.split_at(i + 1))
-                    {
-                        if !buf.is_empty() {
-                            branches.push(Ast::Raw(std::mem::take(&mut buf)));
-                        }
-                        branches.push(Ast::Placeholder(name.to_string()));
-                        placeholders_out.push(name.to_string());
-                        rest = rem;
-                        continue;
+                {
+                    if !buf.is_empty() {
+                        branches.push(Ast::Raw(std::mem::take(&mut buf)));
                     }
+                    branches.push(Ast::Placeholder(name.to_string()));
+                    placeholders_out.push(name.to_string());
+                    rest = rem;
+                    continue;
                 }
 
                 // --- ? positional placeholder ---
@@ -501,7 +498,9 @@ impl Ast {
             index: &mut usize,
         ) -> anyhow::Result<()> {
             match node {
-                Ast::Root { branches, .. } | Ast::Nested(branches) => {
+                Ast::Root { branches, .. }
+                | Ast::Nested(branches)
+                | Ast::ConditionalBlock { branches, .. } => {
                     for b in branches {
                         walk(b, sql, placeholders, param_map, parameters_bucket, index)?;
                     }
@@ -513,11 +512,6 @@ impl Ast {
                         parameters_bucket.insert(new_name.clone(), value);
                     }
                     write!(sql, ":{new_name}")?;
-                }
-                Ast::ConditionalBlock { branches, .. } => {
-                    for b in branches {
-                        walk(b, sql, placeholders, param_map, parameters_bucket, index)?;
-                    }
                 }
                 Ast::InClause { expr, placeholder } | Ast::NotInClause { expr, placeholder } => {
                     let new_name = resolve_placeholder_name(placeholder, placeholders, index);
@@ -723,16 +717,15 @@ impl Ast {
             required_placeholders,
             ..
         } = self
-        {
-            if let Some(missing_placeholder) = required_placeholders.iter().find(|&ph| {
+            && let Some(missing_placeholder) = required_placeholders.iter().find(|&ph| {
                 if let Some(value) = values.get(ph) {
                     value.is_empty()
                 } else {
                     true
                 }
-            }) {
-                bail!("Missing required placeholder `{missing_placeholder}`");
-            }
+            })
+        {
+            bail!("Missing required placeholder `{missing_placeholder}`");
         }
         walk(self, &values, &mut sql, &mut out_vals, settings)?;
         #[cfg(test)]

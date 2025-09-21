@@ -21,11 +21,10 @@ impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
             if s.len() < prefix_len || !s[..prefix_len].eq_ignore_ascii_case(prefix) {
                 return None;
             }
-            if let Some(c) = &s[prefix_len..].chars().next() {
-                if c.is_alphanumeric() {
+            if let Some(c) = &s[prefix_len..].chars().next()
+                && c.is_alphanumeric() {
                     return None;
                 }
-            }
             s = &s[prefix_len..];
         }
         Some(s)

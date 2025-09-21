@@ -148,7 +148,7 @@ impl ByClause {
         Self::allowed(allowed_columns)
     }
 
-    /// `__invoke` magic for apply().
+    /// `__invoke` magic for `apply()`.
     #[must_use]
     pub fn __invoke(&self, columns: Vec<ByClauseColumnDefinition>) -> ByClauseRendered {
         self.render(columns)

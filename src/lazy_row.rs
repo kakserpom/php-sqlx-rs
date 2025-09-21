@@ -87,7 +87,7 @@ impl LazyRow {
         }
     }
 
-    /// ArrayAccess getter (`$row[$column]`).
+    /// `ArrayAccess` getter (`$row[$column]`).
     ///
     /// Performs the same lazy JSON decoding logic as `__get`.
     pub fn offset_get(&self, offset: &'_ Zval) -> PhpResult<Zval> {
@@ -111,7 +111,7 @@ impl LazyRow {
         }
     }
 
-    /// ArrayAccess setter (`$row[$key] = $value`).
+    /// `ArrayAccess` setter (`$row[$key] = $value`).
     ///
     /// Inserts or updates the given key with the provided `Zval`.
     ///
@@ -126,7 +126,7 @@ impl LazyRow {
             .map_err(|_| PhpException::from("unable to set"))
     }
 
-    /// ArrayAccess unsetter (`unset($row[$key])`).
+    /// `ArrayAccess` unsetter (`unset($row[$key])`).
     ///
     /// Unsetting values is not supported and always returns an error.
     pub fn offset_unset(&mut self, offset: &'_ Zval) -> PhpResult {
