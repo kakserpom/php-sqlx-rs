@@ -25,10 +25,10 @@ pub mod select_clause;
 
 mod dbms;
 pub mod driver_factory;
-mod types;
-pub mod utils;
 #[cfg(test)]
 mod tests;
+mod types;
+pub mod utils;
 
 use dbms::{mssql, mysql, postgres};
 use ext_php_rs::prelude::*;
@@ -54,7 +54,7 @@ pub use dbms::mysql::{MySqlDriver, MySqlPreparedQuery};
 
 #[php_module]
 pub fn module(mut module: ModuleBuilder) -> ModuleBuilder {
-    module = module.set_name("sqlx").set_version(env!("CARGO_PKG_VERSION"));
+    module = module.name("sqlx").version(env!("CARGO_PKG_VERSION"));
     module = select_clause::build(module);
     module = by_clause::build(module);
     module = paginate_clause::build(module);
