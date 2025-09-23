@@ -9,6 +9,36 @@ database access with additional SQL syntax. It comes with a powerful [query buil
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
 without any compromise on performance.
 
+## Getting Started
+
+### Installation
+
+Install with [`cargo-php`](https://github.com/davidcole1340/ext-php-rs):
+
+```bash
+cargo install cargo-php --locked
+cd php-sqlx-cdylib
+```
+
+For macOS:
+
+```bash
+export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | tr -d '\n')
+export RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup"
+#export RUSTFLAGS="-Zmacro-backtrace -Zproc-macro-backtrace -Clink-arg=-undefined -Clink-arg=dynamic_lookup"
+cargo install cargo-php --locked
+cd php-sqlx-cdylib
+cargo php install --release --yes
+```
+
+### Usage example
+
+```php
+$driver = Sqlx\DriverFactory::make("postgres://user:pass@localhost/db");
+
+$posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
+```
+
 ## Features
 
 - AST-based SQL augmentation (e.g., conditional blocks)
@@ -19,7 +49,7 @@ without any compromise on performance.
 - Pagination with `PAGINATE`
 - Safe and robust `SELECT`
 - SQL transactions are supported in full
-- Powerful Query Builder.
+- Powerful Query Builder
 - Native JSON support (with lazy decoding and [SIMD](https://docs.rs/simd-json/latest/simd_json/) 🚀)
 - Optional persistent connections (with connection pooling)
 
@@ -302,7 +332,9 @@ var_dump($driver->queryRow(
 // Output: string(3) "bar"
 ```
 
-## [Query Builder](QUERY-BUILDER.md) overview
+## Query Builder overview
+
+> See the full [Query Builder guide](QUERY-BUILDER.md).
 
 You can fluently build SQL queries using `$driver->builder()`:
 
@@ -368,34 +400,6 @@ You can also preview the rendered SQL and parameters without executing:
 
 ```php
 var_dump((string) $query); // SQL with placeholders rendered
-```
-
-<br />
-
-### ❗️[Query Builder guide](QUERY-BUILDER.md)❗
-
-<br />
-
----
-
-## Installation
-
-Install with [`cargo-php`](https://github.com/davidcole1340/ext-php-rs):
-
-```bash
-cargo install cargo-php --locked
-cd php-sqlx-cdylib
-```
-
-For macOS:
-
-```bash
-export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | tr -d '\n')
-export RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup"
-#export RUSTFLAGS="-Zmacro-backtrace -Zproc-macro-backtrace -Clink-arg=-undefined -Clink-arg=dynamic_lookup"
-cargo install cargo-php --locked
-cd php-sqlx-cdylib
-cargo php install --release --yes
 ```
 
 ---
@@ -505,7 +509,7 @@ $driver = Sqlx\DriverFactory::make([
 Prepared queries expose exactly the same surface as the driver, but without the SQL argument:
 
 ```php
-$query = $driver->prepare("SELECT * FROM logs WHERE level = $level");
+$query = $driver->prepare('SELECT * FROM logs WHERE level = $level');
 $rows  = $query->queryAll(['level' => 'warn']);
 ```
 
