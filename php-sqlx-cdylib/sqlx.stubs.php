@@ -1,6 +1,6 @@
 <?php
 
-// Stubs for php-sqlx
+// Stubs for sqlx
 
 namespace Sqlx {
     function OR_(array $or): \Sqlx\OrClause {}
@@ -102,7 +102,7 @@ namespace Sqlx {
         const DESC = null;
 
         /**
-         * `__invoke` magic for apply().
+         * `__invoke` magic for `apply()`.
          */
         public function __invoke(array $columns): \Sqlx\ByClauseRendered {}
 
@@ -249,7 +249,7 @@ namespace Sqlx {
     }
 
     /**
-     * Represents the available options for SQLx drivers (`PgDriver`, `MySqlDriver`, `MssqlDriver`).
+     * Represents the available options for `SQLx` drivers (`PgDriver`, `MySqlDriver`, `MssqlDriver`).
      *
      * These constants are used as keys when constructing an options array passed to `DriverFactory::make(...)`.
      */
@@ -1544,7 +1544,7 @@ namespace Sqlx {
         public function onConflict(mixed $target, ?mixed $set): \Sqlx\MySqlReadQueryBuilder {}
 
         /**
-         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (`MySQL`).
          *
          * # Arguments
          * * `set` – An array representing fields and values to update.
@@ -1610,7 +1610,7 @@ namespace Sqlx {
          * ]);
          * ```
          */
-        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
+        public function with(string $table, mixed $as_, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
 
         /**
          * Appends a `WHERE` clause to the query.
@@ -1622,7 +1622,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $r#where, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
+        public function where(mixed $where_, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -1753,7 +1753,7 @@ namespace Sqlx {
          * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
          * ```
          */
-        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
+        public function withRecursive(string $table_and_fields, mixed $as_, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
 
         /**
          * Appends a `UPDATE` clause to the query.
@@ -1934,7 +1934,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Supported in `PostgreSQL` and some `MySQ`L configurations.
          * - Ensures rows cannot be updated or deleted by other transactions while locked.
          *
          * # Returns
@@ -2067,7 +2067,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - This is mainly supported in PostgreSQL.
+         * - This is mainly supported in `PostgreSQL`.
          * - Use with `INSERT`, `UPDATE`, or `DELETE`.
          */
         public function returning(mixed $fields): \Sqlx\MySqlReadQueryBuilder {}
@@ -2541,7 +2541,7 @@ namespace Sqlx {
         public function onConflict(mixed $target, ?mixed $set): \Sqlx\MySqlWriteQueryBuilder {}
 
         /**
-         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (`MySQL`).
          *
          * # Arguments
          * * `set` – An array representing fields and values to update.
@@ -2607,7 +2607,7 @@ namespace Sqlx {
          * ]);
          * ```
          */
-        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
+        public function with(string $table, mixed $as_, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
 
         /**
          * Appends a `WHERE` clause to the query.
@@ -2619,7 +2619,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $r#where, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
+        public function where(mixed $where_, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -2750,7 +2750,7 @@ namespace Sqlx {
          * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
          * ```
          */
-        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
+        public function withRecursive(string $table_and_fields, mixed $as_, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
 
         /**
          * Appends a `UPDATE` clause to the query.
@@ -2931,7 +2931,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Supported in `PostgreSQL` and some `MySQ`L configurations.
          * - Ensures rows cannot be updated or deleted by other transactions while locked.
          *
          * # Returns
@@ -3064,7 +3064,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - This is mainly supported in PostgreSQL.
+         * - This is mainly supported in `PostgreSQL`.
          * - Use with `INSERT`, `UPDATE`, or `DELETE`.
          */
         public function returning(mixed $fields): \Sqlx\MySqlWriteQueryBuilder {}
@@ -4668,7 +4668,7 @@ namespace Sqlx {
         public function onConflict(mixed $target, ?mixed $set): \Sqlx\PgReadQueryBuilder {}
 
         /**
-         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (`MySQL`).
          *
          * # Arguments
          * * `set` – An array representing fields and values to update.
@@ -4734,7 +4734,7 @@ namespace Sqlx {
          * ]);
          * ```
          */
-        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
+        public function with(string $table, mixed $as_, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
 
         /**
          * Appends a `WHERE` clause to the query.
@@ -4746,7 +4746,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $r#where, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
+        public function where(mixed $where_, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -4877,7 +4877,7 @@ namespace Sqlx {
          * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
          * ```
          */
-        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
+        public function withRecursive(string $table_and_fields, mixed $as_, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
 
         /**
          * Appends a `UPDATE` clause to the query.
@@ -5058,7 +5058,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Supported in `PostgreSQL` and some `MySQ`L configurations.
          * - Ensures rows cannot be updated or deleted by other transactions while locked.
          *
          * # Returns
@@ -5191,7 +5191,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - This is mainly supported in PostgreSQL.
+         * - This is mainly supported in `PostgreSQL`.
          * - Use with `INSERT`, `UPDATE`, or `DELETE`.
          */
         public function returning(mixed $fields): \Sqlx\PgReadQueryBuilder {}
@@ -5665,7 +5665,7 @@ namespace Sqlx {
         public function onConflict(mixed $target, ?mixed $set): \Sqlx\PgWriteQueryBuilder {}
 
         /**
-         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (`MySQL`).
          *
          * # Arguments
          * * `set` – An array representing fields and values to update.
@@ -5731,7 +5731,7 @@ namespace Sqlx {
          * ]);
          * ```
          */
-        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
+        public function with(string $table, mixed $as_, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
 
         /**
          * Appends a `WHERE` clause to the query.
@@ -5743,7 +5743,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $r#where, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
+        public function where(mixed $where_, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -5874,7 +5874,7 @@ namespace Sqlx {
          * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
          * ```
          */
-        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
+        public function withRecursive(string $table_and_fields, mixed $as_, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
 
         /**
          * Appends a `UPDATE` clause to the query.
@@ -6055,7 +6055,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Supported in `PostgreSQL` and some `MySQ`L configurations.
          * - Ensures rows cannot be updated or deleted by other transactions while locked.
          *
          * # Returns
@@ -6188,7 +6188,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - This is mainly supported in PostgreSQL.
+         * - This is mainly supported in `PostgreSQL`.
          * - Use with `INSERT`, `UPDATE`, or `DELETE`.
          */
         public function returning(mixed $fields): \Sqlx\PgWriteQueryBuilder {}
@@ -7409,7 +7409,7 @@ namespace Sqlx {
         public function onConflict(mixed $target, ?mixed $set): \Sqlx\MssqlReadQueryBuilder {}
 
         /**
-         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (`MySQL`).
          *
          * # Arguments
          * * `set` – An array representing fields and values to update.
@@ -7475,7 +7475,7 @@ namespace Sqlx {
          * ]);
          * ```
          */
-        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
+        public function with(string $table, mixed $as_, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
 
         /**
          * Appends a `WHERE` clause to the query.
@@ -7487,7 +7487,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $r#where, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
+        public function where(mixed $where_, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -7618,7 +7618,7 @@ namespace Sqlx {
          * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
          * ```
          */
-        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
+        public function withRecursive(string $table_and_fields, mixed $as_, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
 
         /**
          * Appends a `UPDATE` clause to the query.
@@ -7799,7 +7799,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Supported in `PostgreSQL` and some `MySQ`L configurations.
          * - Ensures rows cannot be updated or deleted by other transactions while locked.
          *
          * # Returns
@@ -7932,7 +7932,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - This is mainly supported in PostgreSQL.
+         * - This is mainly supported in `PostgreSQL`.
          * - Use with `INSERT`, `UPDATE`, or `DELETE`.
          */
         public function returning(mixed $fields): \Sqlx\MssqlReadQueryBuilder {}
@@ -8406,7 +8406,7 @@ namespace Sqlx {
         public function onConflict(mixed $target, ?mixed $set): \Sqlx\MssqlWriteQueryBuilder {}
 
         /**
-         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (MySQL).
+         * Appends an `ON DUPLICATE KEY UPDATE` clause to the query (`MySQL`).
          *
          * # Arguments
          * * `set` – An array representing fields and values to update.
@@ -8472,7 +8472,7 @@ namespace Sqlx {
          * ]);
          * ```
          */
-        public function with(string $table, mixed $r#as, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
+        public function with(string $table, mixed $as_, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
 
         /**
          * Appends a `WHERE` clause to the query.
@@ -8484,7 +8484,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $r#where, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
+        public function where(mixed $where_, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -8615,7 +8615,7 @@ namespace Sqlx {
          * $builder->withRecursive("cte(id, parent)", "SELECT ...", [...]);
          * ```
          */
-        public function withRecursive(string $table_and_fields, mixed $r#as, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
+        public function withRecursive(string $table_and_fields, mixed $as_, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
 
         /**
          * Appends a `UPDATE` clause to the query.
@@ -8796,7 +8796,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - Supported in PostgreSQL and some MySQL configurations.
+         * - Supported in `PostgreSQL` and some `MySQ`L configurations.
          * - Ensures rows cannot be updated or deleted by other transactions while locked.
          *
          * # Returns
@@ -8929,7 +8929,7 @@ namespace Sqlx {
          * ```
          *
          * # Notes
-         * - This is mainly supported in PostgreSQL.
+         * - This is mainly supported in `PostgreSQL`.
          * - Use with `INSERT`, `UPDATE`, or `DELETE`.
          */
         public function returning(mixed $fields): \Sqlx\MssqlWriteQueryBuilder {}
@@ -9351,14 +9351,14 @@ namespace Sqlx {
         public function __get(string $name): mixed {}
 
         /**
-         * ArrayAccess getter (`$row[$column]`).
+         * `ArrayAccess` getter (`$row[$column]`).
          *
          * Performs the same lazy JSON decoding logic as `__get`.
          */
         public function offsetGet(mixed $offset): mixed {}
 
         /**
-         * ArrayAccess setter (`$row[$key] = $value`).
+         * `ArrayAccess` setter (`$row[$key] = $value`).
          *
          * Inserts or updates the given key with the provided `Zval`.
          *
@@ -9369,7 +9369,7 @@ namespace Sqlx {
         public function offsetSet(mixed $offset, mixed $value): mixed {}
 
         /**
-         * ArrayAccess unsetter (`unset($row[$key])`).
+         * `ArrayAccess` unsetter (`unset($row[$key])`).
          *
          * Unsetting values is not supported and always returns an error.
          */
