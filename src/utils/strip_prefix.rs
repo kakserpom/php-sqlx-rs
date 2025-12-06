@@ -18,13 +18,17 @@ impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
             }
 
             let prefix_len = prefix.len();
-            if s.len() < prefix_len || !s[..prefix_len].eq_ignore_ascii_case(prefix) {
+            if s.len() < prefix_len
+                || !s.is_char_boundary(prefix_len)
+                || !s[..prefix_len].eq_ignore_ascii_case(prefix)
+            {
                 return None;
             }
             if let Some(c) = &s[prefix_len..].chars().next()
-                && c.is_alphanumeric() {
-                    return None;
-                }
+                && !c.is_whitespace() && !c.is_ascii_punctuation()
+            {
+                return None;
+            }
             s = &s[prefix_len..];
         }
         Some(s)
