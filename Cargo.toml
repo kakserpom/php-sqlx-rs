@@ -13,16 +13,16 @@ ext-php-rs = { git = "https://github.com/davidcole1340/ext-php-rs", branch = "ma
 itertools = "0.14"
 mimalloc = { version = "0.1", optional = true }
 parse_duration = "2.1.1"
-serde_json = "1.0.140"
+serde_json = "1.0"
 simd-json = { optional = true, version = "0.16" }
 #sqlx-oldapi = { path = "sqlx-oldapi", features = ["json", "runtime-tokio-rustls"] }`
 sqlx-oldapi = { git = "https://github.com/sqlpage/sqlx-oldapi", branch = "main", features = ["json", "runtime-tokio-rustls"] }
-threadsafe-lru = "0.1.2"
-tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
+threadsafe-lru = "0.1"
+tokio = { version = "1.48", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
-serde = { version = "1.0.219", features = ["derive"] }
-strum = { version = "0.27.1", features = ["derive", "strum_macros"] }
-strum_macros = "0.27.1"
+serde = { version = "1.0", features = ["derive"] }
+strum = { version = "0.27", features = ["derive", "strum_macros"] }
+strum_macros = "0.27"
 url = "2.5.4"
 
 [features]
