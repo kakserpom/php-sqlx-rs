@@ -5,10 +5,7 @@ edition = "2024"
 description = "A modern feature-rich SQL driver for PHP."
 
 [dependencies]
-anyhow = "1.0"
 dashmap = "6.1.0"
-#ext-php-rs = { git = "https://github.com/davidcole1340/ext-php-rs", branch = "master", features = ["anyhow"] }
-#ext-php-rs = { path = "ext-php-rs", features = ["anyhow"] }
 ext-php-rs = "0.15"
 itertools = "0.14"
 mimalloc = { version = "0.1", optional = true }
@@ -21,7 +18,6 @@ threadsafe-lru = "0.1"
 tokio = { version = "1.48", features = ["rt-multi-thread"] }
 trim-in-place = "0.1.7"
 serde = { version = "1.0", features = ["derive"] }
-strum = { version = "0.27", features = ["derive", "strum_macros"] }
 strum_macros = "0.27"
 url = "2.5.4"
 
@@ -45,7 +41,7 @@ mimalloc = ["dep:mimalloc"]
 
 [dev-dependencies]
 collapse = "0.1.2"
-criterion = "0.7"
+criterion = "0.8.1"
 
 [[bench]]
 name = "benchmark"

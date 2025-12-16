@@ -320,12 +320,6 @@ impl From<Error> for PhpException {
     }
 }
 
-// Convenience conversion from anyhow::Error for gradual migration
-impl From<anyhow::Error> for Error {
-    fn from(err: anyhow::Error) -> Self {
-        Self::Other(err.to_string())
-    }
-}
 
 impl From<std::num::TryFromIntError> for Error {
     fn from(err: std::num::TryFromIntError) -> Self {

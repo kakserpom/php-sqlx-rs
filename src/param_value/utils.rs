@@ -18,7 +18,7 @@ use sqlx_oldapi::{Database, Encode, Type};
 ///   result in an error
 ///
 /// # Errors
-/// Returns an `anyhow::Error` if an unsupported value is encountered or if recursive binding fails.
+/// Returns a `crate::error::Error` if an unsupported value is encountered or if recursive binding fails.
 ///
 /// # Example
 /// ```rust
