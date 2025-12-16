@@ -1,3 +1,30 @@
+//! ORDER BY / GROUP BY clause validation and rendering for php-sqlx.
+//!
+//! This module provides safe sorting/grouping that validates user input against
+//! a whitelist of allowed columns. It prevents SQL injection by ensuring only
+//! pre-approved columns can be used in ORDER BY or GROUP BY clauses.
+//!
+//! # PHP Usage
+//!
+//! ```php
+//! // Define allowed sort columns
+//! $orderBy = new Sqlx\ByClause([
+//!     'name',
+//!     'age',
+//!     'total_posts' => 'COUNT(posts.*)'  // Custom expression
+//! ]);
+//!
+//! // Apply user input from request
+//! $rendered = $orderBy->input([
+//!     ['name', 'ASC'],
+//!     ['total_posts', 'DESC']
+//! ]);
+//! ```
+//!
+//! # Constants
+//!
+//! The `ByClause` class exposes `ASC` and `DESC` constants for sort direction.
+
 use crate::ast::Settings;
 use crate::utils::ident::is_valid_ident;
 use anyhow::bail;

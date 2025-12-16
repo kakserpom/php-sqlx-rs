@@ -1,10 +1,34 @@
+//! Pagination clause generation for php-sqlx.
+//!
+//! This module provides safe pagination that converts page numbers to SQL
+//! LIMIT/OFFSET clauses with configurable constraints on items per page.
+//!
+//! # PHP Usage
+//!
+//! ```php
+//! // Create paginator with defaults (1-20 items per page)
+//! $paginate = new Sqlx\PaginateClause();
+//!
+//! // Configure limits
+//! $paginate->minPerPage(5);   // At least 5 items
+//! $paginate->maxPerPage(100); // At most 100 items
+//!
+//! // Apply user input (page 2, 25 items per page)
+//! $rendered = $paginate->input(2, 25);
+//! // Generates: LIMIT 25 OFFSET 50
+//! ```
+//!
+//! # Safety
+//!
+//! The paginator clamps `per_page` to configured min/max values, preventing
+//! users from requesting excessive result sets.
+
 use crate::ast::Settings;
 use crate::param_value::ParameterValue;
 use anyhow::bail;
 use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 
-/// Registers the `PaginateClause` and `PaginateClauseRendered` classes
-/// with the provided PHP module builder.
+/// Registers the `PaginateClause` and `PaginateClauseRendered` classes with the PHP module builder.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module
         .class::<PaginateClause>()

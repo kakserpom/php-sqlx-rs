@@ -1,3 +1,9 @@
+//! Case-insensitive prefix stripping for SQL parsing.
+//!
+//! This module provides the [`StripPrefixWordIgnoreAsciiCase`] trait for checking
+//! SQL keywords while respecting word boundaries. Used by the AST parser to identify
+//! clauses like `IN`, `NOT IN`, `PAGINATE`, etc.
+
 /// Trait providing case-insensitive stripping of word prefixes from a string.
 ///
 /// This is useful for checking SQL keywords like `NOT IN (...)`

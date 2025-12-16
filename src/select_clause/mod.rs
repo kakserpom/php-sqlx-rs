@@ -1,3 +1,25 @@
+//! SELECT clause validation and rendering for php-sqlx.
+//!
+//! This module provides safe column selection that validates user input against
+//! a whitelist of allowed columns. It prevents SQL injection by ensuring only
+//! pre-approved columns can be selected.
+//!
+//! # PHP Usage
+//!
+//! ```php
+//! // Define allowed columns
+//! $select = new Sqlx\SelectClause([
+//!     'id',
+//!     'name',
+//!     'email',
+//!     'full_name' => "CONCAT(first_name, ' ', last_name)"
+//! ]);
+//!
+//! // Apply user input (only allowed columns are included)
+//! $rendered = $select->input(['id', 'name', 'unknown_column']);
+//! // Result: only 'id' and 'name' are selected
+//! ```
+
 use crate::ast::Settings;
 use crate::utils::ident::is_valid_ident;
 use anyhow::bail;
@@ -7,8 +29,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use trim_in_place::TrimInPlace;
 
-/// Registers the `SelectClause` and `SelectClauseRendered`
-/// classes with the given PHP module builder.
+/// Registers the `SelectClause` and `SelectClauseRendered` classes with the PHP module builder.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module
         .class::<SelectClause>()

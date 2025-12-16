@@ -1,3 +1,37 @@
+//! Inner database driver implementation macro for php-sqlx.
+//!
+//! This module provides the [`php_sqlx_impl_driver_inner!`] macro that generates the
+//! core database driver logic with connection pooling, query execution, and transaction
+//! management. Each database type uses this macro to create its inner driver.
+//!
+//! The inner driver handles:
+//! - Connection pool management with SQLx
+//! - AST-based query rendering with LRU caching
+//! - Transaction stack for nested transaction support
+//! - All query execution methods (`query_row`, `query_all`, etc.)
+//!
+//! This is separated from the outer driver (in `driver.rs`) to allow the PHP bindings
+//! to wrap the inner driver with `Arc` for shared ownership across prepared queries
+//! and query builders.
+
+/// Generates the inner database driver implementation.
+///
+/// This macro creates the core driver struct with connection pooling, query execution,
+/// and transaction management for a specific database backend.
+///
+/// # Arguments
+///
+/// - `$struct` - The Rust struct name for the inner driver (e.g., `PgInnerDriver`)
+/// - `$database` - The SQLx database type (e.g., `Postgres`, `MySql`, `Mssql`)
+///
+/// # Generated Structure
+///
+/// The macro generates a struct with:
+/// - `pool`: SQLx connection pool
+/// - `ast_cache`: LRU cache for parsed AST queries
+/// - `options`: Driver configuration
+/// - `tx_stack`: Transaction stack for nested transaction support
+/// - `settings`: AST rendering settings
 #[macro_export]
 macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
@@ -20,15 +54,28 @@ macro_rules! php_sqlx_impl_driver_inner {
                 types::ColumnArgument,
             }
         };
+        /// Core database driver containing connection pool and query execution logic.
+        ///
+        /// This struct is typically wrapped in `Arc` and shared across the outer driver,
+        /// prepared queries, and query builders.
         pub struct $struct {
+            /// SQLx connection pool for efficient connection reuse.
             pub pool: Pool<$database>,
+            /// LRU cache for parsed SQL AST, reducing parse overhead for repeated queries.
             pub ast_cache: LruCache<String, Ast>,
+            /// Driver configuration options.
             pub options: DriverInnerOptions,
+            /// Stack of active transactions for nested transaction support.
             pub tx_stack: RwLock<Vec<Transaction<'static, $database>>>,
+            /// AST rendering settings (placeholder style, collapsible IN, etc.).
             pub settings: Settings,
         }
 
         impl $struct {
+            /// Creates a new inner driver with the given configuration.
+            ///
+            /// This establishes the connection pool and initializes the AST cache.
+            /// The URL must be set in options or an error is returned.
             pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
                 let mut pool_options = PoolOptions::<$database>::new()
                     .max_connections(options.max_connections.into())
@@ -58,6 +105,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                 })
             }
 
+            /// Returns whether this driver is configured for read-only mode.
+            ///
+            /// Read-only mode is useful for replica connections where writes should be prevented.
             #[inline]
             pub fn is_readonly(&self) -> bool {
                 self.options.readonly
@@ -99,7 +149,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 .rows_affected())
             }
 
-            /// Render the final SQL query and parameters using the AST cache.
+            /// Renders the final SQL query and parameters using the AST cache.
+            ///
+            /// Looks up the query in the cache; if not found, parses it and caches the AST.
+            /// Returns the rendered SQL string with positional placeholders and the parameter values.
             fn render_query(
                 &self,
                 query: &str,
@@ -116,6 +169,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
             }
 
+            /// Renders a query with all parameters inlined (no placeholders).
+            ///
+            /// This is used for debugging or logging purposes. The rendered query
+            /// contains literal values instead of positional placeholders.
             fn render_query_inline(
                 &self,
                 query: &str,
@@ -137,6 +194,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
             }
 
+            /// Parses a SQL query into an AST, using the cache if available.
+            ///
+            /// Returns a cached AST if the query was previously parsed, otherwise
+            /// parses the query, caches the result, and returns it.
             pub fn parse_query(&self, query: &str) -> anyhow::Result<Ast> {
                 if let Some(ast) = self.ast_cache.get(query) {
                     Ok(ast)
@@ -439,6 +500,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 ])
             }
 
+            /// Returns the query with all parameters inlined for debugging.
+            ///
+            /// Unlike `dry()` which returns placeholders and values separately,
+            /// this method produces a single SQL string with literal values embedded.
             pub fn dry_inline(
                 &self,
                 query: &str,
@@ -765,6 +830,42 @@ macro_rules! php_sqlx_impl_driver_inner {
                     Ok(())
                 } else {
                     Err(anyhow!("There's no ongoing transaction"))
+                }
+            }
+
+            /// Commits the current ongoing transaction.
+            ///
+            /// This method retrieves the transaction from the stack and commits it.
+            /// After commit, the transaction is removed from the stack.
+            ///
+            /// # Errors
+            /// Returns an error if no transaction is active or the commit fails.
+            pub fn commit(&self) -> anyhow::Result<()> {
+                if let Some(tx) = self.retrieve_ongoing_transaction() {
+                    RUNTIME
+                        .block_on(tx.commit())
+                        .map_err(|err| anyhow!("Failed to commit transaction: {err}"))?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction to commit"))
+                }
+            }
+
+            /// Rolls back the current ongoing transaction.
+            ///
+            /// This method retrieves the transaction from the stack and rolls it back.
+            /// After rollback, the transaction is removed from the stack.
+            ///
+            /// # Errors
+            /// Returns an error if no transaction is active or the rollback fails.
+            pub fn rollback(&self) -> anyhow::Result<()> {
+                if let Some(tx) = self.retrieve_ongoing_transaction() {
+                    RUNTIME
+                        .block_on(tx.rollback())
+                        .map_err(|err| anyhow!("Failed to rollback transaction: {err}"))?;
+                    Ok(())
+                } else {
+                    Err(anyhow!("There's no ongoing transaction to rollback"))
                 }
             }
 

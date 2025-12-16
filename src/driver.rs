@@ -1,3 +1,46 @@
+//! Database driver implementation macro for php-sqlx.
+//!
+//! This module provides the [`php_sqlx_impl_driver!`] macro that generates complete
+//! database driver implementations with PHP bindings. Each database type (PostgreSQL,
+//! MySQL, MSSQL) uses this macro to create a driver with consistent API.
+//!
+//! # Generated API
+//!
+//! The macro generates:
+//! - Driver struct with connection pooling and persistent connection support
+//! - Prepared query support with AST caching
+//! - Query builders (read and write)
+//! - Full set of query methods (`query_row`, `query_all`, `query_column`, etc.)
+//! - Transaction support (both callback and imperative styles)
+//! - Savepoint management
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! php_sqlx_impl_driver!(
+//!     PgDriver,           // Struct name
+//!     "Sqlx\\PgDriver",   // PHP class name
+//!     PgInnerDriver,      // Inner driver type
+//!     PgPreparedQuery,    // Prepared query type
+//!     PgReadQueryBuilder, // Read builder type
+//!     PgWriteQueryBuilder // Write builder type
+//! );
+//! ```
+
+/// Generates a complete database driver implementation with PHP bindings.
+///
+/// This macro creates a driver struct, PHP class bindings, and all query methods
+/// for a specific database backend. It reduces boilerplate by providing a consistent
+/// API across PostgreSQL, MySQL, and MSSQL drivers.
+///
+/// # Arguments
+///
+/// - `$struct` - The Rust struct name for the driver (e.g., `PgDriver`)
+/// - `$class` - The PHP class name as a string literal (e.g., `"Sqlx\\PgDriver"`)
+/// - `$inner` - The inner driver type that implements database-specific logic
+/// - `$prepared_query` - The prepared query type for this database
+/// - `$read_query_builder` - The read query builder type
+/// - `$write_query_builder` - The write query builder type
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
     ( $struct:ident, $class:literal, $inner:ident, $prepared_query:ident, $read_query_builder:ident, $write_query_builder:ident $(,)? ) => {
@@ -24,17 +67,31 @@ macro_rules! php_sqlx_impl_driver {
         use $crate::utils::types::ColumnArgument;
         pub mod inner;
 
+        /// Global registry for persistent driver connections.
+        ///
+        /// This allows named connections to be reused across PHP requests when
+        /// `OPT_PERSISTENT_NAME` is specified. The registry maps connection names
+        /// to shared inner driver instances.
         static PERSISTENT_DRIVER_REGISTRY: LazyLock<DashMap<String, Arc<$inner>>> =
             LazyLock::new(|| DashMap::new());
 
-        /// This class supports prepared queries, persistent connections, and augmented SQL.
+        /// Database driver for executing SQL queries with advanced features.
+        ///
+        /// This class supports:
+        /// - **Prepared queries**: Cached AST parsing for repeated queries
+        /// - **Persistent connections**: Reuse connections across PHP requests
+        /// - **Augmented SQL**: Conditional blocks, IN clause optimization, pagination
+        /// - **Transactions**: Both callback-based and imperative styles
+        /// - **Query builders**: Fluent API for constructing queries
         #[php_class]
         #[php(name = $class)]
         #[derive(Clone)]
         pub struct $struct {
+            /// The inner driver instance containing connection pool and configuration.
             pub driver_inner: Arc<$inner>,
         }
 
+        /// Registers driver classes with the PHP module builder.
         pub fn build(module: ModuleBuilder) -> ModuleBuilder {
             module
                 .class::<$struct>()
@@ -44,6 +101,11 @@ macro_rules! php_sqlx_impl_driver {
         }
 
         impl $struct {
+            /// Creates a new driver instance with the given options.
+            ///
+            /// If `persistent_name` is set in options, checks the global registry
+            /// for an existing connection and reuses it. Otherwise, creates a new
+            /// connection pool and optionally registers it for persistence.
             pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
                 static INIT: Once = Once::new();
                 INIT.call_once(|| {
@@ -933,24 +995,57 @@ macro_rules! php_sqlx_impl_driver {
                 self.driver_inner.dry(query, parameters)
             }
 
-            /// Begins a new transaction, yields control to the provided callable,
-            /// and commits or rolls back based on the callable's return value or error.
+            /// Begins a SQL transaction, optionally executing a callable within it.
+            ///
+            /// This method supports two modes of operation:
+            ///
+            /// **Mode 1: Callback-based (automatic commit/rollback)**
+            /// ```php
+            /// $driver->begin(function($driver) {
+            ///     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+            ///     return true; // true = commit, false = rollback
+            /// });
+            /// ```
+            ///
+            /// **Mode 2: Imperative (manual commit/rollback)**
+            /// ```php
+            /// $driver->begin();
+            /// try {
+            ///     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+            ///     $driver->commit();
+            /// } catch (\Exception $e) {
+            ///     $driver->rollback();
+            ///     throw $e;
+            /// }
+            /// ```
             ///
             /// # Parameters
-            /// - `callable`: A PHP callable receiving this Driver instance.
+            /// - `callable`: Optional PHP callable receiving this Driver instance.
             ///
-            /// # Behavior
+            /// # Behavior (with callable)
             /// - Starts a transaction.
             /// - Invokes `callable($this)`.
-            /// - If the callable returns false, rolls back, and commits otherwise.
+            /// - If the callable returns false, rolls back; commits otherwise.
             /// - On exception or callable error, rolls back and rethrows.
             ///
+            /// # Behavior (without callable)
+            /// - Starts a transaction and leaves it active on the transaction stack.
+            /// - You must manually call `commit()` or `rollback()` to finish.
+            ///
             /// # Exceptions
-            /// Throws an exception if transaction commit, rollback,
+            /// Throws an exception if transaction start, commit, rollback,
             /// or callable invocation fails.
             ///
-            pub fn begin(&self, callable: ZendCallable) -> PhpResult<()> {
+            pub fn begin(&self, callable: Option<ZendCallable>) -> PhpResult<()> {
                 self.driver_inner.begin()?;
+
+                // If no callable provided, leave transaction active for manual control
+                if callable.is_none() {
+                    return Ok(());
+                }
+
+                // Callback-based transaction with automatic commit/rollback
+                let callable = callable.unwrap();
                 let callable_ret = callable.try_call(vec![self]);
                 let tx = self.driver_inner.retrieve_ongoing_transaction().unwrap();
                 match callable_ret {
@@ -1015,6 +1110,60 @@ macro_rules! php_sqlx_impl_driver {
             /// Throws an exception if releasing the savepoint fails.
             pub fn release_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
                 self.driver_inner.release_savepoint(savepoint)
+            }
+
+            /// Commits the current ongoing transaction.
+            ///
+            /// This method should be called after `begin()` was called without a callable.
+            /// It commits all changes made during the transaction and removes the transaction
+            /// from the stack.
+            ///
+            /// # Exceptions
+            /// Throws an exception if:
+            /// - no transaction is currently active
+            /// - the commit operation fails
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->begin();
+            /// try {
+            ///     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+            ///     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+            ///     $driver->commit();
+            /// } catch (\Exception $e) {
+            ///     $driver->rollback();
+            ///     throw $e;
+            /// }
+            /// ```
+            pub fn commit(&self) -> anyhow::Result<()> {
+                self.driver_inner.commit()
+            }
+
+            /// Rolls back the current ongoing transaction.
+            ///
+            /// This method should be called after `begin()` was called without a callable.
+            /// It discards all changes made during the transaction and removes the transaction
+            /// from the stack.
+            ///
+            /// # Exceptions
+            /// Throws an exception if:
+            /// - no transaction is currently active
+            /// - the rollback operation fails
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->begin();
+            /// try {
+            ///     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+            ///     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+            ///     $driver->commit();
+            /// } catch (\Exception $e) {
+            ///     $driver->rollback();
+            ///     throw $e;
+            /// }
+            /// ```
+            pub fn rollback(&self) -> anyhow::Result<()> {
+                self.driver_inner.rollback()
             }
         }
     };

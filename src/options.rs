@@ -1,3 +1,24 @@
+//! Driver configuration options for php-sqlx.
+//!
+//! This module provides configuration types for database drivers, including
+//! connection pooling settings, AST cache configuration, and behavioral options.
+//!
+//! # PHP Usage
+//!
+//! Options can be passed either as a simple URL string or as an associative array:
+//!
+//! ```php
+//! // Simple URL
+//! $driver = DriverFactory::make('postgres://user:pass@localhost/db');
+//!
+//! // Full options array
+//! $driver = DriverFactory::make([
+//!     DriverOptions::OPT_URL => 'postgres://user:pass@localhost/db',
+//!     DriverOptions::OPT_MAX_CONNECTIONS => 10,
+//!     DriverOptions::OPT_ASSOC_ARRAYS => true,
+//! ]);
+//! ```
+
 use crate::param_value::ParameterValue;
 use crate::{
     DEFAULT_ASSOC_ARRAYS, DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE,
@@ -10,20 +31,37 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::time::Duration;
 
+/// Internal configuration options for database drivers.
+///
+/// This struct holds all the parsed and validated configuration values
+/// that control driver behavior. It is created by parsing [`DriverOptionsArg`].
 #[allow(clippy::struct_excessive_bools)]
 pub struct DriverInnerOptions {
+    /// Database connection URL (e.g., `postgres://user:pass@host/db`).
     pub(crate) url: Option<String>,
+    /// Number of shards in the AST LRU cache for concurrent access.
     pub(crate) ast_cache_shard_count: usize,
+    /// Maximum entries per shard in the AST LRU cache.
     pub(crate) ast_cache_shard_size: usize,
+    /// Optional name for persistent connection pooling across requests.
     pub(crate) persistent_name: Option<String>,
+    /// Whether to return results as associative arrays (true) or objects (false).
     pub(crate) associative_arrays: bool,
+    /// Maximum number of connections in the pool.
     pub(crate) max_connections: NonZeroU32,
+    /// Minimum number of idle connections to maintain.
     pub(crate) min_connections: u32,
+    /// Maximum lifetime of a connection before it's closed and replaced.
     pub(crate) max_lifetime: Option<Duration>,
+    /// Timeout when acquiring a connection from the pool.
     pub(crate) acquire_timeout: Option<Duration>,
+    /// How long a connection can remain idle before being closed.
     pub(crate) idle_timeout: Option<Duration>,
+    /// Whether to validate connections before acquiring from pool.
     pub(crate) test_before_acquire: bool,
+    /// Whether empty IN clauses collapse to FALSE (and NOT IN to TRUE).
     pub(crate) collapsible_in_enabled: bool,
+    /// Whether the connection should be read-only (useful for replicas).
     pub(crate) readonly: bool,
 }
 impl Default for DriverInnerOptions {
@@ -88,16 +126,21 @@ impl DriverOptions {
     pub const OPT_IDLE_TIMEOUT: &'static str = "idle_timeout";
 
     /// Timeout when acquiring a connection from the pool. Accepts string or integer (seconds).
-    pub const OPT_ACQUIRE_TIMEOUT: &'static str = "_timeout";
+    pub const OPT_ACQUIRE_TIMEOUT: &'static str = "acquire_timeout";
 
     /// Whether to validate connections before acquiring them from the pool.
     pub const OPT_TEST_BEFORE_ACQUIRE: &'static str = "test_before_acquire";
 }
 
 /// Represents either a simple URL string or a full associative array of driver options.
+///
+/// This enum is automatically converted from PHP values by ext-php-rs, allowing
+/// flexible driver construction syntax in PHP.
 #[derive(ZvalConvert)]
 pub enum DriverOptionsArg {
+    /// A simple database connection URL string.
     Url(String),
+    /// A full options array with configuration keys from [`DriverOptions`].
     Options(BTreeMap<String, ParameterValue>),
 }
 impl DriverOptionsArg {
@@ -156,7 +199,7 @@ impl DriverOptionsArg {
                         if let ParameterValue::String(str) = value {
                             Some(str.clone())
                         } else {
-                            bail!("OPT_PERSISTENT_NAME must be an integer");
+                            bail!("OPT_PERSISTENT_NAME must be a string");
                         }
                     }
                 },

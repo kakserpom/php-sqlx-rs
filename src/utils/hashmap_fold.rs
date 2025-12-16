@@ -1,3 +1,9 @@
+//! Helpers for folding database results into PHP hash maps.
+//!
+//! This module provides fold functions used when building PHP associative arrays
+//! from database query results, supporting both simple key-value maps and grouped
+//! results where multiple values share the same key.
+
 use anyhow::anyhow;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::ffi::zend_array;

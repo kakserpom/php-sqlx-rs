@@ -1,3 +1,7 @@
+//! SQL indentation utilities for php-sqlx.
+//!
+//! This module provides the [`IndentSql`] trait for adding consistent indentation
+//! to SQL queries, primarily used when formatting subqueries within query builders.
 
 /// Trait for adding indentation to strings.
 ///

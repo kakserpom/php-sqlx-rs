@@ -1,3 +1,22 @@
+//! Parameter value types and conversion for php-sqlx.
+//!
+//! This module provides the [`ParameterValue`] enum that represents all possible
+//! parameter types that can be bound to SQL queries. It handles conversion from
+//! PHP values (via ext-php-rs) and rendering to SQL literals.
+//!
+//! # Supported Types
+//!
+//! - **Primitives**: null, string, integer, float, boolean
+//! - **Arrays**: Homogeneous lists for IN clauses and batch operations
+//! - **Objects**: Key-value maps for JSON columns
+//! - **JSON**: Explicit JSON wrapper for proper serialization
+//! - **Clauses**: Pre-rendered SELECT, ORDER BY, and pagination fragments
+//!
+//! # PHP to Rust Conversion
+//!
+//! PHP values are automatically converted via the `FromZval` trait implementation.
+//! This allows seamless parameter binding from PHP code.
+
 mod conversion;
 mod json;
 mod quote;
@@ -22,17 +41,29 @@ pub type ParamsMap = BTreeMap<Placeholder, ParameterValue>;
 /// and pre-rendered clauses like `ORDER BY`, `SELECT`, and pagination fragments.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParameterValue {
+    /// SQL NULL value.
     Null,
+    /// Text string value, escaped and quoted when rendered.
     String(String),
+    /// 64-bit signed integer.
     Int(i64),
+    /// 64-bit floating point number.
     Float(f64),
+    /// Boolean value, rendered as TRUE/FALSE or 1/0 depending on database.
     Bool(bool),
+    /// Array of values, typically expanded for IN clauses.
     Array(Vec<ParameterValue>),
+    /// Key-value object, typically serialized as JSON.
     Object(BTreeMap<String, ParameterValue>),
+    /// Explicit JSON wrapper that forces JSON serialization.
     Json(Box<ParameterValue>),
+    /// Pre-rendered ORDER BY clause from `ByClause`.
     ByClauseRendered(ByClauseRendered),
+    /// Pre-rendered SELECT clause from `SelectClause`.
     SelectClauseRendered(SelectClauseRendered),
+    /// Pre-rendered pagination (LIMIT/OFFSET) from `PaginateClause`.
     PaginateClauseRendered(PaginateClauseRendered),
+    /// Embedded query builder with its SQL and parameters.
     Builder((String, BTreeMap<String, ParameterValue>)),
 }
 

@@ -1,3 +1,33 @@
+//! SQL Abstract Syntax Tree (AST) parsing and rendering for php-sqlx.
+//!
+//! This module provides AST-based SQL processing that enables:
+//!
+//! - **Conditional blocks**: `{{ ... }}` sections that render only when placeholders are provided
+//! - **Named placeholders**: `$name` and `:name` style parameter binding
+//! - **Positional placeholders**: `?` markers converted to ordinal references
+//! - **IN clause optimization**: Automatic expansion of arrays and collapsing of empty lists
+//! - **Pagination**: `PAGINATE :param` expansion into `LIMIT`/`OFFSET`
+//!
+//! # Example
+//!
+//! ```sql
+//! SELECT * FROM users
+//! WHERE status = :status
+//! {{ AND role IN :roles }}
+//! {{ AND created_at > :since }}
+//! ```
+//!
+//! In this query:
+//! - `:status` is required
+//! - The `role IN :roles` clause only appears if `:roles` is provided and non-empty
+//! - The `created_at > :since` clause only appears if `:since` is provided
+//!
+//! # Collapsible IN Clauses
+//!
+//! When `collapsible_in_enabled` is true:
+//! - `column IN :empty_array` becomes `FALSE`
+//! - `column NOT IN :empty_array` becomes `TRUE`
+
 use crate::param_value::{ParameterValue, ParamsMap, Placeholder, write::ParamVecWriteSqlTo};
 use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
 use anyhow::bail;
@@ -95,6 +125,14 @@ pub struct Settings {
 }
 
 impl Ast {
+    /// Returns the required placeholders for this AST if it's a Root node.
+    ///
+    /// # Returns
+    /// - `Some(&Vec<Placeholder>)` if this is a Root with non-empty placeholders
+    /// - `None` if this is a Root with no placeholders
+    ///
+    /// # Panics
+    /// Panics if called on a non-Root AST node.
     pub fn get_placeholders_if_any(&self) -> Option<&Vec<Placeholder>> {
         match self {
             Ast::Root {

@@ -1,3 +1,31 @@
+//! SQL Query Builder for php-sqlx.
+//!
+//! This module provides a fluent API for constructing SQL queries safely and composably.
+//! It includes support for:
+//!
+//! - **SELECT queries**: Column selection, table references, joins, WHERE clauses
+//! - **INSERT/UPDATE/DELETE**: Safe data modification with parameter binding
+//! - **JOIN support**: All standard join types (INNER, LEFT, RIGHT, FULL OUTER, CROSS, NATURAL)
+//! - **OR clauses**: Complex boolean logic with nested conditions
+//! - **Subqueries**: Composable query builders that can be embedded
+//!
+//! # PHP Usage
+//!
+//! ```php
+//! $builder = $driver->builder()
+//!     ->select('id, name, email')
+//!     ->from('users')
+//!     ->where([['status', '=', 'active']])
+//!     ->orderBy(['name' => 'ASC']);
+//!
+//! $results = $builder->all();
+//! ```
+//!
+//! # Macro-based Implementation
+//!
+//! The [`php_sqlx_impl_query_builder!`] macro generates database-specific query builders
+//! for each supported database (PostgreSQL, MySQL, MSSQL).
+
 use crate::param_value::{ParameterValue, ParamsMap};
 use anyhow::{anyhow, bail};
 use ext_php_rs::convert::FromZval;
@@ -5,47 +33,111 @@ use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable, Zval};
 use strum_macros::Display;
 
-/// Registers the `OrClause` class and `OR_` function
-/// with the provided PHP module builder.
+/// Registers the `OrClause` class and `OR_` function with the PHP module builder.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
     module.class::<OrClause>().function(wrap_function!(or_))
 }
 
+/// Represents an OR clause for building complex boolean conditions.
+///
+/// Created using the `OR_()` PHP function, this allows nested OR conditions
+/// within WHERE clauses.
+///
+/// # PHP Example
+///
+/// ```php
+/// use function Sqlx\OR_;
+///
+/// $builder->where([
+///     ['status', '=', 'active'],
+///     OR_([
+///         ['role', '=', 'admin'],
+///         ['role', '=', 'moderator']
+///     ])
+/// ]);
+/// ```
 #[php_class]
 #[php(name = "Sqlx\\OrClause")]
 #[derive(Debug, Clone)]
 pub struct OrClause {
+    /// The items within this OR clause.
     pub(crate) inner: Vec<OrClauseItem>,
 }
+
+/// Represents a single item within an OR clause.
 #[derive(Debug, Clone)]
 pub enum OrClauseItem {
+    /// A nested OR clause for complex boolean logic.
     Nested(OrClause),
+    /// A comparison operation: (column, operator, value).
     Op((String, String, Option<ParameterValue>)),
+    /// A raw SQL fragment with optional parameters.
     Item((String, Option<ParamsMap>)),
 }
 
 /// Represents the supported SQL `JOIN` types.
+///
+/// Used by the query builder's `join()` method to specify the join type.
 #[derive(Debug, Clone, Display)]
 pub enum JoinType {
+    /// INNER JOIN - returns rows with matching values in both tables.
     #[strum(to_string = "INNER")]
     Inner,
 
+    /// LEFT JOIN - returns all rows from left table, matched rows from right.
     #[strum(to_string = "LEFT")]
     Left,
 
+    /// RIGHT JOIN - returns all rows from right table, matched rows from left.
     #[strum(to_string = "RIGHT")]
     Right,
 
+    /// NATURAL JOIN - joins on columns with the same name in both tables.
     #[strum(to_string = "NATURAL")]
     Natural,
 
+    /// FULL OUTER JOIN - returns all rows when there's a match in either table.
     #[strum(to_string = "FULL OUTER")]
     FullOuter,
 
+    /// CROSS JOIN - returns Cartesian product of both tables.
     #[strum(to_string = "CROSS")]
     Cross,
 }
 
+/// Creates an OR clause from an array of conditions.
+///
+/// This function is exposed to PHP as `Sqlx\OR_()` and allows building
+/// complex boolean expressions with OR logic.
+///
+/// # Arguments
+/// - `or`: An array of conditions, where each condition can be:
+///   - A string (raw SQL fragment)
+///   - An array `[column, operator, value]`
+///   - A nested `OrClause` for complex logic
+///
+/// # Returns
+/// An `OrClause` instance that can be used in WHERE clauses.
+///
+/// # PHP Example
+/// ```php
+/// use function Sqlx\OR_;
+///
+/// // Simple OR
+/// OR_([
+///     ['status', '=', 'pending'],
+///     ['status', '=', 'processing']
+/// ])
+///
+/// // Nested OR
+/// OR_([
+///     ['role', '=', 'admin'],
+///     OR_([
+///         ['department', '=', 'IT'],
+///         ['level', '>=', 5]
+///     ])
+/// ])
+/// ```
 #[php_function]
 #[php(name = "Sqlx\\OR_")]
 pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
