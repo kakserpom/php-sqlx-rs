@@ -1,7 +1,7 @@
 use crate::conversion::{Conversion, json_into_zval};
+use crate::error::Error as SqlxError;
 #[cfg(feature = "lazy-row")]
 use crate::lazy_row::LazyRowJson;
-use anyhow::{anyhow, bail};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
@@ -17,18 +17,18 @@ impl Conversion for PgRow {
         &self,
         column: &PgColumn,
         associative_arrays: bool,
-    ) -> anyhow::Result<Zval> {
-        fn try_cast_into_zval<'r, T>(row: &'r PgRow, column_ordinal: usize) -> anyhow::Result<Zval>
+    ) -> crate::error::Result<Zval> {
+        fn try_cast_into_zval<'r, T>(row: &'r PgRow, column_ordinal: usize) -> crate::error::Result<Zval>
         where
             T: Decode<'r, <PgRow as Row>::Database> + Type<<PgRow as Row>::Database>,
             T: IntoZval,
         {
             match row.try_get::<'r, T, _>(column_ordinal) {
-                Ok(value) => Ok(value.into_zval(false).map_err(|err| anyhow!("{err:?}"))?),
+                Ok(value) => Ok(value.into_zval(false).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?),
                 Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => {
                     Ok(Zval::null())
                 }
-                Err(err) => Err(anyhow!("{err:?}")),
+                Err(err) => Err(SqlxError::Conversion { message: format!("{err:?}") }),
             }
         }
         let column_ordinal = column.ordinal();
@@ -36,10 +36,10 @@ impl Conversion for PgRow {
             "BOOL" => try_cast_into_zval::<bool>(self, column_ordinal)?,
             "BYTEA" | "BINARY" => self
                 .try_get::<&[u8], _>(column_ordinal)
-                .map_err(|err| anyhow!("{err:?}"))
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
                 .map(|x| x.iter().copied().collect::<Binary<_>>())?
                 .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?,
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
             "CHAR" | "NAME" | "TEXT" | "BPCHAR" | "VARCHAR" => {
                 try_cast_into_zval::<String>(self, column_ordinal)?
             }
@@ -54,15 +54,15 @@ impl Conversion for PgRow {
             "JSON" => self
                 .try_get_raw::<_>(column_ordinal)
                 .map(|val_ref: PgValueRef| {
-                    let buf = val_ref.as_bytes().map_err(|err| anyhow!("{err:?}"))?;
+                    let buf = val_ref.as_bytes().map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
                     if buf.is_empty() {
-                        bail!("empty JSON raw value in {:?}", column.name());
+                        return Err(SqlxError::Conversion { message: format!("empty JSON raw value in {:?}", column.name()) });
                     }
                     #[cfg(feature = "lazy-row")]
                     if buf.len() > crate::lazy_row::LAZY_ROW_JSON_SIZE_THRESHOLD {
                         return LazyRowJson::new(buf, associative_arrays)
                             .into_zval(associative_arrays)
-                            .map_err(|err| anyhow!("{err:?}"));
+                            .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") });
                     }
 
                     #[cfg(feature = "simd-json")]
@@ -79,15 +79,14 @@ impl Conversion for PgRow {
             "JSONB" => self
                 .try_get_raw::<_>(column_ordinal)
                 .map(|val_ref: PgValueRef| {
-                    let buf = val_ref.as_bytes().map_err(|err| anyhow!("{err:?}"))?;
+                    let buf = val_ref.as_bytes().map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
                     if buf.is_empty() {
-                        bail!("empty JSONB raw value in {:?}", column.name());
+                        return Err(SqlxError::Conversion { message: format!("empty JSONB raw value in {:?}", column.name()) });
                     }
                     if buf[0] != 1 {
-                        bail!(
-                            "unsupported JSONB format version {}; please open an issue",
-                            buf[0]
-                        );
+                        return Err(SqlxError::Conversion {
+                            message: format!("unsupported JSONB format version {}; please open an issue", buf[0]),
+                        });
                     }
                     #[cfg(not(feature = "lazy-row"))]
                     {
@@ -99,23 +98,23 @@ impl Conversion for PgRow {
                         #[cfg(not(feature = "simd-json"))]
                         return serde_json::from_slice(&mut buf[1..].to_vec())?
                             .into_zval(associative_arrays)
-                            .map_err(|err| anyhow!("{err:?}"));
+                            .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") });
                     }
                     #[cfg(feature = "lazy-row")]
                     LazyRowJson::new(&buf[1..], associative_arrays)
                         .into_zval(associative_arrays)
-                        .map_err(|err| anyhow!("{err:?}"))
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
                 })??,
             "_JSON" | "_JSONB" => self
                 .try_get::<Vec<serde_json::Value>, _>(column_ordinal)
-                .map_err(|err| anyhow!("{err:?}"))
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
                 .map(|x| -> Vec<_> {
                     x.into_iter()
                         .map(|x| json_into_zval(x, associative_arrays))
                         .collect()
                 })?
                 .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?,
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
             "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
                 try_cast_into_zval::<String>(self, column_ordinal)?
             }
@@ -161,14 +160,14 @@ impl Conversion for PgRow {
             "_RECORD" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
             "_JSONPATH" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
 
-            other => bail!("unsupported type: {other}"),
+            other => return Err(SqlxError::Conversion { message: format!("unsupported type: {other}") }),
         })
     }
 
     fn column_value_into_array_key<'a, PgColumn: Column, Postgres>(
         &self,
         column: &PgColumn,
-    ) -> anyhow::Result<ArrayKey<'a>> {
+    ) -> crate::error::Result<ArrayKey<'a>> {
         let column_ordinal = column.ordinal();
         Ok(match column.type_info().name() {
             "BOOLEAN" => ArrayKey::Long(i64::from(self.try_get::<bool, _>(column_ordinal)?)),
@@ -189,7 +188,7 @@ impl Conversion for PgRow {
             }
             "ENUM" | "SET" => ArrayKey::String(self.try_get::<String, _>(column_ordinal)?),
             "NULL" => ArrayKey::Str(""),
-            other => bail!("unsupported type for array key: {other}"),
+            other => return Err(SqlxError::Conversion { message: format!("unsupported type for array key: {other}") }),
         })
     }
 }

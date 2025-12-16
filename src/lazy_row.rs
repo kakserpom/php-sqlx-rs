@@ -170,7 +170,7 @@ impl LazyRowJson {
     /// # Errors
     ///
     /// Propagates JSON parsing exceptions.
-    pub fn take_zval(self_: &ZendClassObject<LazyRowJson>) -> anyhow::Result<Zval> {
+    pub fn take_zval(self_: &ZendClassObject<LazyRowJson>) -> crate::error::Result<Zval> {
         #[cfg(feature = "simd-json")]
         return json_into_zval(
             simd_json::from_slice::<serde_json::Value>(self_.raw.borrow_mut().as_mut_slice())?,

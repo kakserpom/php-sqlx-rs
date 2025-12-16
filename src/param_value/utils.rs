@@ -1,5 +1,5 @@
+use crate::error::Error as SqlxError;
 use crate::param_value::ParameterValue;
-use anyhow::bail;
 use sqlx_oldapi::database::HasArguments;
 use sqlx_oldapi::query::Query;
 use sqlx_oldapi::{Database, Encode, Type};
@@ -31,7 +31,7 @@ use sqlx_oldapi::{Database, Encode, Type};
 pub fn bind_values<'a, D: Database>(
     query: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
     values: &'a [ParameterValue],
-) -> anyhow::Result<Query<'a, D, <D as HasArguments<'a>>::Arguments>>
+) -> crate::error::Result<Query<'a, D, <D as HasArguments<'a>>::Arguments>>
 where
     f64: Type<D>,
     f64: Encode<'a, D>,
@@ -45,7 +45,7 @@ where
     fn walker<'a, D: Database>(
         q: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
         value: &'a ParameterValue,
-    ) -> anyhow::Result<Query<'a, D, <D as HasArguments<'a>>::Arguments>>
+    ) -> crate::error::Result<Query<'a, D, <D as HasArguments<'a>>::Arguments>>
     where
         f64: Type<D>,
         f64: Encode<'a, D>,
@@ -68,7 +68,9 @@ where
             | ParameterValue::SelectClauseRendered(_)
             | ParameterValue::PaginateClauseRendered(_)
             | ParameterValue::Builder(_)
-            | ParameterValue::Null => bail!("Internal error: cannot bind parameter of this type"),
+            | ParameterValue::Null => {
+                return Err(SqlxError::Other("Internal error: cannot bind parameter of this type".to_string()))
+            }
         })
     }
 

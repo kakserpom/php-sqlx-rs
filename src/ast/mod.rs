@@ -30,7 +30,7 @@
 
 use crate::param_value::{ParameterValue, ParamsMap, Placeholder, write::ParamVecWriteSqlTo};
 use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
-use anyhow::bail;
+use crate::error::Error as SqlxError;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::fmt::Write;
@@ -157,14 +157,14 @@ impl Ast {
     ///
     /// An `Ast::Root` containing the parsed branches and the list of
     /// placeholders required to render the final SQL.
-    pub fn parse(input: &str, settings: &Settings) -> anyhow::Result<Ast> {
+    pub fn parse(input: &str, settings: &Settings) -> crate::error::Result<Ast> {
         fn inner<'s>(
             mut rest: &'s str,
             placeholders_out: &mut Vec<String>,
             branches: &mut Vec<Ast>,
             positional_counter: &mut usize,
             settings: &Settings,
-        ) -> anyhow::Result<&'s str> {
+        ) -> crate::error::Result<&'s str> {
             let mut buf = String::new();
 
             while !rest.is_empty() {
@@ -225,7 +225,7 @@ impl Ast {
                         rest = &rest[2 + close + 2..];
                         continue;
                     }
-                    bail!("Unterminated block comment");
+                    return Err(SqlxError::Other("Unterminated block comment".to_string()));
                 }
 
                 // Conditional block start
@@ -501,7 +501,7 @@ impl Ast {
             settings,
         )?;
         if !rest.trim().is_empty() {
-            bail!("Unmatched `{{` or extra trailing content");
+            return Err(SqlxError::Other("Unmatched `{{` or extra trailing content".to_string()));
         }
 
         Ok(Ast::Root {
@@ -521,7 +521,7 @@ impl Ast {
         placeholders: &mut BTreeSet<String>,
         parameters: I,
         parameters_bucket: &mut ParamsMap,
-    ) -> anyhow::Result<String>
+    ) -> crate::error::Result<String>
     where
         I: IntoIterator<Item = (K, V)> + Debug,
         K: Into<String>,
@@ -534,7 +534,7 @@ impl Ast {
             param_map: &mut ParamsMap,
             parameters_bucket: &mut ParamsMap,
             index: &mut usize,
-        ) -> anyhow::Result<()> {
+        ) -> crate::error::Result<()> {
             match node {
                 Ast::Root { branches, .. }
                 | Ast::Nested(branches)
@@ -647,7 +647,7 @@ impl Ast {
         &self,
         parameters: I,
         settings: &Settings,
-    ) -> anyhow::Result<(String, Vec<ParameterValue>)>
+    ) -> crate::error::Result<(String, Vec<ParameterValue>)>
     where
         I: IntoIterator<Item = (K, V)> + Debug,
         K: Into<String>,
@@ -659,7 +659,7 @@ impl Ast {
             sql: &mut String,
             out_vals: &mut Vec<ParameterValue>,
             settings: &Settings,
-        ) -> anyhow::Result<()> {
+        ) -> crate::error::Result<()> {
             match node {
                 Ast::Root { branches, .. } | Ast::Nested(branches) => {
                     for n in branches {
@@ -723,9 +723,9 @@ impl Ast {
                             rendered.write_sql_to(sql, out_vals, settings)?;
                         }
                         _ => {
-                            bail!(
+                            return Err(SqlxError::Other(format!(
                                 "PAGINATE accepts only Sqlx\\PaginateClause instance, given: {placeholder:?} = {value:?}"
-                            );
+                            )));
                         }
                     }
                 }
@@ -763,7 +763,7 @@ impl Ast {
                 }
             })
         {
-            bail!("Missing required placeholder `{missing_placeholder}`");
+            return Err(SqlxError::MissingPlaceholder { name: missing_placeholder.clone() });
         }
         walk(self, &values, &mut sql, &mut out_vals, settings)?;
         #[cfg(test)]

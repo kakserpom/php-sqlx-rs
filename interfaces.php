@@ -73,10 +73,12 @@ interface DriverInterface
     public function execute(string $query, ?array $parameters): int;
     public function insert(string $table, array $row): int;
     public function dry(string $query, ?array $parameters): array;
-    public function begin(callable $callable): void;
+    public function begin(?callable $callable): void;
     public function savepoint(string $savepoint): void;
     public function rollbackToSavepoint(string $savepoint): void;
     public function releaseSavepoint(string $savepoint): void;
+    public function commit(): void;
+    public function rollback(): void;
     public function __construct(mixed $url_or_options);
     public function prepare(string $query): Sqlx\Driver\MssqlPreparedQuery;
     public function builder(): Sqlx\MssqlWriteQueryBuilder;
@@ -117,10 +119,12 @@ interface DriverInterface
     public function execute(string $query, ?array $parameters): int;
     public function insert(string $table, array $row): int;
     public function dry(string $query, ?array $parameters): array;
-    public function begin(callable $callable): void;
+    public function begin(?callable $callable): void;
     public function savepoint(string $savepoint): void;
     public function rollbackToSavepoint(string $savepoint): void;
     public function releaseSavepoint(string $savepoint): void;
+    public function commit(): void;
+    public function rollback(): void;
     public function __construct(mixed $url_or_options);
 }
 
@@ -181,7 +185,7 @@ interface ReadQueryBuilderInterface
     public function crossJoin(string $table, string $on, ?array $parameters): Sqlx\PgReadQueryBuilder;
     public function naturalJoin(string $table): Sqlx\PgReadQueryBuilder;
     public function with(string $table, mixed $as_, ?array $parameters): Sqlx\PgReadQueryBuilder;
-    public function where(mixed $where_, ?array $parameters): Sqlx\PgReadQueryBuilder;
+    public function Where(mixed $where_, ?array $parameters): Sqlx\PgReadQueryBuilder;
     public function union(mixed $query, ?array $parameters): Sqlx\PgReadQueryBuilder;
     public function unionAll(mixed $query, ?array $parameters): Sqlx\PgReadQueryBuilder;
     public function having(mixed $having, ?array $parameters): Sqlx\PgReadQueryBuilder;
@@ -251,7 +255,7 @@ interface ReadQueryBuilderInterface
     public function crossJoin(string $table, string $on, ?array $parameters): Sqlx\MssqlReadQueryBuilder;
     public function naturalJoin(string $table): Sqlx\MssqlReadQueryBuilder;
     public function with(string $table, mixed $as_, ?array $parameters): Sqlx\MssqlReadQueryBuilder;
-    public function where(mixed $where_, ?array $parameters): Sqlx\MssqlReadQueryBuilder;
+    public function Where(mixed $where_, ?array $parameters): Sqlx\MssqlReadQueryBuilder;
     public function union(mixed $query, ?array $parameters): Sqlx\MssqlReadQueryBuilder;
     public function unionAll(mixed $query, ?array $parameters): Sqlx\MssqlReadQueryBuilder;
     public function having(mixed $having, ?array $parameters): Sqlx\MssqlReadQueryBuilder;
@@ -366,10 +370,12 @@ interface SqlDriverInterface
     public function execute(string $query, ?array $parameters): int;
     public function insert(string $table, array $row): int;
     public function dry(string $query, ?array $parameters): array;
-    public function begin(callable $callable): void;
+    public function begin(?callable $callable): void;
     public function savepoint(string $savepoint): void;
     public function rollbackToSavepoint(string $savepoint): void;
     public function releaseSavepoint(string $savepoint): void;
+    public function commit(): void;
+    public function rollback(): void;
     public function __construct(mixed $url_or_options);
 }
 
@@ -419,7 +425,7 @@ interface SqlReadQueryBuilderInterface
     public function crossJoin(string $table, string $on, ?array $parameters): Sqlx\MySqlReadQueryBuilder;
     public function naturalJoin(string $table): Sqlx\MySqlReadQueryBuilder;
     public function with(string $table, mixed $as_, ?array $parameters): Sqlx\MySqlReadQueryBuilder;
-    public function where(mixed $where_, ?array $parameters): Sqlx\MySqlReadQueryBuilder;
+    public function Where(mixed $where_, ?array $parameters): Sqlx\MySqlReadQueryBuilder;
     public function union(mixed $query, ?array $parameters): Sqlx\MySqlReadQueryBuilder;
     public function unionAll(mixed $query, ?array $parameters): Sqlx\MySqlReadQueryBuilder;
     public function having(mixed $having, ?array $parameters): Sqlx\MySqlReadQueryBuilder;
@@ -493,7 +499,7 @@ interface SqlWriteQueryBuilderInterface
     public function crossJoin(string $table, string $on, ?array $parameters): Sqlx\MySqlWriteQueryBuilder;
     public function naturalJoin(string $table): Sqlx\MySqlWriteQueryBuilder;
     public function with(string $table, mixed $as_, ?array $parameters): Sqlx\MySqlWriteQueryBuilder;
-    public function where(mixed $where_, ?array $parameters): Sqlx\MySqlWriteQueryBuilder;
+    public function Where(mixed $where_, ?array $parameters): Sqlx\MySqlWriteQueryBuilder;
     public function union(mixed $query, ?array $parameters): Sqlx\MySqlWriteQueryBuilder;
     public function unionAll(mixed $query, ?array $parameters): Sqlx\MySqlWriteQueryBuilder;
     public function having(mixed $having, ?array $parameters): Sqlx\MySqlWriteQueryBuilder;
@@ -572,7 +578,7 @@ interface WriteQueryBuilderInterface
     public function crossJoin(string $table, string $on, ?array $parameters): Sqlx\PgWriteQueryBuilder;
     public function naturalJoin(string $table): Sqlx\PgWriteQueryBuilder;
     public function with(string $table, mixed $as_, ?array $parameters): Sqlx\PgWriteQueryBuilder;
-    public function where(mixed $where_, ?array $parameters): Sqlx\PgWriteQueryBuilder;
+    public function Where(mixed $where_, ?array $parameters): Sqlx\PgWriteQueryBuilder;
     public function union(mixed $query, ?array $parameters): Sqlx\PgWriteQueryBuilder;
     public function unionAll(mixed $query, ?array $parameters): Sqlx\PgWriteQueryBuilder;
     public function having(mixed $having, ?array $parameters): Sqlx\PgWriteQueryBuilder;
@@ -642,7 +648,7 @@ interface WriteQueryBuilderInterface
     public function crossJoin(string $table, string $on, ?array $parameters): Sqlx\MssqlWriteQueryBuilder;
     public function naturalJoin(string $table): Sqlx\MssqlWriteQueryBuilder;
     public function with(string $table, mixed $as_, ?array $parameters): Sqlx\MssqlWriteQueryBuilder;
-    public function where(mixed $where_, ?array $parameters): Sqlx\MssqlWriteQueryBuilder;
+    public function Where(mixed $where_, ?array $parameters): Sqlx\MssqlWriteQueryBuilder;
     public function union(mixed $query, ?array $parameters): Sqlx\MssqlWriteQueryBuilder;
     public function unionAll(mixed $query, ?array $parameters): Sqlx\MssqlWriteQueryBuilder;
     public function having(mixed $having, ?array $parameters): Sqlx\MssqlWriteQueryBuilder;

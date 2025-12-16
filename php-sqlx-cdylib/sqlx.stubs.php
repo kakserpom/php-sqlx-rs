@@ -3,6 +3,41 @@
 // Stubs for sqlx
 
 namespace Sqlx {
+    /**
+     * Creates an OR clause from an array of conditions.
+     *
+     * This function is exposed to PHP as `Sqlx\OR_()` and allows building
+     * complex boolean expressions with OR logic.
+     *
+     * # Arguments
+     * - `or`: An array of conditions, where each condition can be:
+     *   - A string (raw SQL fragment)
+     *   - An array `[column, operator, value]`
+     *   - A nested `OrClause` for complex logic
+     *
+     * # Returns
+     * An `OrClause` instance that can be used in WHERE clauses.
+     *
+     * # PHP Example
+     * ```php
+     * use function Sqlx\OR_;
+     *
+     * // Simple OR
+     * OR_([
+     *     ['status', '=', 'pending'],
+     *     ['status', '=', 'processing']
+     * ])
+     *
+     * // Nested OR
+     * OR_([
+     *     ['role', '=', 'admin'],
+     *     OR_([
+     *         ['department', '=', 'IT'],
+     *         ['level', '>=', 5]
+     *     ])
+     * ])
+     * ```
+     */
     function OR_(array $or): \Sqlx\OrClause {}
 
     function JSON(mixed $pv): \Sqlx\JsonWrapper {}
@@ -220,6 +255,26 @@ namespace Sqlx {
         public function __construct() {}
     }
 
+    /**
+     * Represents an OR clause for building complex boolean conditions.
+     *
+     * Created using the `OR_()` PHP function, this allows nested OR conditions
+     * within WHERE clauses.
+     *
+     * # PHP Example
+     *
+     * ```php
+     * use function Sqlx\OR_;
+     *
+     * $builder->where([
+     *     ['status', '=', 'active'],
+     *     OR_([
+     *         ['role', '=', 'admin'],
+     *         ['role', '=', 'moderator']
+     *     ])
+     * ]);
+     * ```
+     */
     class OrClause {
         public function __construct() {}
     }
@@ -327,7 +382,14 @@ namespace Sqlx {
     }
 
     /**
-     * This class supports prepared queries, persistent connections, and augmented SQL.
+     * Database driver for executing SQL queries with advanced features.
+     *
+     * This class supports:
+     * - **Prepared queries**: Cached AST parsing for repeated queries
+     * - **Persistent connections**: Reuse connections across PHP requests
+     * - **Augmented SQL**: Conditional blocks, IN clause optimization, pagination
+     * - **Transactions**: Both callback-based and imperative styles
+     * - **Query builders**: Fluent API for constructing queries
      */
     class MySqlDriver {
         /**
@@ -1007,24 +1069,49 @@ namespace Sqlx {
         public function dry(string $query, ?array $parameters): array {}
 
         /**
-         * Begins a new transaction, yields control to the provided callable,
-         * and commits or rolls back based on the callable's return value or error.
+         * Begins a SQL transaction, optionally executing a callable within it.
+         *
+         * This method supports two modes of operation:
+         *
+         * **Mode 1: Callback-based (automatic commit/rollback)**
+         * ```php
+         * $driver->begin(function($driver) {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     return true; // true = commit, false = rollback
+         * });
+         * ```
+         *
+         * **Mode 2: Imperative (manual commit/rollback)**
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
          *
          * # Parameters
-         * - `callable`: A PHP callable receiving this Driver instance.
+         * - `callable`: Optional PHP callable receiving this Driver instance.
          *
-         * # Behavior
+         * # Behavior (with callable)
          * - Starts a transaction.
          * - Invokes `callable($this)`.
-         * - If the callable returns false, rolls back, and commits otherwise.
+         * - If the callable returns false, rolls back; commits otherwise.
          * - On exception or callable error, rolls back and rethrows.
          *
+         * # Behavior (without callable)
+         * - Starts a transaction and leaves it active on the transaction stack.
+         * - You must manually call `commit()` or `rollback()` to finish.
+         *
          * # Exceptions
-         * Throws an exception if transaction commit, rollback,
+         * Throws an exception if transaction start, commit, rollback,
          * or callable invocation fails.
          *
          */
-        public function begin(callable $callable): mixed {}
+        public function begin(?callable $callable): mixed {}
 
         /**
          * Creates a transaction savepoint with the given name.
@@ -1058,6 +1145,60 @@ namespace Sqlx {
          * Throws an exception if releasing the savepoint fails.
          */
         public function releaseSavepoint(string $savepoint): mixed {}
+
+        /**
+         * Commits the current ongoing transaction.
+         *
+         * This method should be called after `begin()` was called without a callable.
+         * It commits all changes made during the transaction and removes the transaction
+         * from the stack.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - no transaction is currently active
+         * - the commit operation fails
+         *
+         * # Example
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
+         */
+        public function commit(): mixed {}
+
+        /**
+         * Rolls back the current ongoing transaction.
+         *
+         * This method should be called after `begin()` was called without a callable.
+         * It discards all changes made during the transaction and removes the transaction
+         * from the stack.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - no transaction is currently active
+         * - the rollback operation fails
+         *
+         * # Example
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
+         */
+        public function rollback(): mixed {}
 
         /**
          * Constructs a new SQLx driver instance.
@@ -1622,7 +1763,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $where_, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
+        public function Where(mixed $where_, ?array $parameters): \Sqlx\MySqlReadQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -2619,7 +2760,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $where_, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
+        public function Where(mixed $where_, ?array $parameters): \Sqlx\MySqlWriteQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -3451,7 +3592,14 @@ namespace Sqlx {
     }
 
     /**
-     * This class supports prepared queries, persistent connections, and augmented SQL.
+     * Database driver for executing SQL queries with advanced features.
+     *
+     * This class supports:
+     * - **Prepared queries**: Cached AST parsing for repeated queries
+     * - **Persistent connections**: Reuse connections across PHP requests
+     * - **Augmented SQL**: Conditional blocks, IN clause optimization, pagination
+     * - **Transactions**: Both callback-based and imperative styles
+     * - **Query builders**: Fluent API for constructing queries
      */
     class PgDriver {
         /**
@@ -4131,24 +4279,49 @@ namespace Sqlx {
         public function dry(string $query, ?array $parameters): array {}
 
         /**
-         * Begins a new transaction, yields control to the provided callable,
-         * and commits or rolls back based on the callable's return value or error.
+         * Begins a SQL transaction, optionally executing a callable within it.
+         *
+         * This method supports two modes of operation:
+         *
+         * **Mode 1: Callback-based (automatic commit/rollback)**
+         * ```php
+         * $driver->begin(function($driver) {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     return true; // true = commit, false = rollback
+         * });
+         * ```
+         *
+         * **Mode 2: Imperative (manual commit/rollback)**
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
          *
          * # Parameters
-         * - `callable`: A PHP callable receiving this Driver instance.
+         * - `callable`: Optional PHP callable receiving this Driver instance.
          *
-         * # Behavior
+         * # Behavior (with callable)
          * - Starts a transaction.
          * - Invokes `callable($this)`.
-         * - If the callable returns false, rolls back, and commits otherwise.
+         * - If the callable returns false, rolls back; commits otherwise.
          * - On exception or callable error, rolls back and rethrows.
          *
+         * # Behavior (without callable)
+         * - Starts a transaction and leaves it active on the transaction stack.
+         * - You must manually call `commit()` or `rollback()` to finish.
+         *
          * # Exceptions
-         * Throws an exception if transaction commit, rollback,
+         * Throws an exception if transaction start, commit, rollback,
          * or callable invocation fails.
          *
          */
-        public function begin(callable $callable): mixed {}
+        public function begin(?callable $callable): mixed {}
 
         /**
          * Creates a transaction savepoint with the given name.
@@ -4182,6 +4355,60 @@ namespace Sqlx {
          * Throws an exception if releasing the savepoint fails.
          */
         public function releaseSavepoint(string $savepoint): mixed {}
+
+        /**
+         * Commits the current ongoing transaction.
+         *
+         * This method should be called after `begin()` was called without a callable.
+         * It commits all changes made during the transaction and removes the transaction
+         * from the stack.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - no transaction is currently active
+         * - the commit operation fails
+         *
+         * # Example
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
+         */
+        public function commit(): mixed {}
+
+        /**
+         * Rolls back the current ongoing transaction.
+         *
+         * This method should be called after `begin()` was called without a callable.
+         * It discards all changes made during the transaction and removes the transaction
+         * from the stack.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - no transaction is currently active
+         * - the rollback operation fails
+         *
+         * # Example
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
+         */
+        public function rollback(): mixed {}
 
         /**
          * Constructs a new SQLx driver instance.
@@ -4746,7 +4973,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $where_, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
+        public function Where(mixed $where_, ?array $parameters): \Sqlx\PgReadQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -5743,7 +5970,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $where_, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
+        public function Where(mixed $where_, ?array $parameters): \Sqlx\PgWriteQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -6575,7 +6802,14 @@ namespace Sqlx {
     }
 
     /**
-     * This class supports prepared queries, persistent connections, and augmented SQL.
+     * Database driver for executing SQL queries with advanced features.
+     *
+     * This class supports:
+     * - **Prepared queries**: Cached AST parsing for repeated queries
+     * - **Persistent connections**: Reuse connections across PHP requests
+     * - **Augmented SQL**: Conditional blocks, IN clause optimization, pagination
+     * - **Transactions**: Both callback-based and imperative styles
+     * - **Query builders**: Fluent API for constructing queries
      */
     class MssqlDriver {
         /**
@@ -7255,24 +7489,49 @@ namespace Sqlx {
         public function dry(string $query, ?array $parameters): array {}
 
         /**
-         * Begins a new transaction, yields control to the provided callable,
-         * and commits or rolls back based on the callable's return value or error.
+         * Begins a SQL transaction, optionally executing a callable within it.
+         *
+         * This method supports two modes of operation:
+         *
+         * **Mode 1: Callback-based (automatic commit/rollback)**
+         * ```php
+         * $driver->begin(function($driver) {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     return true; // true = commit, false = rollback
+         * });
+         * ```
+         *
+         * **Mode 2: Imperative (manual commit/rollback)**
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
          *
          * # Parameters
-         * - `callable`: A PHP callable receiving this Driver instance.
+         * - `callable`: Optional PHP callable receiving this Driver instance.
          *
-         * # Behavior
+         * # Behavior (with callable)
          * - Starts a transaction.
          * - Invokes `callable($this)`.
-         * - If the callable returns false, rolls back, and commits otherwise.
+         * - If the callable returns false, rolls back; commits otherwise.
          * - On exception or callable error, rolls back and rethrows.
          *
+         * # Behavior (without callable)
+         * - Starts a transaction and leaves it active on the transaction stack.
+         * - You must manually call `commit()` or `rollback()` to finish.
+         *
          * # Exceptions
-         * Throws an exception if transaction commit, rollback,
+         * Throws an exception if transaction start, commit, rollback,
          * or callable invocation fails.
          *
          */
-        public function begin(callable $callable): mixed {}
+        public function begin(?callable $callable): mixed {}
 
         /**
          * Creates a transaction savepoint with the given name.
@@ -7306,6 +7565,60 @@ namespace Sqlx {
          * Throws an exception if releasing the savepoint fails.
          */
         public function releaseSavepoint(string $savepoint): mixed {}
+
+        /**
+         * Commits the current ongoing transaction.
+         *
+         * This method should be called after `begin()` was called without a callable.
+         * It commits all changes made during the transaction and removes the transaction
+         * from the stack.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - no transaction is currently active
+         * - the commit operation fails
+         *
+         * # Example
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
+         */
+        public function commit(): mixed {}
+
+        /**
+         * Rolls back the current ongoing transaction.
+         *
+         * This method should be called after `begin()` was called without a callable.
+         * It discards all changes made during the transaction and removes the transaction
+         * from the stack.
+         *
+         * # Exceptions
+         * Throws an exception if:
+         * - no transaction is currently active
+         * - the rollback operation fails
+         *
+         * # Example
+         * ```php
+         * $driver->begin();
+         * try {
+         *     $driver->execute('INSERT INTO users (name) VALUES (?)', ['John']);
+         *     $driver->execute('INSERT INTO logs (action) VALUES (?)', ['user_created']);
+         *     $driver->commit();
+         * } catch (\Exception $e) {
+         *     $driver->rollback();
+         *     throw $e;
+         * }
+         * ```
+         */
+        public function rollback(): mixed {}
 
         /**
          * Constructs a new SQLx driver instance.
@@ -7487,7 +7800,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $where_, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
+        public function Where(mixed $where_, ?array $parameters): \Sqlx\MssqlReadQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.
@@ -8484,7 +8797,7 @@ namespace Sqlx {
          * # Exceptions
          * Throws an exception if the input is not valid.
          */
-        public function where(mixed $where_, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
+        public function Where(mixed $where_, ?array $parameters): \Sqlx\MssqlWriteQueryBuilder {}
 
         /**
          * Appends a `UNION` clause to the query.

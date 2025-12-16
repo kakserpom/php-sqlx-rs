@@ -1,5 +1,5 @@
 use crate::conversion::Conversion;
-use anyhow::{anyhow, bail};
+use crate::error::Error as SqlxError;
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
@@ -15,21 +15,21 @@ impl Conversion for MssqlRow {
         &self,
         column: &MssqlColumn,
         _associative_arrays: bool,
-    ) -> anyhow::Result<Zval> {
+    ) -> crate::error::Result<Zval> {
         fn try_cast_into_zval<'r, T>(
             row: &'r MssqlRow,
             column_ordinal: usize,
-        ) -> anyhow::Result<Zval>
+        ) -> crate::error::Result<Zval>
         where
             T: Decode<'r, <MssqlRow as Row>::Database> + Type<<MssqlRow as Row>::Database>,
             T: IntoZval,
         {
             match row.try_get::<'r, T, _>(column_ordinal) {
-                Ok(value) => Ok(value.into_zval(false).map_err(|err| anyhow!("{err:?}"))?),
+                Ok(value) => Ok(value.into_zval(false).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?),
                 Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => {
                     Ok(Zval::null())
                 }
-                Err(err) => Err(anyhow!("{err:?}")),
+                Err(err) => Err(SqlxError::Conversion { message: format!("{err:?}") }),
             }
         }
 
@@ -62,16 +62,16 @@ impl Conversion for MssqlRow {
                 .copied()
                 .collect::<Binary<_>>()
                 .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?,
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
 
-            other => bail!("unsupported type: {}", other),
+            other => return Err(SqlxError::Conversion { message: format!("unsupported type: {}", other) }),
         })
     }
 
     fn column_value_into_array_key<'a, MssqlColumn: Column, Mssql>(
         &self,
         column: &MssqlColumn,
-    ) -> anyhow::Result<ArrayKey<'a>> {
+    ) -> crate::error::Result<ArrayKey<'a>> {
         let column_ordinal = column.name();
         Ok(match column.type_info().name() {
             "BIT" => {
@@ -95,7 +95,7 @@ impl Conversion for MssqlRow {
                 ArrayKey::String(self.try_get::<String, _>(column_ordinal)?)
             }
 
-            other => bail!("unsupported type for array key: {}", other),
+            other => return Err(SqlxError::Conversion { message: format!("unsupported type for array key: {}", other) }),
         })
     }
 }

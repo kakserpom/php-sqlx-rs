@@ -13,7 +13,7 @@ pub trait ParamVecWriteSqlTo {
         sql: &mut String,
         out_vals: &mut Vec<ParameterValue>,
         settings: &Settings,
-    ) -> anyhow::Result<()>;
+    ) -> crate::error::Result<()>;
 }
 
 impl ParameterValue {
@@ -31,7 +31,7 @@ impl ParameterValue {
         sql: &mut String,
         out_vals: &mut Vec<Self>,
         settings: &Settings,
-    ) -> anyhow::Result<()> {
+    ) -> crate::error::Result<()> {
         if out_vals.len() < settings.max_placeholders {
             out_vals.push(self.clone());
             if settings.placeholder_dollar_sign {
@@ -64,7 +64,7 @@ impl ParameterValue {
         sql: &mut String,
         out_vals: &mut Vec<ParameterValue>,
         settings: &Settings,
-    ) -> anyhow::Result<()> {
+    ) -> crate::error::Result<()> {
         match self {
             ParameterValue::SelectClauseRendered(scr) => {
                 scr.write_sql_to(sql, settings)?;
@@ -100,7 +100,7 @@ impl ParamVecWriteSqlTo for Vec<ParameterValue> {
         sql: &mut String,
         out_vals: &mut Vec<ParameterValue>,
         settings: &Settings,
-    ) -> anyhow::Result<()> {
+    ) -> crate::error::Result<()> {
         out_vals.reserve_exact(self.len());
         for (i, item) in self.iter().enumerate() {
             if i > 0 {

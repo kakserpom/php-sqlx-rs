@@ -25,7 +25,7 @@
 
 use crate::ast::Settings;
 use crate::param_value::ParameterValue;
-use anyhow::bail;
+use crate::error::Error as SqlxError;
 use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 
 /// Registers the `PaginateClause` and `PaginateClauseRendered` classes with the PHP module builder.
@@ -123,9 +123,9 @@ impl PaginateClause {
     ///
     /// # Errors
     /// Returns an error if `per_page < 1`.
-    pub fn per_page(&mut self, per_page: i64) -> anyhow::Result<()> {
+    pub fn per_page(&mut self, per_page: i64) -> crate::error::Result<()> {
         if per_page < 1 {
-            bail!("per_page must be greater than 0");
+            return Err(SqlxError::Other("per_page must be greater than 0".to_string()));
         }
         self.min_per_page = per_page;
         self.max_per_page = per_page;
@@ -140,9 +140,9 @@ impl PaginateClause {
     ///
     /// # Errors
     /// Returns an error if `min_per_page < 1`.
-    pub fn min_per_page(&mut self, min_per_page: i64) -> anyhow::Result<()> {
+    pub fn min_per_page(&mut self, min_per_page: i64) -> crate::error::Result<()> {
         if min_per_page < 1 {
-            bail!("min_per_page must be greater than 0");
+            return Err(SqlxError::Other("min_per_page must be greater than 0".to_string()));
         }
         self.min_per_page = min_per_page;
         self.max_per_page = self.max_per_page.max(min_per_page);
@@ -157,9 +157,9 @@ impl PaginateClause {
     ///
     /// # Errors
     /// Returns an error if `max_per_page < 1`.
-    pub fn max_per_page(&mut self, max_per_page: i64) -> anyhow::Result<()> {
+    pub fn max_per_page(&mut self, max_per_page: i64) -> crate::error::Result<()> {
         if max_per_page < 1 {
-            bail!("max_per_page must be greater than 0");
+            return Err(SqlxError::Other("max_per_page must be greater than 0".to_string()));
         }
         self.min_per_page = self.min_per_page.min(max_per_page);
         self.max_per_page = max_per_page;
@@ -196,7 +196,7 @@ impl PaginateClauseRendered {
         sql: &mut String,
         out_vals: &mut Vec<ParameterValue>,
         settings: &Settings,
-    ) -> anyhow::Result<()> {
+    ) -> crate::error::Result<()> {
         sql.push_str("LIMIT ");
         ParameterValue::Int(self.limit).write_sql_to(sql, out_vals, settings)?;
         sql.push_str(" OFFSET ");

@@ -1,6 +1,6 @@
 use crate::LazyRowJson;
 use crate::conversion::{Conversion, json_into_zval};
-use anyhow::{anyhow, bail};
+use crate::error::Error as SqlxError;
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
@@ -14,16 +14,16 @@ impl Conversion for MySqlRow {
         &self,
         column: &MySqlColumn,
         associative_arrays: bool,
-    ) -> anyhow::Result<Zval> {
-        fn try_cast_into_zval<'r, T>(row: &'r MySqlRow, column_ordinal: usize) -> anyhow::Result<Zval>
+    ) -> crate::error::Result<Zval> {
+        fn try_cast_into_zval<'r, T>(row: &'r MySqlRow, column_ordinal: usize) -> crate::error::Result<Zval>
         where
             T: Decode<'r, <MySqlRow as Row>::Database> + Type<<MySqlRow as Row>::Database>,
             T: IntoZval,
         {
             row.try_get::<'r, T, _>(column_ordinal)
-                .map_err(|err| anyhow!("{err:?}"))?
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?
                 .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
         }
 
         let column_ordinal = column.ordinal();
@@ -51,7 +51,7 @@ impl Conversion for MySqlRow {
                 .copied()
                 .collect::<Binary<_>>()
                 .into_zval(false)
-                .map_err(|err| anyhow!("{err:?}"))?,
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
             "TEXT" | "TINYTEXT" | "MEDIUMTEXT" | "LONGTEXT" | "CHAR" | "VARCHAR" => {
                 try_cast_into_zval::<String>(self, column_ordinal)?
             }
@@ -61,26 +61,26 @@ impl Conversion for MySqlRow {
                 if v.len() == 1 {
                     (v[0] != 0)
                         .into_zval(false)
-                        .map_err(|err| anyhow!("{err:?}"))?
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?
                 } else {
                     Binary::from(v)
                         .into_zval(false)
-                        .map_err(|err| anyhow!("{err:?}"))?
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?
                 }
             }
             "NULL" => Zval::null(),
             "JSON" => {
                 self.try_get_raw::<_>(column_ordinal)
                     .map(|value_ref: MySqlValueRef<'_>| {
-                        let buf = value_ref.as_bytes().map_err(|err| anyhow!("{err:?}"))?;
+                        let buf = value_ref.as_bytes().map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
                         if buf.is_empty() {
-                            bail!("empty JSON raw value in {column_ordinal}");
+                            return Err(SqlxError::Conversion { message: format!("empty JSON raw value in {column_ordinal}") });
                         }
                         #[cfg(feature = "lazy-row")]
                         if buf.len() > crate::lazy_row::LAZY_ROW_JSON_SIZE_THRESHOLD {
                             return LazyRowJson::new(buf, associative_arrays)
                                 .into_zval(associative_arrays)
-                                .map_err(|err| anyhow!("{err:?}"));
+                                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") });
                         }
 
                         #[cfg(feature = "simd-json")]
@@ -95,14 +95,14 @@ impl Conversion for MySqlRow {
                         );
                     })??
             }
-            other => bail!("unsupported type: {other}"),
+            other => return Err(SqlxError::Conversion { message: format!("unsupported type: {other}") }),
         })
     }
 
     fn column_value_into_array_key<'a, MySqlColumn: Column, MySql>(
         &self,
         column: &MySqlColumn,
-    ) -> anyhow::Result<ArrayKey<'a>> {
+    ) -> crate::error::Result<ArrayKey<'a>> {
         let column_name = column.name();
         Ok(match column.type_info().name() {
             "BOOLEAN" => ArrayKey::Long(i64::from(self.try_get::<bool, _>(column_name)?)),
@@ -123,7 +123,7 @@ impl Conversion for MySqlRow {
             }
             "ENUM" | "SET" => ArrayKey::String(self.try_get::<String, _>(column_name)?),
             "NULL" => ArrayKey::Str(""),
-            other => bail!("unsupported type for array key: {other}"),
+            other => return Err(SqlxError::Conversion { message: format!("unsupported type for array key: {other}") }),
         })
     }
 }

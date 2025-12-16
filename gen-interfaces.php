@@ -51,7 +51,10 @@ foreach ($classes as $class) {
         }
         $signature .= implode(', ', $params) . ')';
         if ($method->hasReturnType()) {
-            $signature .= ': ' . $method->getReturnType();
+            $returnType = (string)$method->getReturnType();
+            // Strip leading backslash from fully qualified names
+            $returnType = ltrim($returnType, '\\');
+            $signature .= ': ' . $returnType;
         }
 
         $doc = $method->getDocComment() ?: '';

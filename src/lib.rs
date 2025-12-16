@@ -20,6 +20,7 @@
 //! - [`query_builder`]: Fluent query builder API
 //! - [`options`]: Driver configuration options
 //! - [`driver_factory`]: Factory for creating database drivers
+//! - [`error`]: Typed error handling with PHP exception conversion
 //! - Clause modules: [`select_clause`], [`by_clause`], [`paginate_clause`]
 
 #![warn(clippy::pedantic)]
@@ -38,6 +39,7 @@ pub mod ast;
 pub mod by_clause;
 pub mod conversion;
 mod driver;
+pub mod error;
 mod inner_driver;
 #[cfg(feature = "lazy-row")]
 mod lazy_row;

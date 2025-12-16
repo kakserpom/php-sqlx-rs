@@ -58,7 +58,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_column_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, None)
             }
@@ -79,7 +79,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_column_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, Some(true))
             }
@@ -100,7 +100,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_column_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, Some(false))
             }
@@ -127,7 +127,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, None)
             }
@@ -152,7 +152,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, Some(true))
             }
@@ -177,7 +177,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, Some(false))
             }
@@ -194,7 +194,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_grouped_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, None)
             }
@@ -203,7 +203,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_grouped_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, Some(true))
             }
@@ -212,7 +212,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_grouped_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, Some(false))
             }
@@ -228,7 +228,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_grouped_column_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(&self.query, parameters, None)
             }
@@ -241,7 +241,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_grouped_column_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
                     parameters,
@@ -257,7 +257,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_grouped_column_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
                     parameters,
@@ -281,7 +281,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn execute(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<u64> {
+            ) -> $crate::error::Result<u64> {
                 self.driver_inner.execute(self.query.as_str(), parameters)
             }
 
@@ -302,7 +302,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_row(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_row(&self.query, parameters, None)
             }
 
@@ -313,7 +313,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_row_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_row(&self.query, parameters, Some(true))
             }
@@ -325,7 +325,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_row_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_row(&self.query, parameters, Some(false))
             }
@@ -344,7 +344,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_maybe_row(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, None)
             }
@@ -366,7 +366,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_maybe_row_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, Some(true))
             }
@@ -387,7 +387,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_maybe_row_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, Some(false))
             }
@@ -411,7 +411,7 @@ macro_rules! php_sqlx_impl_prepared_query {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(&self.query, parameters, column, None)
             }
@@ -432,7 +432,7 @@ macro_rules! php_sqlx_impl_prepared_query {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(&self.query, parameters, column, Some(true))
             }
@@ -452,7 +452,7 @@ macro_rules! php_sqlx_impl_prepared_query {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(&self.query, parameters, column, Some(false))
             }
@@ -474,7 +474,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_all(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner.query_all(&self.query, parameters, None)
             }
 
@@ -492,7 +492,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_all_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_all(&self.query, parameters, Some(true))
             }
@@ -511,7 +511,7 @@ macro_rules! php_sqlx_impl_prepared_query {
             pub fn query_all_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_all(&self.query, parameters, Some(false))
             }

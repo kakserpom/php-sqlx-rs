@@ -1,6 +1,6 @@
 use crate::ast::Settings;
 use crate::param_value::ParameterValue;
-use anyhow::bail;
+use crate::error::Error as SqlxError;
 
 impl ParameterValue {
     /// Escapes `%`, `_`, and `\` characters in the input string by prefixing them with a backslash,
@@ -8,9 +8,9 @@ impl ParameterValue {
     ///
     /// # Returns
     /// A new `String` where all occurrences of `%`, `_`, and `\` are escaped.
-    pub fn meta_quote_like(&self) -> anyhow::Result<String> {
+    pub fn meta_quote_like(&self) -> crate::error::Result<String> {
         let Self::String(input) = self else {
-            bail!("meta_quote_like called on non-string parameter");
+            return Err(SqlxError::Other("meta_quote_like called on non-string parameter".to_string()));
         };
 
         let mut escaped = String::with_capacity(input.len());
@@ -33,7 +33,7 @@ impl ParameterValue {
     ///
     /// # Errors
     /// Return Err if the value is a structured clause or an unsupported type.
-    pub fn quote(&self, settings: &Settings) -> anyhow::Result<String> {
+    pub fn quote(&self, settings: &Settings) -> crate::error::Result<String> {
         fn escape_sql_string(input: &str, settings: &Settings) -> String {
             let mut out = String::with_capacity(input.len() + 8);
             if settings.strings_as_ntext {
@@ -77,14 +77,14 @@ impl ParameterValue {
                 let elements = values
                     .iter()
                     .map(|v| v.quote(settings))
-                    .collect::<anyhow::Result<Vec<_>>>()?
+                    .collect::<crate::error::Result<Vec<_>>>()?
                     .join(", ");
                 format!("({elements})")
             }
 
             Self::Object(obj) => escape_sql_string(
                 &serde_json::to_string(obj)
-                    .map_err(|e| anyhow::anyhow!("JSON serialization error: {}", e))?,
+                    .map_err(|e| SqlxError::Other(format!("JSON serialization error: {e}")))?,
                 settings,
             ),
 
@@ -92,7 +92,7 @@ impl ParameterValue {
             | Self::SelectClauseRendered(_)
             | Self::PaginateClauseRendered(_)
             | Self::Builder(_) => {
-                bail!("Cannot quote a clause as a value")
+                return Err(SqlxError::Other("Cannot quote a clause as a value".to_string()))
             }
         })
     }

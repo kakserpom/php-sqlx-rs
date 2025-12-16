@@ -27,7 +27,7 @@
 //! for each supported database (PostgreSQL, MySQL, MSSQL).
 
 use crate::param_value::{ParameterValue, ParamsMap};
-use anyhow::{anyhow, bail};
+use crate::error::Error as SqlxError;
 use ext_php_rs::convert::FromZval;
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable, Zval};
@@ -140,7 +140,7 @@ pub enum JoinType {
 /// ```
 #[php_function]
 #[php(name = "Sqlx\\OR_")]
-pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
+pub fn or_(or: &ZendHashTable) -> crate::error::Result<OrClause> {
     let mut inner = Vec::with_capacity(or.len());
     for (i, (key, value)) in or.iter().enumerate() {
         if let ArrayKey::Long(_) = key {
@@ -150,14 +150,14 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
                 if array.has_sequential_keys() {
                     let array_len = array.len();
                     if array_len > 3 {
-                        bail!("condition #{i}: array cannot contain more than 3 elements");
+                        return Err(SqlxError::Other("condition #{i}: array cannot contain more than 3 elements".to_string()));
                     }
                     let left_operand =
                         array.get_index(0).and_then(Zval::string).ok_or_else(|| {
-                            anyhow!("first element (left operand) of #{i} must be a string")
+                            SqlxError::Other(format!("first element (left operand) of #{i} must be a string"))
                         })?;
                     let operator = array.get_index(1).and_then(Zval::string).ok_or_else(|| {
-                        anyhow!("second element (operator) of #{i} must be a string")
+                        SqlxError::Other(format!("second element (operator) of #{i} must be a string"))
                     })?;
                     let right_operand = if array_len > 2 {
                         Some(
@@ -165,7 +165,7 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
                                 .get_index(2)
                                 .and_then(ParameterValue::from_zval)
                                 .ok_or_else(|| {
-                                    anyhow!("third element (value) must a valid parameter value")
+                                    SqlxError::Other("third element (value) must a valid parameter value".to_string())
                                 })?,
                         )
                     } else {
@@ -180,13 +180,13 @@ pub fn or_(or: &ZendHashTable) -> anyhow::Result<OrClause> {
             {
                 inner.push(OrClauseItem::Nested(or));
             } else {
-                bail!("element must be a string or OrClause");
+                return Err(SqlxError::Other("element must be a string or OrClause".to_string()));
             }
         } else {
             let Some(parameters) = value.array() else {
-                bail!("keyed element's value must be array");
+                return Err(SqlxError::Other("keyed element's value must be array".to_string()));
             };
-            let parameters: ParamsMap = parameters.try_into().map_err(|err| anyhow!("{err}"))?;
+            let parameters: ParamsMap = parameters.try_into().map_err(|err| SqlxError::Other(format!("{err}")))?;
             inner.push(OrClauseItem::Item((key.to_string(), Some(parameters))));
         }
     }
@@ -210,7 +210,6 @@ macro_rules! php_sqlx_impl_query_builder {
             query_builder::JoinType,
             utils::strip_prefix::StripPrefixWordIgnoreAsciiCase
         };
-        use anyhow::{anyhow, bail};
         use ext_php_rs::{
           prelude::*,
           types::{ArrayKey, ZendClassObject, Zval},
@@ -285,9 +284,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 }
             }
 
-            fn _write_op_guard(&self) -> anyhow::Result<()> {
+            fn _write_op_guard(&self) -> crate::error::Result<()> {
                 if self.readonly {
-                    bail!("You cannot write to a replica.");
+                    return Err($crate::error::Error::Other("You cannot write to a replica.".to_string()));
                 }
                 Ok(())
             }
@@ -308,7 +307,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 on: &str,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<()> {
+            ) -> crate::error::Result<()> {
                 if !self.query.is_empty() {
                     self.query.push('\n');
                 }
@@ -329,7 +328,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 keyword: &str,
                 query: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<()> {
+            ) -> crate::error::Result<()> {
                 use ext_php_rs::types::ZendClassObject;
 
                 write!(self.query, "\n{keyword}\n")?;
@@ -347,7 +346,7 @@ macro_rules! php_sqlx_impl_query_builder {
                         "union",
                     )?;
                 } else {
-                    bail!("argument to union must be a string or Builder");
+                    return Err($crate::error::Error::Other("argument to union must be a string or Builder".to_string()));
                 }
 
                 Ok(())
@@ -364,7 +363,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 operator: &str,
                 right_operand: Option<ParameterValue>,
                 placeholder_prefix: &str,
-            ) -> anyhow::Result<()> {
+            ) -> crate::error::Result<()> {
                 let mut op = operator.to_ascii_uppercase();
                 op.trim_in_place();
 
@@ -394,10 +393,10 @@ macro_rules! php_sqlx_impl_query_builder {
                 }
                 if matches!(op.as_str(), "IS NULL" | "IS NOT NULL") {
                     if not {
-                        bail!("Invalid operator");
+                        return Err($crate::error::Error::Other("Invalid operator".to_string()));
                     }
                     if right_operand.is_some() {
-                            bail!("Operator {op} must not be given a right-hand operand");
+                            return Err($crate::error::Error::Other(format!("Operator {op} must not be given a right-hand operand")));
                         }
                         self._append(
                             &format!("{left_operand} {op}"),
@@ -406,7 +405,7 @@ macro_rules! php_sqlx_impl_query_builder {
                         )?;
                 }
                 else {
-                    let value = right_operand.ok_or_else(|| anyhow!("Operator {op} requires a right-hand operand"))?;
+                    let value = right_operand.ok_or_else(|| $crate::error::Error::Other(format!("Operator {op} requires a right-hand operand")))?;
                     match op.as_str() {
                         "=" | "!=" | ">" | ">=" | "<" | "<=" if !not => {
                             self._append(
@@ -478,7 +477,7 @@ macro_rules! php_sqlx_impl_query_builder {
                                 placeholder_prefix
                             )?;
                         }
-                        _ => bail!("Operator {operator:?} is not supported"),
+                        _ => return Err($crate::error::Error::Other(format!("Operator {operator:?} is not supported"))),
                     }
                 }
                 Ok(())
@@ -488,7 +487,7 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// This method recursively renders nested `OrClause` groups and ensures
             /// proper formatting within parenthesis.
-            pub fn _append_or(&mut self, or: &OrClause, prefix: &str) -> anyhow::Result<()> {
+            pub fn _append_or(&mut self, or: &OrClause, prefix: &str) -> crate::error::Result<()> {
                 self.query.push('(');
                 for (i, item) in or.inner.iter().enumerate() {
                     if i > 0 {
@@ -533,7 +532,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 part: &str,
                 parameters: Option<I>,
                 prefix: &str,
-            ) -> anyhow::Result<()>
+            ) -> crate::error::Result<()>
             where
                 I: IntoIterator<Item = (K, V)>,
                 K: Into<String>,
@@ -551,7 +550,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 ast: &Ast,
                 parameters: Option<I>,
                 prefix: &str,
-            ) -> anyhow::Result<()>
+            ) -> crate::error::Result<()>
             where
                 I: IntoIterator<Item = (K, V)>,
                 K: Into<String>,
@@ -567,7 +566,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     parameters_bucket: &mut ParamsMap,
                     positional_index: &mut usize,
                     prefix: &str,
-                ) -> anyhow::Result<()> {
+                ) -> crate::error::Result<()> {
                     match node {
                         Ast::Root { branches, .. } | Ast::Nested(branches) => {
                             for b in branches {
@@ -735,11 +734,11 @@ macro_rules! php_sqlx_impl_query_builder {
                 $struct::new(self.driver_inner.clone())
             }
 
-            pub fn factory(driver: &ZendClassObject<$driver>) -> anyhow::Result<$struct> {
+            pub fn factory(driver: &ZendClassObject<$driver>) -> crate::error::Result<$struct> {
                 if let Some(obj) = driver.obj.as_ref() {
                      Ok($struct::new(obj.driver_inner.clone()))
                 } else {
-                    bail!("You cannot do this now.");
+                    return Err($crate::error::Error::Other("You cannot do this now.".to_string()));
                 }
             }
 
@@ -765,7 +764,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// ```php
             /// $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
             /// ```
-            pub fn quote(&self, param: ParameterValue) -> anyhow::Result<String> {
+            pub fn quote(&self, param: ParameterValue) -> crate::error::Result<String> {
                 param.quote(&self.driver_inner.settings)
             }
 
@@ -793,7 +792,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// // Use like:
             /// $builder->where([["name", "LIKE", "%$escaped%"]]);
             /// ```
-            pub fn meta_quote_like(&self, param: ParameterValue) -> anyhow::Result<String> {
+            pub fn meta_quote_like(&self, param: ParameterValue) -> crate::error::Result<String> {
                 param.meta_quote_like()
             }
 
@@ -812,18 +811,18 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 target: &Zval,
                 set: Option<&Zval>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 let target_str = if let Some(scalar) = target.str() {
                     scalar.to_string()
                 } else if let Some(arr) = target.array() {
                     arr
                         .iter()
                         .map(|(_, val)| {
-                            val.str().ok_or_else(|| anyhow!("ON CONFLICT array elements must be strings"))
+                            val.str().ok_or_else(|| $crate::error::Error::Other("ON CONFLICT array elements must be strings".to_string()))
                         })
-                        .collect::<anyhow::Result<Vec<_>>>()?.join(", ")
+                        .collect::<crate::error::Result<Vec<_>>>()?.join(", ")
                 } else {
-                    bail!("Conflict target must be a string or array of strings");
+                    return Err($crate::error::Error::Other("Conflict target must be a string or array of strings".to_string()));
                 };
 
                 if let Some(set_val) = set {
@@ -849,7 +848,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn on_duplicate_key_update<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 set: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_.query.push_str("\nON DUPLICATE KEY UPDATE");
                 $struct::set(self_, set)?;
                 Ok(self_)
@@ -861,7 +860,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 on: &str,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Inner, table, on, parameters)?;
                 Ok(self_)
             }
@@ -873,7 +872,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 on: &str,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Inner, table, on, parameters)?;
                 Ok(self_)
             }
@@ -884,7 +883,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 on: &str,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Left, table, on, parameters)?;
                 Ok(self_)
             }
@@ -895,7 +894,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 on: &str,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Right, table, on, parameters)?;
                 Ok(self_)
             }
@@ -906,7 +905,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 on: &str,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::FullOuter, table, on, parameters)?;
                 Ok(self_)
             }
@@ -917,7 +916,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 on: &str,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Cross, table, on, parameters)?;
                 Ok(self_)
             }
@@ -929,7 +928,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn natural_join<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._join_clause(JoinType::Natural, table, "", None)?;
                 Ok(self_)
             }
@@ -952,7 +951,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table: &str,
                 as_: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
@@ -971,7 +970,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     self_._append(&query.indent_sql(true), Some(parameters.clone()), "with")?;
                 }
                 else {
-                    bail!("`as` must be a string or Builder");
+                    return Err($crate::error::Error::Other("`as` must be a string or Builder".to_string()));
                 }
                 self_.query.push_str("\n)");
                 Ok(self_)
@@ -989,7 +988,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 where_: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 if let Some(part) = where_.str() {
                     self_.query.push_str("\nWHERE ");
                     self_._append(&part.indent_sql(false), parameters, "where")?;
@@ -1011,24 +1010,24 @@ macro_rules! php_sqlx_impl_query_builder {
                                     if array.has_sequential_keys() {
                                         let array_len = array.len();
                                         if array_len > 3 {
-                                            bail!("condition #{i}: array cannot contain more than 3 elements");
+                                            return Err($crate::error::Error::Other("condition #{i}: array cannot contain more than 3 elements".to_string()));
                                         }
                                         let left_operand = array.get_index(0)
                                             .and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be a string"))?;
+                                            .ok_or_else(|| $crate::error::Error::Other(format!("first element (left operand) of #{i} must be a string")))?;
                                         let operator = array.get_index(1).and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be a string"))?;
+                                            .ok_or_else(|| $crate::error::Error::Other(format!("second element (operator) of #{i} must be a string")))?;
                                         self_._append_op(left_operand, operator, if array_len > 2 {
                                             Some(
                                                 array.get_index(2)
                                                     .and_then(ParameterValue::from_zval)
-                                                    .ok_or_else(|| anyhow!("third element (value) must a valid parameter value"))?
+                                                    .ok_or_else(|| $crate::error::Error::Other("third element (value) must a valid parameter value".to_string()))?
                                             )
                                         } else {
                                             None
                                         }, "where")?;
                                     } else {
-                                        bail!("condition #{i}: array must be a list");
+                                        return Err($crate::error::Error::Other("condition #{i}: array must be a list".to_string()));
                                     }
                                 }
                                 else if let Some(or) = value
@@ -1038,7 +1037,7 @@ macro_rules! php_sqlx_impl_query_builder {
                                 {
                                     self_._append_or(or, "where")?;
                                 } else {
-                                    bail!("element must be a string or OrClause");
+                                    return Err($crate::error::Error::Other("element must be a string or OrClause".to_string()));
                                 }
                             }
                             _ => {
@@ -1046,17 +1045,17 @@ macro_rules! php_sqlx_impl_query_builder {
                                 let ast = self_.driver_inner.parse_query(&part)?;
                                 if let Some(placeholders) = ast.get_placeholders_if_any() {
                                     let Some(parameters) = value.array() else {
-                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {placeholders:?}");
+                                        return Err($crate::error::Error::Other(format!("value must be array because the key string ({part:?}) contains placeholders: {placeholders:?}")));
                                     };
                                     let parameters: HashMap<String, ParameterValueWrapper> =
-                                        parameters.try_into().map_err(|err| anyhow!("Conversion error: {err}"))?;
+                                        parameters.try_into().map_err(|err| $crate::error::Error::Other(format!("Conversion error: {err}")))?;
                                     self_._append_ast(&ast, Some(parameters), "where")?;
                                 } else {
                                     self_._append(
                                         &format!("{part} = ?"),
                                         Some([
                                             ("0", ParameterValue::from_zval(value)
-                                                .ok_or_else(|| anyhow!("element value must a valid parameter value"))?
+                                                .ok_or_else(|| $crate::error::Error::Other("element value must a valid parameter value".to_string()))?
                                             ); 1]
                                         ),
                                         "where"
@@ -1066,7 +1065,7 @@ macro_rules! php_sqlx_impl_query_builder {
                         }
                     }
                 } else {
-                    bail!("illegal where() argument");
+                    return Err($crate::error::Error::Other("illegal where() argument".to_string()));
                 }
                 Ok(self_)
             }
@@ -1087,7 +1086,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 query: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._append_union_clause("UNION", query, parameters)?;
                 Ok(self_)
             }
@@ -1107,7 +1106,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 query: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._append_union_clause("UNION ALL", query, parameters)?;
                 Ok(self_)
             }
@@ -1124,7 +1123,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 having: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 if let Some(part) = having.str() {
                     self_.query.push_str("\nHAVING ");
                     self_._append(&part.indent_sql(false), parameters, "having")?;
@@ -1146,24 +1145,24 @@ macro_rules! php_sqlx_impl_query_builder {
                                     if array.has_sequential_keys() {
                                         let array_len = array.len();
                                         if array_len > 3 {
-                                            bail!("condition #{i}: array cannot contain more than 3 elements");
+                                            return Err($crate::error::Error::Other("condition #{i}: array cannot contain more than 3 elements".to_string()));
                                         }
                                         let left_operand = array.get_index(0)
                                             .and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("first element (left operand) of #{i} must be a string"))?;
+                                            .ok_or_else(|| $crate::error::Error::Other(format!("first element (left operand) of #{i} must be a string")))?;
                                         let operator = array.get_index(1).and_then(Zval::str)
-                                            .ok_or_else(|| anyhow!("second element (operator) of #{i} must be a string"))?;
+                                            .ok_or_else(|| $crate::error::Error::Other(format!("second element (operator) of #{i} must be a string")))?;
                                         self_._append_op(left_operand, operator, if array_len > 2 {
                                             Some(
                                                 array.get_index(2)
                                                     .and_then(ParameterValue::from_zval)
-                                                    .ok_or_else(|| anyhow!("third element (value) must a valid parameter value"))?
+                                                    .ok_or_else(|| $crate::error::Error::Other("third element (value) must a valid parameter value".to_string()))?
                                             )
                                         } else {
                                             None
                                         }, "having")?;
                                     } else {
-                                        bail!("condition #{i}: array must be a list");
+                                        return Err($crate::error::Error::Other("condition #{i}: array must be a list".to_string()));
                                     }
                                 }
                                 else if let Some(or) = value
@@ -1173,7 +1172,7 @@ macro_rules! php_sqlx_impl_query_builder {
                                 {
                                     self_._append_or(or, "having")?;
                                 } else {
-                                    bail!("element must be a string or OrClause");
+                                    return Err($crate::error::Error::Other("element must be a string or OrClause".to_string()));
                                 }
                             }
                             _ => {
@@ -1181,17 +1180,17 @@ macro_rules! php_sqlx_impl_query_builder {
                                 let ast = self_.driver_inner.parse_query(&part)?;
                                 if let Some(placeholders) = ast.get_placeholders_if_any() {
                                     let Some(parameters) = value.array() else {
-                                        bail!("value must be array because the key string ({part:?}) contains placeholders: {placeholders:?}");
+                                        return Err($crate::error::Error::Other(format!("value must be array because the key string ({part:?}) contains placeholders: {placeholders:?}")));
                                     };
                                     let parameters: HashMap<String, ParameterValueWrapper> =
-                                        parameters.try_into().map_err(|err| anyhow!("{err}"))?;
+                                        parameters.try_into().map_err(|err| $crate::error::Error::Other(format!("{err}")))?;
                                     self_._append_ast(&ast, Some(parameters), "having")?;
                                 } else {
                                     self_._append(
                                         &format!("{part} = ?"),
                                         Some([
                                             ("0", ParameterValue::from_zval(value)
-                                                .ok_or_else(|| anyhow!("element value must a valid parameter value"))?
+                                                .ok_or_else(|| $crate::error::Error::Other("element value must a valid parameter value".to_string()))?
                                             ); 1]
                                         ),
                                         "having"
@@ -1201,7 +1200,7 @@ macro_rules! php_sqlx_impl_query_builder {
                         }
                     }
                 } else {
-                    bail!("illegal having() argument");
+                    return Err($crate::error::Error::Other("illegal having() argument".to_string()));
                 }
                 Ok(self_)
             }
@@ -1221,9 +1220,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &mut ZendClassObject<$struct>,
                 limit: i64,
                 offset: Option<i64>,
-            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&mut ZendClassObject<$struct>> {
                 if limit < 0 {
-                    bail!("LIMIT must be non-negative");
+                    return Err($crate::error::Error::Other("LIMIT must be non-negative".to_string()));
                 }
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
@@ -1231,7 +1230,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 write!(self_.query, "LIMIT {limit}")?;
                 if let Some(offset) = offset {
                     if offset < 0 {
-                        bail!("OFFSET must be non-negative");
+                        return Err($crate::error::Error::Other("OFFSET must be non-negative".to_string()));
                     }
                     write!(self_.query, " OFFSET {offset}")?;
                 }
@@ -1250,9 +1249,9 @@ macro_rules! php_sqlx_impl_query_builder {
             fn offset(
                 self_: &mut ZendClassObject<$struct>,
                 offset: i64,
-            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&mut ZendClassObject<$struct>> {
                 if offset < 0 {
-                    bail!("OFFSET must be non-negative");
+                    return Err($crate::error::Error::Other("OFFSET must be non-negative".to_string()));
                 }
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
@@ -1277,7 +1276,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 from: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
 
                 if !self_.query.is_empty() {
@@ -1287,7 +1286,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 if let Some(str) = from.str() {
                     self_._append(&format!("DELETE FROM ({})", str.indent_sql(true)), parameters, "delete")?;
                 } else if from.array().is_some() {
-                    bail!("deleteFrom() does not support arrays");
+                    return Err($crate::error::Error::Other("deleteFrom() does not support arrays".to_string()));
                 } else if let Some($struct { query, parameters, .. }) = from
                     .object()
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
@@ -1295,7 +1294,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 {
                     self_._append(&format!("DELETE FROM ({})", query.indent_sql(true)), Some(parameters.clone()), "delete")?;
                 } else {
-                    bail!("invalid deleteFrom() argument");
+                    return Err($crate::error::Error::Other("invalid deleteFrom() argument".to_string()));
                 }
                 Ok(self_)
             }
@@ -1309,13 +1308,13 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 from: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_.query.push_str("\nUSING ");
 
                 if let Some(str) = from.str() {
                     self_._append(&str.indent_sql(true), parameters, "using")?;
                 } else if from.array().is_some() {
-                    bail!("using() does not support arrays");
+                    return Err($crate::error::Error::Other("using() does not support arrays".to_string()));
                 } else if let Some($struct { query, parameters, .. }) = from
                     .object()
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
@@ -1323,7 +1322,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 {
                     self_._append(&format!("({})", query.indent_sql(true)), Some(parameters.clone()), "using")?;
                 } else {
-                    bail!("invalid using() argument");
+                    return Err($crate::error::Error::Other("invalid using() argument".to_string()));
                 }
 
                 Ok(self_)
@@ -1350,11 +1349,11 @@ macro_rules! php_sqlx_impl_query_builder {
             fn paginate<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 paginate: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
 
                 let pv =  ParameterValue::from_zval(paginate);
                 if !matches!(pv, Some(ParameterValue::PaginateClauseRendered(_))) {
-                    bail!("argument must be PaginateClauseRendered");
+                    return Err($crate::error::Error::Other("argument must be PaginateClauseRendered".to_string()));
                 }
                 self_._append(&format!("PAGINATE ?"), pv.map(|x| [("0", x); 1]), "paginate")?;
                 Ok(self_)
@@ -1376,7 +1375,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 table_and_fields: &str,
                 as_: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
@@ -1395,7 +1394,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     self_._append(&query.indent_sql(true), Some(parameters.clone()), "with")?;
                 }
                 else {
-                    bail!("`as` must be a string or Builder");
+                    return Err($crate::error::Error::Other("`as` must be a string or Builder".to_string()));
                 }
                 self_.query.push_str("\n)");
                 Ok(self_)
@@ -1411,7 +1410,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn update<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
                 if let Some(str) = table.str() {
                     if !self_.query.is_empty() {
@@ -1419,7 +1418,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     }
                     write!(self_.query, "UPDATE {str}")?;
                 } else {
-                    bail!("illegal update() argument")
+                    return Err($crate::error::Error::Other("illegal update() argument".to_string()));
                 }
                 Ok(self_)
             }
@@ -1442,12 +1441,12 @@ macro_rules! php_sqlx_impl_query_builder {
             fn set<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 set: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
                 self_.query.push_str("\nSET ");
                 let mut first = true;
 
-                let set_array = set.array().ok_or_else(|| anyhow!("Argument to set() must be an array"))?;
+                let set_array = set.array().ok_or_else(|| $crate::error::Error::Other("Argument to set() must be an array".to_string()))?;
                 for (key, value) in set_array.iter() {
                     if !first {
                         self_.query.push_str(", ");
@@ -1460,29 +1459,29 @@ macro_rules! php_sqlx_impl_query_builder {
                             if let Some(array) = value.array() {
                                 if array.has_sequential_keys() {
                                     if array.len() != 2 {
-                                        bail!("each element must be [field, value]");
+                                        return Err($crate::error::Error::Other("each element must be [field, value]".to_string()));
                                     }
                                     let field = array
                                         .get_index(0)
                                         .and_then(Zval::str)
-                                        .ok_or_else(|| anyhow!("first element (field) must be a string"))?;
+                                        .ok_or_else(|| $crate::error::Error::Other("first element (field) must be a string".to_string()))?;
 
                                     let param = array
                                         .get_index(1)
                                         .and_then(ParameterValue::from_zval)
-                                        .ok_or_else(|| anyhow!("second element (value) must be a valid parameter value"))?;
+                                        .ok_or_else(|| $crate::error::Error::Other("second element (value) must be a valid parameter value".to_string()))?;
 
                                     self_._append_op(field, "=", Some(param), "set")?;
                                 } else {
                                     if array.len() != 1 {
-                                        bail!("keyed array must contain a single element");
+                                        return Err($crate::error::Error::Other("keyed array must contain a single element".to_string()));
                                     }
                                     for (key, value) in array {
                                         let Some(parameters) = value.array() else {
-                                            bail!("value of keyed element {key:?} must be array");
+                                            return Err($crate::error::Error::Other(format!("value of keyed element {key:?} must be array")));
                                         };
                                         let parameters: HashMap<String, ParameterValue> =
-                                            parameters.try_into().map_err(|err| anyhow!("invalid parameters: {err}"))?;
+                                            parameters.try_into().map_err(|err| $crate::error::Error::Other(format!("invalid parameters: {err}")))?;
                                         self_._append(&key.to_string(), Some(parameters), "set")?;
                                     }
                                 }
@@ -1494,13 +1493,13 @@ macro_rules! php_sqlx_impl_query_builder {
                                 )?;
                             }
                             else {
-                                bail!("numeric element #{key} must be string (raw expression) or array like [field, value]");
+                                return Err($crate::error::Error::Other(format!("numeric element #{key} must be string (raw expression) or array like [field, value]")));
                             }
                         }
                         ArrayKey::Str(_) | ArrayKey::String(_) => {
                             let field = key.to_string();
                             let param = ParameterValue::from_zval(&value)
-                                .ok_or_else(|| anyhow!("value for key `{field}` must be a valid parameter value"))?;
+                                .ok_or_else(|| $crate::error::Error::Other(format!("value for key `{field}` must be a valid parameter value")))?;
 
                             self_._append_op(field.as_str(), "=", Some(param), "set")?;
                         }
@@ -1517,7 +1516,7 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// # Exceptions
             /// - If rendering or encoding of parameters fails.
-            pub(crate) fn dry(&self) -> anyhow::Result<Vec<Zval>> {
+            pub(crate) fn dry(&self) -> crate::error::Result<Vec<Zval>> {
                 self.driver_inner.dry(&self.query, Some(self.parameters.clone().into_iter().collect()))
             }
 
@@ -1528,7 +1527,7 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// # Exceptions
             /// - If rendering or encoding of parameters fails.
-            pub(crate) fn dry_inline(&self) -> anyhow::Result<String> {
+            pub(crate) fn dry_inline(&self) -> crate::error::Result<String> {
                 self.driver_inner.dry_inline(&self.query, Some(self.parameters.clone().into_iter().collect()))
             }
 
@@ -1541,7 +1540,7 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// # Exceptions
             /// - If rendering or encoding of parameters fails.
-            fn __to_string(&self) -> anyhow::Result<String> {
+            fn __to_string(&self) -> crate::error::Result<String> {
                 self.dry_inline()
             }
 
@@ -1590,7 +1589,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 part: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._append(
                     part,
                     parameters,
@@ -1609,7 +1608,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn select<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 fields: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
@@ -1626,14 +1625,14 @@ macro_rules! php_sqlx_impl_query_builder {
                             if let Some(field) = value.str() {
                                 self_.query.push_str(field);
                             } else {
-                                bail!("indexed element must be a string")
+                                return Err($crate::error::Error::Other("indexed element must be a string".to_string()))
                             }
                         } else {
                             let field = key.to_string();
                             if let Some(expr) = value.str() {
                                 write!(self_.query, "{expr} AS {field}")?;
                             } else {
-                                bail!("keyed element value must be a string")
+                                return Err($crate::error::Error::Other("keyed element value must be a string".to_string()))
                             }
                         }
                     }
@@ -1646,7 +1645,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     scr.write_sql_to(&mut clause, &self_.driver_inner.settings)?;
                     self_.query.push_str(&clause);
                 } else {
-                    bail!("illegal select() argument")
+                    return Err($crate::error::Error::Other("illegal select() argument".to_string()));
                 }
                 Ok(self_)
             }
@@ -1661,7 +1660,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn order_by<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 fields: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
@@ -1678,14 +1677,14 @@ macro_rules! php_sqlx_impl_query_builder {
                             if let Some(field) = value.str() {
                                 self_.query.push_str(field);
                             } else {
-                                bail!("indexed element must be a string")
+                                return Err($crate::error::Error::Other("indexed element must be a string".to_string()))
                             }
                         } else {
                             let field = key.to_string();
                             if let Some(dir) = value.str() {
                                 write!(self_.query, "{field} {dir}")?;
                             } else {
-                                bail!("keyed element value must be a string")
+                                return Err($crate::error::Error::Other("keyed element value must be a string".to_string()))
                             }
                         }
                     }
@@ -1698,7 +1697,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     bcr.write_sql_to(&mut clause, &self_.driver_inner.settings)?;
                     self_.query.push_str(&clause);
                 } else {
-                    bail!("illegal order_by() argument")
+                    return Err($crate::error::Error::Other("illegal order_by() argument".to_string()));
                 }
                 Ok(self_)
             }
@@ -1713,7 +1712,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn group_by<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 fields: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
                 }
@@ -1730,14 +1729,14 @@ macro_rules! php_sqlx_impl_query_builder {
                             if let Some(field) = value.str() {
                                 self_.query.push_str(field);
                             } else {
-                                bail!("indexed element must be a string")
+                                return Err($crate::error::Error::Other("indexed element must be a string".to_string()))
                             }
                         } else {
                             let field = key.to_string();
                             if let Some(dir) = value.str() {
                                 write!(self_.query, "{field} {dir}")?;
                             } else {
-                                bail!("keyed element value must be a string")
+                                return Err($crate::error::Error::Other("keyed element value must be a string".to_string()))
                             }
                         }
                     }
@@ -1750,7 +1749,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     bcr.write_sql_to(&mut clause, &self_.driver_inner.settings)?;
                     self_.query.push_str(&clause);
                 } else {
-                    bail!("illegal group_by() argument")
+                    return Err($crate::error::Error::Other("illegal group_by() argument".to_string()));
                 }
                 Ok(self_)
             }
@@ -1776,7 +1775,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// The query builder with `FOR UPDATE` appended.
             fn for_update(
                 self_: &mut ZendClassObject<$struct>,
-            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
                 self_.query.push_str("\nFOR UPDATE");
                 Ok(self_)
@@ -1802,7 +1801,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// The query builder with `FOR SHARE` appended.
             fn for_share(
                 self_: &mut ZendClassObject<$struct>,
-            ) -> anyhow::Result<&mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
                 self_.query.push_str("\nFOR SHARE");
                 Ok(self_)
@@ -1820,7 +1819,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn insert_into<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
@@ -1842,7 +1841,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn replace_into<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
@@ -1866,7 +1865,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn values<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 values: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 use ext_php_rs::types::ArrayKey;
 
                 if let Some(array) = values.array() {
@@ -1879,19 +1878,19 @@ macro_rules! php_sqlx_impl_query_builder {
                         match key {
                             ArrayKey::Long(_) => {
                                 // Expecting list of [col, val]
-                                let arr = val.array().ok_or_else(|| anyhow!("each element must be [column, value]"))?;
+                                let arr = val.array().ok_or_else(|| $crate::error::Error::Other("each element must be [column, value]".to_string()))?;
                                 if arr.len() != 2 {
-                                    bail!("each sub-array must be [column, value]");
+                                    return Err($crate::error::Error::Other("each sub-array must be [column, value]".to_string()));
                                 }
-                                let column = arr.get_index(0).and_then(Zval::str).ok_or_else(|| anyhow!("first element must be string"))?;
-                                let value = arr.get_index(1).and_then(ParameterValue::from_zval).ok_or_else(|| anyhow!("invalid value"))?;
+                                let column = arr.get_index(0).and_then(Zval::str).ok_or_else(|| $crate::error::Error::Other("first element must be string".to_string()))?;
+                                let value = arr.get_index(1).and_then(ParameterValue::from_zval).ok_or_else(|| $crate::error::Error::Other("invalid value".to_string()))?;
                                 columns.push(column.to_string());
                                 placeholders.push((String::from("0"), value));
                             }
                             _ => {
                                 // Associative array
                                 let column = key.to_string();
-                                let value = ParameterValue::from_zval(&val).ok_or_else(|| anyhow!("invalid value"))?;
+                                let value = ParameterValue::from_zval(&val).ok_or_else(|| $crate::error::Error::Other("invalid value".to_string()))?;
                                 columns.push(column);
                                 placeholders.push((param_index.to_string(), value));
                                 param_index += 1;
@@ -1900,7 +1899,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     }
 
                     if columns.is_empty() {
-                        bail!("values() requires at least one column-value pair");
+                        return Err($crate::error::Error::Other("values() requires at least one column-value pair".to_string()));
                     }
 
                     write!(self_.query, "\n({})\nVALUES (", columns.join(", "))?;
@@ -1932,7 +1931,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     self_.parameters.extend(parameters.clone());
                     Ok(self_)
                 } else {
-                    bail!("values() expects array, string or Builder");
+                    return Err($crate::error::Error::Other("values() expects array, string or Builder".to_string()));
                 }
             }
 
@@ -1959,7 +1958,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn truncate_table<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 table: &str,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_._write_op_guard()?;
                 if !self_.query.is_empty() {
                     self_.query.push('\n');
@@ -1988,7 +1987,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn end<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 _table: &str,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 self_.query.push(';');
                 Ok(self_)
             }
@@ -2017,15 +2016,15 @@ macro_rules! php_sqlx_impl_query_builder {
             fn values_many<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 rows: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 use ext_php_rs::types::ArrayKey;
 
                 let rows_array = rows
                     .array()
-                    .ok_or_else(|| anyhow!("values_many() expects an array of rows"))?;
+                    .ok_or_else(|| $crate::error::Error::Other("values_many() expects an array of rows".to_string()))?;
 
                 if rows_array.len() == 0 {
-                    bail!("values_many() array is empty");
+                    return Err($crate::error::Error::Other("values_many() array is empty".to_string()));
                 }
 
                 let mut columns: Vec<String> = Vec::new();
@@ -2034,7 +2033,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 for (row_index, (_, row_val)) in rows_array.iter().enumerate() {
                     let row = row_val
                         .array()
-                        .ok_or_else(|| anyhow!("each row must be an array"))?;
+                        .ok_or_else(|| $crate::error::Error::Other("each row must be an array".to_string()))?;
 
                     if row_index == 0 {
                         // Infer column names or count
@@ -2045,13 +2044,13 @@ macro_rules! php_sqlx_impl_query_builder {
                             }
                         }
                     } else if row.len() != columns.len() {
-                        bail!("row #{row_index} has inconsistent column count");
+                        return Err($crate::error::Error::Other("row #{row_index} has inconsistent column count".to_string()));
                     }
 
                     let mut placeholder_row = Vec::with_capacity(columns.len());
                     for (_, v) in row.iter() {
                         let pv = ParameterValue::from_zval(&v).ok_or_else(|| {
-                            anyhow!("row #{row_index}: failed to convert value to parameter")
+                            $crate::error::Error::Other("row #{row_index}: failed to convert value to parameter".to_string())
                         })?;
                         placeholder_row.push(pv);
                     }
@@ -2104,7 +2103,7 @@ macro_rules! php_sqlx_impl_query_builder {
             fn returning<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 fields: &Zval,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 use ext_php_rs::types::ArrayKey;
 
                 if !self_.query.is_empty() {
@@ -2123,21 +2122,21 @@ macro_rules! php_sqlx_impl_query_builder {
                         match key {
                             ArrayKey::Long(_) => {
                                 let Some(field) = value.str() else {
-                                    bail!("returning[] values must be strings");
+                                    return Err($crate::error::Error::Other("returning[] values must be strings".to_string()));
                                 };
                                 self_.query.push_str(field);
                             }
                             _ => {
                                 let alias = key.to_string();
                                 let Some(expr) = value.str() else {
-                                    bail!("returning[key => value] must be strings");
+                                    return Err($crate::error::Error::Other("returning[key => value] must be strings".to_string()));
                                 };
                                 write!(self_.query, "{expr} AS {alias}")?;
                             }
                         }
                     }
                 } else {
-                    bail!("Argument to returning() must be a string or array");
+                    return Err($crate::error::Error::Other("Argument to returning() must be a string or array".to_string()));
                 }
 
                 Ok(self_)
@@ -2147,7 +2146,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 from: &Zval,
                 parameters: Option<BTreeMap<String, ParameterValueWrapper>>,
-            ) -> anyhow::Result<&'a mut ZendClassObject<$struct>> {
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
                 use ext_php_rs::types::ArrayKey;
 
                 if !self_.query.is_empty() {
@@ -2160,7 +2159,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     self_._append(&from_str.indent_sql(false), parameters, "from")?;
                 } else if let Some(from_array) = from.array() {
                     if parameters.is_some() {
-                        bail!("parameters argument cannot be used with array-based `from()`");
+                        return Err($crate::error::Error::Other("parameters argument cannot be used with array-based `from()`".to_string()));
                     }
 
                     let parts: Vec<_> = from_array
@@ -2172,14 +2171,14 @@ macro_rules! php_sqlx_impl_query_builder {
                             };
                             let source = value
                                 .str()
-                                .ok_or_else(|| anyhow!("`from` value must be a string"))?;
+                                .ok_or_else(|| $crate::error::Error::Other("`from` value must be a string".to_string()))?;
 
                             Ok(match alias {
                                 Some(alias) => (format!("{source} AS {alias}"), ParamsMap::default()),
                                 None => (source.to_string(), ParamsMap::default()),
                             })
                         })
-                        .collect::<anyhow::Result<_>>()?;
+                        .collect::<crate::error::Result<_>>()?;
 
                     for (i, (part, params)) in parts.into_iter().enumerate() {
                         if i > 0 {
@@ -2188,7 +2187,7 @@ macro_rules! php_sqlx_impl_query_builder {
                         self_._append(&part.indent_sql(true), Some(params), "from")?;
                     }
                 } else {
-                    bail!("illegal `from()` argument: must be string or array");
+                    return Err($crate::error::Error::Other("illegal `from()` argument: must be string or array".to_string()));
                 }
 
                 Ok(self_)
@@ -2218,7 +2217,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_column_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, None)
             }
@@ -2239,7 +2238,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_column_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, Some(true))
             }
@@ -2260,7 +2259,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_column_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(&self.query, parameters, Some(false))
             }
@@ -2287,7 +2286,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, None)
             }
@@ -2312,7 +2311,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, Some(true))
             }
@@ -2337,7 +2336,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(&self.query, parameters, Some(false))
             }
@@ -2354,7 +2353,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_grouped_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, None)
             }
@@ -2363,7 +2362,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_grouped_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, Some(true))
             }
@@ -2372,7 +2371,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_grouped_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(&self.query, parameters, Some(false))
             }
@@ -2388,7 +2387,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_grouped_column_dictionary(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(&self.query, parameters, None)
             }
@@ -2401,7 +2400,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_grouped_column_dictionary_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
                     parameters,
@@ -2417,7 +2416,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_grouped_column_dictionary_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
                     parameters,
@@ -2441,7 +2440,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn execute(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<u64> {
+            ) -> crate::error::Result<u64> {
                 self.driver_inner.execute(self.query.as_str(), parameters)
             }
 
@@ -2462,7 +2461,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_row(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner.query_row(&self.query, parameters, None)
             }
 
@@ -2473,7 +2472,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_row_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_row(&self.query, parameters, Some(true))
             }
@@ -2485,7 +2484,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_row_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_row(&self.query, parameters, Some(false))
             }
@@ -2504,7 +2503,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_maybe_row(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, None)
             }
@@ -2526,7 +2525,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_maybe_row_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, Some(true))
             }
@@ -2547,7 +2546,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_maybe_row_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(&self.query, parameters, Some(false))
             }
@@ -2571,7 +2570,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(&self.query, parameters, column, None)
             }
@@ -2592,7 +2591,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(&self.query, parameters, column, Some(true))
             }
@@ -2612,7 +2611,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(&self.query, parameters, column, Some(false))
             }
@@ -2634,7 +2633,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_all(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> crate::error::Result<Vec<Zval>> {
                 self.driver_inner.query_all(&self.query, parameters, None)
             }
 
@@ -2652,7 +2651,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_all_assoc(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_all(&self.query, parameters, Some(true))
             }
@@ -2671,7 +2670,7 @@ macro_rules! php_sqlx_impl_query_builder {
             pub fn query_all_obj(
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_all(&self.query, parameters, Some(false))
             }

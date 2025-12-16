@@ -48,7 +48,7 @@ macro_rules! php_sqlx_impl_driver {
         pub mod prepared_query;
         pub mod read_query_builder;
         pub mod write_query_builder;
-        use anyhow::anyhow;
+        use $crate::error::Error as SqlxError;
         use dashmap::DashMap;
         use ext_php_rs::builders::ModuleBuilder;
         use ext_php_rs::prelude::*;
@@ -106,7 +106,7 @@ macro_rules! php_sqlx_impl_driver {
             /// If `persistent_name` is set in options, checks the global registry
             /// for an existing connection and reuses it. Otherwise, creates a new
             /// connection pool and optionally registers it for persistence.
-            pub fn new(options: DriverInnerOptions) -> anyhow::Result<Self> {
+            pub fn new(options: DriverInnerOptions) -> $crate::error::Result<Self> {
                 static INIT: Once = Once::new();
                 INIT.call_once(|| {
                     $crate::utils::adhoc_php_class_implements($class, "Sqlx\\DriverInterface");
@@ -139,7 +139,7 @@ macro_rules! php_sqlx_impl_driver {
             ///   - `ast_cache_shard_size`: (int) size per shard (default: 256)
             ///   - `persistent_name`: (string) name of persistent connection
             ///   - `assoc_arrays`: (bool) return associative arrays instead of objects
-            pub fn __construct(url_or_options: DriverOptionsArg) -> anyhow::Result<Self> {
+            pub fn __construct(url_or_options: DriverOptionsArg) -> $crate::error::Result<Self> {
                 Self::new(url_or_options.parse()?)
             }
 
@@ -197,7 +197,7 @@ macro_rules! php_sqlx_impl_driver {
             /// ```php
             /// $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
             /// ```
-            pub fn quote(&self, param: ParameterValue) -> anyhow::Result<String> {
+            pub fn quote(&self, param: ParameterValue) -> $crate::error::Result<String> {
                 param.quote(&self.driver_inner.settings)
             }
 
@@ -225,7 +225,7 @@ macro_rules! php_sqlx_impl_driver {
             /// // Use like:
             /// $builder->where([["name", "LIKE", "%{$escaped}%"]]);
             /// ```
-            pub fn meta_quote_like(&self, param: ParameterValue) -> anyhow::Result<String> {
+            pub fn meta_quote_like(&self, param: ParameterValue) -> $crate::error::Result<String> {
                 param.meta_quote_like()
             }
 
@@ -257,7 +257,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_row(query, parameters, None)
             }
 
@@ -281,7 +281,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_value(query, parameters, column, None)
             }
@@ -291,7 +291,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_value(query, parameters, column, Some(true))
             }
@@ -320,7 +320,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_value(query, parameters, column, Some(false))
             }
@@ -345,7 +345,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_value(query, parameters, column, None)
             }
@@ -369,7 +369,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_value(query, parameters, column, Some(true))
             }
@@ -393,7 +393,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_value(query, parameters, column, Some(false))
             }
@@ -414,7 +414,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_row(query, parameters, Some(true))
             }
 
@@ -434,7 +434,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_row(query, parameters, Some(false))
             }
 
@@ -454,7 +454,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_maybe_row(query, parameters, None)
             }
 
@@ -476,7 +476,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(query, parameters, Some(true))
             }
@@ -499,7 +499,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_maybe_row(query, parameters, Some(false))
             }
@@ -524,7 +524,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(query, parameters, column, None)
             }
@@ -546,7 +546,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(query, parameters, column, Some(true))
             }
@@ -568,7 +568,7 @@ macro_rules! php_sqlx_impl_driver {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner
                     .query_column(query, parameters, column, Some(false))
             }
@@ -592,7 +592,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner.query_all(query, parameters, None)
             }
 
@@ -612,7 +612,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner.query_all(query, parameters, Some(true))
             }
 
@@ -632,7 +632,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner.query_all(query, parameters, Some(false))
             }
 
@@ -662,7 +662,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner.query_dictionary(query, parameters, None)
             }
 
@@ -687,7 +687,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(query, parameters, Some(true))
             }
@@ -713,7 +713,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_dictionary(query, parameters, Some(false))
             }
@@ -759,7 +759,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(query, parameters, None)
             }
@@ -775,7 +775,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(query, parameters, Some(true))
             }
@@ -791,7 +791,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_dictionary(query, parameters, Some(false))
             }
@@ -822,7 +822,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(query, parameters, None)
             }
@@ -845,7 +845,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(query, parameters, Some(true))
             }
@@ -868,7 +868,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_column_dictionary(query, parameters, Some(false))
             }
@@ -879,7 +879,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(query, parameters, Some(true))
             }
@@ -890,7 +890,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(query, parameters, Some(false))
             }
@@ -916,7 +916,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Zval> {
+            ) -> $crate::error::Result<Zval> {
                 self.driver_inner
                     .query_grouped_column_dictionary(query, parameters, None)
             }
@@ -939,7 +939,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<u64> {
+            ) -> $crate::error::Result<u64> {
                 self.driver_inner.execute(query, parameters)
             }
 
@@ -961,7 +961,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 table: &str,
                 row: BTreeMap<String, ParameterValue>,
-            ) -> anyhow::Result<u64> {
+            ) -> $crate::error::Result<u64> {
                 self.execute(
                     &format!(
                         "INSERT INTO {table} ({}) VALUES ({})",
@@ -991,7 +991,7 @@ macro_rules! php_sqlx_impl_driver {
                 &self,
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> anyhow::Result<Vec<Zval>> {
+            ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner.dry(query, parameters)
             }
 
@@ -1053,18 +1053,18 @@ macro_rules! php_sqlx_impl_driver {
                         if value.is_false() {
                             $crate::RUNTIME
                                 .block_on(tx.rollback())
-                                .map_err(|err| anyhow!("{err:?}"))?;
+                                .map_err(SqlxError::rollback_failed)?;
                         } else {
                             $crate::RUNTIME
                                 .block_on(tx.commit())
-                                .map_err(|err| anyhow!("{err:?}"))?;
+                                .map_err(SqlxError::commit_failed)?;
                         }
                         Ok(())
                     }
                     Err(err) => {
                         $crate::RUNTIME
                             .block_on(tx.rollback())
-                            .map_err(|err| anyhow!("{err:?}"))?;
+                            .map_err(SqlxError::rollback_failed)?;
                         match err {
                             ext_php_rs::error::Error::Exception(exception) => Err(exception
                                 .properties_table[0]
@@ -1086,7 +1086,7 @@ macro_rules! php_sqlx_impl_driver {
             ///
             /// # Exceptions
             /// Throws an exception if the driver fails to create the savepoint.
-            pub fn savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+            pub fn savepoint(&self, savepoint: &str) -> $crate::error::Result<()> {
                 self.driver_inner.savepoint(savepoint)
             }
 
@@ -1097,7 +1097,7 @@ macro_rules! php_sqlx_impl_driver {
             ///
             /// # Exceptions
             /// Throws an exception if rollback to the savepoint fails.
-            pub fn rollback_to_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+            pub fn rollback_to_savepoint(&self, savepoint: &str) -> $crate::error::Result<()> {
                 self.driver_inner.rollback_to_savepoint(savepoint)
             }
 
@@ -1108,7 +1108,7 @@ macro_rules! php_sqlx_impl_driver {
             ///
             /// # Exceptions
             /// Throws an exception if releasing the savepoint fails.
-            pub fn release_savepoint(&self, savepoint: &str) -> anyhow::Result<()> {
+            pub fn release_savepoint(&self, savepoint: &str) -> $crate::error::Result<()> {
                 self.driver_inner.release_savepoint(savepoint)
             }
 
@@ -1135,7 +1135,7 @@ macro_rules! php_sqlx_impl_driver {
             ///     throw $e;
             /// }
             /// ```
-            pub fn commit(&self) -> anyhow::Result<()> {
+            pub fn commit(&self) -> $crate::error::Result<()> {
                 self.driver_inner.commit()
             }
 
@@ -1162,7 +1162,7 @@ macro_rules! php_sqlx_impl_driver {
             ///     throw $e;
             /// }
             /// ```
-            pub fn rollback(&self) -> anyhow::Result<()> {
+            pub fn rollback(&self) -> $crate::error::Result<()> {
                 self.driver_inner.rollback()
             }
         }

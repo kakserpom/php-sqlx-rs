@@ -27,7 +27,7 @@
 
 use crate::ast::Settings;
 use crate::utils::ident::is_valid_ident;
-use anyhow::bail;
+use crate::error::Error as SqlxError;
 use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use itertools::Itertools;
@@ -82,7 +82,7 @@ impl ByClause {
     ///
     /// # Errors
     /// Returns an error if a numeric key maps to an invalid SQL identifier.
-    pub fn allowed<K, V>(allowed_columns: impl IntoIterator<Item = (K, V)>) -> anyhow::Result<Self>
+    pub fn allowed<K, V>(allowed_columns: impl IntoIterator<Item = (K, V)>) -> crate::error::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
@@ -90,12 +90,12 @@ impl ByClause {
         Ok(Self {
             allowed_columns: allowed_columns
                 .into_iter()
-                .map(|(key, value)| -> anyhow::Result<_> {
+                .map(|(key, value)| -> crate::error::Result<_> {
                     let key: String = key.into();
                     let value: String = value.into();
                     if key.parse::<u32>().is_ok() {
                         if !is_valid_ident(&value) {
-                            bail!("Invalid identifier: {}", value);
+                            return Err(SqlxError::Other(format!("Invalid identifier: {}", value)));
                         }
                         Ok((value, None))
                     } else {
@@ -171,7 +171,7 @@ impl ByClause {
     ///     "total_posts" => "COUNT(posts.*)"
     /// ]);
     /// ```
-    pub fn __construct(allowed_columns: HashMap<String, String>) -> anyhow::Result<Self> {
+    pub fn __construct(allowed_columns: HashMap<String, String>) -> crate::error::Result<Self> {
         Self::allowed(allowed_columns)
     }
 
@@ -223,7 +223,7 @@ impl ByClauseRendered {
     }
 
     #[inline]
-    pub(crate) fn write_sql_to(&self, sql: &mut String, settings: &Settings) -> anyhow::Result<()> {
+    pub(crate) fn write_sql_to(&self, sql: &mut String, settings: &Settings) -> crate::error::Result<()> {
         for (
             i,
             ByClauseRenderedField {
