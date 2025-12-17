@@ -3,9 +3,49 @@
 //! This module provides a structured error enum that converts to PHP exceptions
 //! with appropriate error codes and messages.
 
+use ext_php_rs::builders::ModuleBuilder;
+use ext_php_rs::class::RegisteredClass;
 use ext_php_rs::exception::PhpException;
+use ext_php_rs::prelude::*;
 use ext_php_rs::zend::ce;
 use std::fmt;
+
+/// Custom exception class for php-sqlx errors.
+///
+/// This exception class extends PHP's base Exception and is used for all
+/// errors thrown by the php-sqlx extension. The error code can be used
+/// to programmatically handle specific error types.
+#[php_class]
+#[php(name = "Sqlx\\SqlxException")]
+#[php(extends(ce = ce::exception, stub = "\\Exception"))]
+#[derive(Default)]
+pub struct SqlxException;
+
+#[php_impl]
+impl SqlxException {
+    /// General/unknown error
+    pub const GENERAL: i32 = ErrorCode::General as i32;
+    /// Database connection failed
+    pub const CONNECTION: i32 = ErrorCode::Connection as i32;
+    /// Query execution failed
+    pub const QUERY: i32 = ErrorCode::Query as i32;
+    /// Transaction-related error
+    pub const TRANSACTION: i32 = ErrorCode::Transaction as i32;
+    /// SQL parsing/AST error
+    pub const PARSE: i32 = ErrorCode::Parse as i32;
+    /// Missing or invalid parameter
+    pub const PARAMETER: i32 = ErrorCode::Parameter as i32;
+    /// Configuration/options error
+    pub const CONFIGURATION: i32 = ErrorCode::Configuration as i32;
+    /// Invalid identifier or input validation error
+    pub const VALIDATION: i32 = ErrorCode::Validation as i32;
+    /// Operation not permitted (e.g., write on readonly)
+    pub const NOT_PERMITTED: i32 = ErrorCode::NotPermitted as i32;
+    /// Timeout error
+    pub const TIMEOUT: i32 = ErrorCode::Timeout as i32;
+    /// Pool exhausted
+    pub const POOL_EXHAUSTED: i32 = ErrorCode::PoolExhausted as i32;
+}
 
 /// Error codes for categorizing errors in PHP.
 ///
@@ -314,9 +354,7 @@ impl From<Error> for PhpException {
         let code = err.code() as i32;
         let message = err.to_string();
 
-        // Use default Exception class
-        // In production, you might want to register custom exception classes
-        PhpException::new(message, code, ce::exception())
+        PhpException::new(message, code, SqlxException::get_metadata().ce())
     }
 }
 
@@ -386,6 +424,11 @@ impl From<sqlx_oldapi::Error> for Error {
 
 /// Result type alias using our Error.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Registers the error module classes with the PHP module.
+pub fn build(module: ModuleBuilder) -> ModuleBuilder {
+    module.class::<SqlxException>()
+}
 
 #[cfg(test)]
 mod tests {

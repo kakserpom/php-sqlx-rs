@@ -108,6 +108,7 @@ pub use dbms::mysql::{MySqlDriver, MySqlPreparedQuery};
 #[php_module]
 pub fn module(mut module: ModuleBuilder) -> ModuleBuilder {
     module = module.name("sqlx").version(env!("CARGO_PKG_VERSION"));
+    module = error::build(module);
     module = select_clause::build(module);
     module = by_clause::build(module);
     module = paginate_clause::build(module);
