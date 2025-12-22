@@ -302,3 +302,77 @@ fn test_pagination() {
         vec![ParameterValue::Int(5), ParameterValue::Int(35)]
     );
 }
+
+/// Test that null values are allowed for required placeholders (not treated as missing)
+#[test]
+fn test_null_placeholder_is_valid() {
+    let sql = "SELECT * FROM users WHERE name = :name";
+    let ast = into_ast(sql);
+    let mut vals = ParamsMap::default();
+    vals.insert("name".into(), ParameterValue::Null);
+    let result = ast.render(vals, &SETTINGS);
+    assert!(result.is_ok(), "Null value should be valid for required placeholder");
+    let (query, params) = result.unwrap();
+    collapsed_eq!(&query, "SELECT * FROM users WHERE name = $1");
+    assert_eq!(params, vec![ParameterValue::Null]);
+}
+
+/// Test that absent placeholders still error
+#[test]
+fn test_absent_placeholder_errors() {
+    let sql = "SELECT * FROM users WHERE name = :name";
+    let ast = into_ast(sql);
+    let vals = ParamsMap::default(); // empty - no "name" provided
+    let result = ast.render(vals, &SETTINGS);
+    assert!(result.is_err(), "Absent placeholder should error");
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("name"),
+        "Error should mention the missing placeholder name"
+    );
+}
+
+/// Test that null values in conditional blocks cause the block to be skipped
+#[test]
+fn test_null_in_conditional_block_skips() {
+    let sql = "SELECT * FROM users WHERE id = :id {{ AND name = :name }}";
+    let ast = into_ast(sql);
+    let mut vals = ParamsMap::default();
+    vals.insert("id".into(), ParameterValue::Int(1));
+    vals.insert("name".into(), ParameterValue::Null);
+    let (query, params) = ast.render(vals, &SETTINGS).unwrap();
+    // Block should be skipped because name is null
+    collapsed_eq!(&query, "SELECT * FROM users WHERE id = $1");
+    assert_eq!(params, vec![ParameterValue::Int(1)]);
+}
+
+/// Test that absent placeholders in conditional blocks cause the block to be skipped
+#[test]
+fn test_absent_in_conditional_block_skips() {
+    let sql = "SELECT * FROM users WHERE id = :id {{ AND name = :name }}";
+    let ast = into_ast(sql);
+    let mut vals = ParamsMap::default();
+    vals.insert("id".into(), ParameterValue::Int(1));
+    // name is not provided at all
+    let (query, params) = ast.render(vals, &SETTINGS).unwrap();
+    // Block should be skipped because name is absent
+    collapsed_eq!(&query, "SELECT * FROM users WHERE id = $1");
+    assert_eq!(params, vec![ParameterValue::Int(1)]);
+}
+
+/// Test that empty arrays are allowed for required IN clause placeholders
+#[test]
+fn test_empty_array_in_clause_renders_false() {
+    let sql = "SELECT * FROM users WHERE status IN :statuses";
+    let ast = into_ast(sql);
+    let mut vals = ParamsMap::default();
+    vals.insert("statuses".into(), ParameterValue::Array(vec![]));
+    let result = ast.render(vals, &SETTINGS);
+    assert!(result.is_ok(), "Empty array should be valid for IN clause");
+    let (query, _) = result.unwrap();
+    // Empty IN clause should render as FALSE
+    assert!(
+        query.contains("FALSE"),
+        "Empty IN clause should render as FALSE"
+    );
+}

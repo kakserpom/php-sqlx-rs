@@ -755,15 +755,13 @@ impl Ast {
             required_placeholders,
             ..
         } = self
-            && let Some(missing_placeholder) = required_placeholders.iter().find(|&ph| {
-                if let Some(value) = values.get(ph) {
-                    value.is_empty()
-                } else {
-                    true
-                }
-            })
+            && let Some(missing_placeholder) = required_placeholders
+                .iter()
+                .find(|&ph| !values.contains_key(ph))
         {
-            return Err(SqlxError::MissingPlaceholder { name: missing_placeholder.clone() });
+            return Err(SqlxError::MissingPlaceholder {
+                name: missing_placeholder.clone(),
+            });
         }
         walk(self, &values, &mut sql, &mut out_vals, settings)?;
         #[cfg(test)]
