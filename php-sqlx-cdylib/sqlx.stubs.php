@@ -43,6 +43,72 @@ namespace Sqlx {
     function JSON(mixed $pv): \Sqlx\JsonWrapper {}
 
     /**
+     * Custom exception class for php-sqlx errors.
+     *
+     * This exception class extends PHP's base Exception and is used for all
+     * errors thrown by the php-sqlx extension. The error code can be used
+     * to programmatically handle specific error types.
+     */
+    class SqlxException extends \Exception {
+        /**
+         * General/unknown error
+         */
+        const GENERAL = null;
+
+        /**
+         * Database connection failed
+         */
+        const CONNECTION = null;
+
+        /**
+         * Query execution failed
+         */
+        const QUERY = null;
+
+        /**
+         * Transaction-related error
+         */
+        const TRANSACTION = null;
+
+        /**
+         * SQL parsing/AST error
+         */
+        const PARSE = null;
+
+        /**
+         * Missing or invalid parameter
+         */
+        const PARAMETER = null;
+
+        /**
+         * Configuration/options error
+         */
+        const CONFIGURATION = null;
+
+        /**
+         * Invalid identifier or input validation error
+         */
+        const VALIDATION = null;
+
+        /**
+         * Operation not permitted (e.g., write on readonly)
+         */
+        const NOT_PERMITTED = null;
+
+        /**
+         * Timeout error
+         */
+        const TIMEOUT = null;
+
+        /**
+         * Pool exhausted
+         */
+        const POOL_EXHAUSTED = null;
+
+        public function __construct() {}
+    }
+
+    /**
      * The `Sqlx\\SelectClause` class manages a set of allowed
      * columns for SQL SELECT operations and provides methods
      * to render validated column clauses from user input.

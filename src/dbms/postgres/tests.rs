@@ -22,8 +22,8 @@ fn test_named_and_positional() {
         let names: Vec<&str> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder(n) = b {
-                    Some(n.as_str())
+                if let Ast::Placeholder { name, .. } = b {
+                    Some(name.as_str())
                 } else {
                     None
                 }
@@ -213,7 +213,7 @@ fn test_parse_in_not_in_and_string() {
         _ => panic!("Expected Sql at branch 0"),
     }
     match &branches[1] {
-        Ast::InClause { expr, placeholder } => {
+        Ast::InClause { expr, placeholder, .. } => {
             assert_eq!(expr, "status");
             assert_eq!(placeholder, "statuses");
         }
@@ -224,7 +224,7 @@ fn test_parse_in_not_in_and_string() {
         _ => panic!("Expected Sql at branch 2"),
     }
     match &branches[3] {
-        Ast::NotInClause { expr, placeholder } => {
+        Ast::NotInClause { expr, placeholder, .. } => {
             assert_eq!(expr, "age");
             assert_eq!(placeholder, "ages");
         }

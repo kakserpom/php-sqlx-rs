@@ -583,7 +583,7 @@ macro_rules! php_sqlx_impl_query_builder {
                             }
                         }
                         Ast::Raw(s) => sql.push_str(s),
-                        Ast::Placeholder(name) => {
+                        Ast::Placeholder { name, .. } => {
                             let param = param_map.remove(name);
                             if let Some(ParameterValue::Builder((part, mut params))) = param {
                                  sql.push('(');
@@ -625,8 +625,8 @@ macro_rules! php_sqlx_impl_query_builder {
                                 )?;
                             }
                         }
-                        Ast::InClause { expr, placeholder }
-                        | Ast::NotInClause { expr, placeholder } => {
+                        Ast::InClause { expr, placeholder, .. }
+                        | Ast::NotInClause { expr, placeholder, .. } => {
                             let new_name = resolve_placeholder_name(
                                 placeholder,
                                 placeholders,

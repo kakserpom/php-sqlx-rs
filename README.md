@@ -43,6 +43,8 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 
 - AST-based SQL augmentation (e.g., conditional blocks)
 - Named parameters with `$param`, `:param`, or positional `:1` syntax
+- **Type-safe placeholders** with type suffixes (`?i`, `?s`, `?d`, `?u`, `?ud`)
+- **Nullable type support** with `n` prefix (`?ni`, `?ns`, `?nud`)
 - Automatic result conversion to PHP arrays or objects
 - Painless `IN (?)` / `NOT IN (?)` clauses expansion and collapse
 - Safe and robust `ORDER BY` / `GROUP BY` clauses
@@ -95,6 +97,111 @@ WHERE date > $since {{ AND level = $level }}
 ```
 
 The above example will throw an exception if `$since` is not set.
+
+---
+
+### Type-Safe Placeholders
+
+You can enforce type constraints on placeholders using type suffixes. When a value doesn't match the expected type, an exception is thrown during query rendering.
+
+#### Scalar Types
+
+| Suffix | Named Syntax | Description |
+|--------|--------------|-------------|
+| `?i` | `:id!i`, `$id!i` | Integer |
+| `?u` | `:age!u`, `$age!u` | Unsigned integer (≥ 0) |
+| `?d` | `:score!d`, `$score!d` | Decimal (int, float, or numeric string) |
+| `?ud` | `:price!ud`, `$price!ud` | Unsigned decimal (≥ 0, int/float/numeric string) |
+| `?s` | `:name!s`, `$name!s` | String |
+
+```php
+// Type validation examples
+$driver->queryAll('SELECT * FROM users WHERE id = ?i', [42]);        // OK
+$driver->queryAll('SELECT * FROM users WHERE id = ?i', ["string"]);  // Error: Type mismatch
+$driver->queryAll('SELECT * FROM users WHERE age = ?u', [-5]);       // Error: negative not allowed
+
+// Decimal accepts int, float, and numeric strings
+$driver->queryAll('SELECT * FROM products WHERE price = ?d', [19.99]);     // OK (float)
+$driver->queryAll('SELECT * FROM products WHERE price = ?d', [20]);        // OK (int)
+$driver->queryAll('SELECT * FROM products WHERE price = ?d', ["19.99"]);   // OK (numeric string)
+$driver->queryAll('SELECT * FROM products WHERE price = ?d', ["abc"]);     // Error: not numeric
+```
+
+#### Array Types (for IN clauses)
+
+| Suffix | Named Syntax | Description |
+|--------|--------------|-------------|
+| `?ia` | `:ids!ia` | Array of integers |
+| `?ua` | `:ids!ua` | Array of unsigned integers |
+| `?da` | `:scores!da` | Array of decimals |
+| `?uda` | `:prices!uda` | Array of unsigned decimals |
+| `?sa` | `:names!sa` | Array of strings |
+
+```php
+$driver->queryAll('SELECT * FROM users WHERE id IN :ids!ia', [
+    'ids' => [1, 2, 3]
+]); // OK
+
+$driver->queryAll('SELECT * FROM users WHERE id IN :ids!ia', [
+    'ids' => [1, "two", 3]
+]); // Error: Type mismatch
+```
+
+---
+
+### Nullable Types
+
+By default, typed placeholders reject `null` values. Use the `n` prefix to allow nulls:
+
+| Suffix | Named Syntax | Description |
+|--------|--------------|-------------|
+| `?n` | `:data!n` | Nullable mixed (any type including null) |
+| `?ni` | `:id!ni` | Nullable integer |
+| `?nu` | `:age!nu` | Nullable unsigned integer |
+| `?nd` | `:score!nd` | Nullable decimal |
+| `?nud` | `:price!nud` | Nullable unsigned decimal |
+| `?ns` | `:name!ns` | Nullable string |
+
+Nullable array types: `?nia`, `?nua`, `?nda`, `?nuda`, `?nsa`
+
+```php
+// Non-nullable rejects null
+$driver->queryAll('SELECT * FROM users WHERE id = ?i', [null]);   // Error: Type mismatch
+
+// Nullable accepts null
+$driver->queryAll('SELECT * FROM users WHERE id = ?ni', [null]);  // OK - renders NULL
+$driver->queryAll('SELECT * FROM users WHERE id = ?ni', [42]);    // OK - renders 42
+```
+
+#### Nullable in Conditional Blocks
+
+The nullable flag affects how conditional blocks behave:
+
+| Placeholder | Value | Block Behavior |
+|-------------|-------|----------------|
+| `:status!ni` (nullable) | absent | Block **skipped** |
+| `:status!ni` (nullable) | `null` | Block **rendered** |
+| `:status!ni` (nullable) | `5` | Block **rendered** |
+| `:status!i` (non-nullable) | `null` | Block **skipped** |
+| `:status` (untyped) | `null` | Block **skipped** |
+
+```php
+$sql = 'SELECT * FROM users WHERE 1=1 {{ AND status = :status!ni }}';
+
+// Absent - block skipped
+$driver->queryAll($sql, []);
+// Result: SELECT * FROM users WHERE 1=1
+
+// Null provided - block rendered (nullable allows null)
+$driver->queryAll($sql, ['status' => null]);
+// Result: SELECT * FROM users WHERE 1=1 AND status = NULL
+
+// Value provided - block rendered
+$driver->queryAll($sql, ['status' => 1]);
+// Result: SELECT * FROM users WHERE 1=1 AND status = $1
+```
+
+This is useful when you want to explicitly query for `NULL` values vs. omitting the condition entirely.
 
 ---
 

@@ -127,6 +127,13 @@ pub enum Error {
     /// Invalid parameter type for placeholder.
     InvalidParameter { name: String, expected: String },
 
+    /// Type mismatch for typed placeholder (e.g., ?i, :name!s).
+    TypeMismatch {
+        placeholder: String,
+        expected: String,
+        actual: String,
+    },
+
     /// Invalid configuration option.
     Configuration { option: String, message: String },
 
@@ -170,7 +177,9 @@ impl Error {
             | Self::RollbackFailed { .. }
             | Self::BeginFailed { .. } => ErrorCode::Transaction,
             Self::Parse { .. } => ErrorCode::Parse,
-            Self::MissingPlaceholder { .. } | Self::InvalidParameter { .. } => ErrorCode::Parameter,
+            Self::MissingPlaceholder { .. }
+            | Self::InvalidParameter { .. }
+            | Self::TypeMismatch { .. } => ErrorCode::Parameter,
             Self::Configuration { .. } | Self::UrlRequired => ErrorCode::Configuration,
             Self::InvalidIdentifier { .. } | Self::InvalidSavepoint { .. } => ErrorCode::Validation,
             Self::ReadonlyViolation => ErrorCode::NotPermitted,
@@ -312,6 +321,16 @@ impl fmt::Display for Error {
             }
             Self::InvalidParameter { name, expected } => {
                 write!(f, "Invalid parameter `{name}`: expected {expected}")
+            }
+            Self::TypeMismatch {
+                placeholder,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Type mismatch for placeholder `{placeholder}`: expected {expected}, got {actual}"
+                )
             }
             Self::Configuration { option, message } => {
                 write!(f, "Configuration error for `{option}`: {message}")
