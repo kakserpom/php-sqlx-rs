@@ -85,7 +85,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang
+          sudo apt-get install -y clang llvm
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -98,15 +98,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-php${{ matrix.php }}-cargo-build-
 
-      - name: Install cargo-php
-        run: cargo install cargo-php --locked
-
       - name: Build PHP extension
         working-directory: php-sqlx-cdylib
-        run: cargo php install --release --yes
+        run: cargo build --release
+
+      - name: Install PHP extension
+        run: |
+          EXT_DIR=$(php -r "echo ini_get('extension_dir');")
+          sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
+          echo "extension=sqlx.so" | sudo tee /etc/php/${{ matrix.php }}/cli/conf.d/99-sqlx.ini
 
       - name: Verify extension loads
-        run: php -m | grep -i sqlx || echo "Extension registered"
+        run: php -m | grep -i sqlx
 
   integration-postgres:
     name: Integration Tests (PostgreSQL)
@@ -140,7 +143,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang
+          sudo apt-get install -y clang llvm
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -153,12 +156,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-integration-
 
-      - name: Install cargo-php
-        run: cargo install cargo-php --locked
-
       - name: Build PHP extension
         working-directory: php-sqlx-cdylib
-        run: cargo php install --release --yes
+        run: cargo build --release
+
+      - name: Install PHP extension
+        run: |
+          EXT_DIR=$(php -r "echo ini_get('extension_dir');")
+          sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
+          echo "extension=sqlx.so" | sudo tee /etc/php/8.4/cli/conf.d/99-sqlx.ini
 
       - name: Run integration tests
         env:
@@ -206,7 +212,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang
+          sudo apt-get install -y clang llvm
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -219,12 +225,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-mysql-
 
-      - name: Install cargo-php
-        run: cargo install cargo-php --locked
-
       - name: Build PHP extension
         working-directory: php-sqlx-cdylib
-        run: cargo php install --release --yes
+        run: cargo build --release
+
+      - name: Install PHP extension
+        run: |
+          EXT_DIR=$(php -r "echo ini_get('extension_dir');")
+          sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
+          echo "extension=sqlx.so" | sudo tee /etc/php/8.4/cli/conf.d/99-sqlx.ini
 
       - name: Run integration tests
         env:
