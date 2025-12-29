@@ -1070,6 +1070,46 @@ macro_rules! php_sqlx_impl_driver {
                 }
             }
 
+            /// Sets the application name for this connection.
+            ///
+            /// This helps identify the connection in database monitoring tools:
+            /// - `PostgreSQL`: Visible in `pg_stat_activity.application_name`
+            /// - `MySQL`: Stored in session variable `@sqlx_application_name`
+            /// - `MSSQL`: Stored in session context via `sp_set_session_context`
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->setApplicationName('order-service');
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws an exception if the query fails to execute.
+            pub fn set_application_name(&self, name: &str) -> $crate::error::Result<()> {
+                self.driver_inner.set_application_name(name)
+            }
+
+            /// Sets client metadata for this connection.
+            ///
+            /// The metadata is formatted and appended to the application name,
+            /// making it visible in database monitoring tools. This is useful for tracking
+            /// request IDs, user IDs, or other debugging information.
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->setClientInfo('order-service', ['request_id' => $requestId, 'user_id' => $userId]);
+            /// // In pg_stat_activity: "order-service {request_id='abc123',user_id=42}"
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws an exception if the query fails to execute.
+            pub fn set_client_info(
+                &self,
+                application_name: &str,
+                info: BTreeMap<String, ParameterValue>,
+            ) -> $crate::error::Result<()> {
+                self.driver_inner.set_client_info(application_name, &info)
+            }
+
             /// Begins a SQL transaction, optionally executing a callable within it.
             ///
             /// This method supports two modes of operation:

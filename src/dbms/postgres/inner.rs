@@ -1,6 +1,10 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::php_sqlx_impl_driver_inner;
 
+/// SQL query to set the application name for connection identification.
+/// Visible in `pg_stat_activity.application_name`.
+pub const SET_APPLICATION_NAME_QUERY: &str = "SET application_name = $name";
+
 /// SQL query to describe table columns using `information_schema`.
 pub const DESCRIBE_TABLE_QUERY: &str = r"
 SELECT

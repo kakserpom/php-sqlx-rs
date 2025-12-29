@@ -2,6 +2,12 @@
 
 use crate::php_sqlx_impl_driver_inner;
 
+/// SQL query to set the application name as a session variable.
+/// Can be queried via `SELECT @sqlx_application_name`.
+/// Note: `MySQL` doesn't have a built-in equivalent to `PostgreSQL`'s `application_name`,
+/// but this value can be retrieved in custom monitoring queries.
+pub const SET_APPLICATION_NAME_QUERY: &str = "SET @sqlx_application_name = $name";
+
 /// SQL query to describe table columns using `information_schema`.
 pub const DESCRIBE_TABLE_QUERY: &str = r"
 SELECT

@@ -87,6 +87,7 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - Custom `SqlxException` class with error codes for precise error handling
 - **Schema introspection** via `describeTable()` for table column metadata
 - **Query profiling** via `onQuery()` callback for logging and performance monitoring
+- **Connection tagging** via `setApplicationName()` and `setClientInfo()` for debugging
 
 ---
 
@@ -751,6 +752,30 @@ The callback receives:
 - `$durationMs` – Execution time in milliseconds
 
 **Performance**: When no hook is registered, there is zero overhead. Timing only starts when a hook is active.
+
+#### Connection Tagging
+
+Tag connections with metadata for easier debugging in database monitoring tools:
+
+- `setApplicationName(string $name): void` – sets the application name for this connection.
+- `setClientInfo(string $applicationName, array $info): void` – sets application name with additional metadata.
+
+```php
+// Simple application name
+$driver->setApplicationName('order-service');
+
+// With additional context (useful for debugging)
+$driver->setClientInfo('order-service', [
+    'request_id' => $requestId,
+    'user_id' => $userId,
+]);
+// Result: "order-service {request_id='abc123',user_id=42}"
+```
+
+**Database-specific visibility**:
+- PostgreSQL: Visible in `pg_stat_activity.application_name`
+- MySQL: Stored in session variable `@sqlx_application_name` (queryable via `SELECT @sqlx_application_name`)
+- MSSQL: Stored in session context (queryable via `SELECT SESSION_CONTEXT(N'application_name')`)
 
 #### Schema Introspection
 

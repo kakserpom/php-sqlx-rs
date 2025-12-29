@@ -1,6 +1,11 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::php_sqlx_impl_driver_inner;
 
+/// SQL query to set the application name in session context.
+/// Readable via `SELECT SESSION_CONTEXT(N'application_name')`.
+/// Requires SQL Server 2016 or later.
+pub const SET_APPLICATION_NAME_QUERY: &str = "EXEC sp_set_session_context @key = N'application_name', @value = $name";
+
 /// SQL query to describe table columns using `information_schema`.
 pub const DESCRIBE_TABLE_QUERY: &str = r"
 SELECT

@@ -1018,6 +1018,64 @@ macro_rules! php_sqlx_impl_driver_inner {
                 self.query_all(DESCRIBE_TABLE_QUERY, Some(params), Some(true))
             }
 
+            /// Sets the application name for this connection.
+            ///
+            /// This helps identify the connection in database monitoring tools:
+            /// - `PostgreSQL`: Visible in `pg_stat_activity.application_name`
+            /// - `MySQL`: Stored in session variable `@sqlx_application_name`
+            /// - `MSSQL`: Stored in session context, readable via `SESSION_CONTEXT(N'application_name')`
+            ///
+            /// # Parameters
+            /// - `name`: The application name to set.
+            ///
+            /// # Errors
+            /// Returns an error if the query fails to execute.
+            pub fn set_application_name(&self, name: &str) -> $crate::error::Result<()> {
+                let mut params = BTreeMap::new();
+                params.insert("name".to_string(), ParameterValue::String(name.to_string()));
+                self.execute(SET_APPLICATION_NAME_QUERY, Some(params))?;
+                Ok(())
+            }
+
+            /// Sets client metadata for this connection.
+            ///
+            /// The metadata is formatted as a JSON object and appended to the application name,
+            /// making it visible in database monitoring tools. This is useful for tracking
+            /// request IDs, user IDs, or other debugging information.
+            ///
+            /// # Parameters
+            /// - `info`: Key-value pairs of client metadata.
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->setClientInfo(['request_id' => $requestId, 'user_id' => $userId]);
+            /// // Sets application name to: "myapp {\"request_id\":\"abc123\",\"user_id\":42}"
+            /// ```
+            ///
+            /// # Errors
+            /// Returns an error if the query fails to execute.
+            pub fn set_client_info(
+                &self,
+                base_name: &str,
+                info: &BTreeMap<String, ParameterValue>,
+            ) -> $crate::error::Result<()> {
+                // Format info as key=value pairs
+                let mut parts = Vec::new();
+                for (k, v) in info {
+                    let quoted = v.quote(&self.settings)?;
+                    parts.push(format!("{k}={quoted}"));
+                }
+                let info_str = parts.join(",");
+
+                let full_name = if info_str.is_empty() {
+                    base_name.to_string()
+                } else {
+                    format!("{base_name} {{{info_str}}}")
+                };
+
+                self.set_application_name(&full_name)
+            }
+
             /// Begins a new SQL transaction and places it into the transaction stack.
             ///
             /// This method must be called before executing transactional operations
