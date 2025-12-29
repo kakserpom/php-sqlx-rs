@@ -54,6 +54,7 @@ pub mod select_clause;
 
 mod dbms;
 pub mod driver_factory;
+pub mod query_hook;
 #[cfg(test)]
 mod tests;
 mod types;

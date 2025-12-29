@@ -1037,6 +1037,39 @@ macro_rules! php_sqlx_impl_driver {
                 self.driver_inner.dry(query, parameters)
             }
 
+            /// Registers a callback to be invoked after each query execution.
+            ///
+            /// The callback receives:
+            /// - `string $sql` - The rendered SQL query with placeholders
+            /// - `string $sqlInline` - The SQL query with inlined parameter values (for logging)
+            /// - `float $durationMs` - Execution time in milliseconds
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->onQuery(function(string $sql, string $sqlInline, float $durationMs) {
+            ///     Logger::debug("Query took {$durationMs}ms: $sqlInline");
+            /// });
+            ///
+            /// // Disable the hook
+            /// $driver->onQuery(null);
+            /// ```
+            ///
+            /// # Performance
+            /// When no hook is registered, there is zero overhead. When a hook is active,
+            /// timing measurements are taken and the callback is invoked after each query.
+            ///
+            /// # Notes
+            /// - Exceptions thrown by the callback are silently ignored to avoid disrupting query execution
+            /// - The hook applies to all query methods: `query*`, `execute`, `insert`
+            /// - The hook is NOT inherited by prepared queries or query builders
+            pub fn on_query(&self, callback: &Zval) {
+                if callback.is_null() {
+                    self.driver_inner.query_hook.clear();
+                } else {
+                    self.driver_inner.query_hook.set(callback.shallow_clone());
+                }
+            }
+
             /// Begins a SQL transaction, optionally executing a callable within it.
             ///
             /// This method supports two modes of operation:

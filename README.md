@@ -86,6 +86,7 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - **Automatic retry** with exponential backoff for transient failures
 - Custom `SqlxException` class with error codes for precise error handling
 - **Schema introspection** via `describeTable()` for table column metadata
+- **Query profiling** via `onQuery()` callback for logging and performance monitoring
 
 ---
 
@@ -726,6 +727,30 @@ $driver = Sqlx\DriverFactory::make([
 - `dry(string $query, array $parameters = null): array` – render final SQL + bound parameters without executing. Handy
   for
   debugging.
+
+#### Query Profiling
+
+- `onQuery(?callable $callback): void` – registers a callback for query profiling/logging.
+
+```php
+// Enable query logging
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs) {
+    Logger::debug("Query took {$durationMs}ms: $sqlInline");
+});
+
+// Run some queries - the callback is called after each one
+$users = $driver->queryAll('SELECT * FROM users WHERE status = $status', ['status' => 'active']);
+
+// Disable the hook
+$driver->onQuery(null);
+```
+
+The callback receives:
+- `$sql` – The rendered SQL with placeholders (`SELECT * FROM users WHERE status = $1`)
+- `$sqlInline` – The SQL with inlined values for logging (`SELECT * FROM users WHERE status = 'active'`)
+- `$durationMs` – Execution time in milliseconds
+
+**Performance**: When no hook is registered, there is zero overhead. Timing only starts when a hook is active.
 
 #### Schema Introspection
 

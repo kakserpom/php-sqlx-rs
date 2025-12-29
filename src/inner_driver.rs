@@ -99,6 +99,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             inner_driver::RetryPolicy,
             options::DriverInnerOptions,
             param_value::{ParameterValue, utils::bind_values},
+            query_hook::{QueryHook, QueryTimer},
             utils::{
                 hashmap_fold::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped},
                 ident::is_valid_ident,
@@ -122,6 +123,8 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub settings: Settings,
             /// Retry policy for transient failures.
             pub retry_policy: RetryPolicy,
+            /// Query profiling hook for logging and monitoring.
+            pub query_hook: QueryHook,
         }
 
         impl $struct {
@@ -160,6 +163,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     ),
                     settings,
                     retry_policy,
+                    query_hook: QueryHook::new(),
                     options,
                 })
             }
@@ -233,9 +237,19 @@ macro_rules! php_sqlx_impl_driver_inner {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> $crate::error::Result<u64> {
+                // Render inline query for logging only if hook is active
+                let sql_inline = if self.query_hook.is_set() {
+                    self.render_query_inline(query, parameters.clone()).ok()
+                } else {
+                    None
+                };
+
                 let (query, values) = self.render_query(query, parameters)?;
 
-                self.with_retry(|| {
+                // Start timing if hook is active
+                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
+
+                let result = self.with_retry(|| {
                     Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                         let val = RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *tx),
@@ -249,7 +263,14 @@ macro_rules! php_sqlx_impl_driver_inner {
                     }
                     .map_err(|err| SqlxError::query_with_source(&query, err))?
                     .rows_affected())
-                })
+                });
+
+                // Call hook with timing info
+                if let Some(t) = timer {
+                    t.finish();
+                }
+
+                result
             }
 
             /// Renders the final SQL query and parameters using the AST cache.
@@ -514,8 +535,16 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
+                let sql_inline = if self.query_hook.is_set() {
+                    self.render_query_inline(query, parameters.clone()).ok()
+                } else {
+                    None
+                };
+
                 let (query, values) = self.render_query(query, parameters)?;
-                self.with_retry(|| {
+                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
+
+                let result = self.with_retry(|| {
                     RUNTIME
                         .block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
@@ -523,7 +552,13 @@ macro_rules! php_sqlx_impl_driver_inner {
                         )
                         .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
-                .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
+                .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays));
+
+                if let Some(t) = timer {
+                    t.finish();
+                }
+
+                result
             }
 
             /// Executes an SQL query and returns a single row if available, or `null` if no rows are returned.
@@ -548,8 +583,16 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
+                let sql_inline = if self.query_hook.is_set() {
+                    self.render_query_inline(query, parameters.clone()).ok()
+                } else {
+                    None
+                };
+
                 let (query, values) = self.render_query(query, parameters)?;
-                Ok(self
+                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
+
+                let result = self
                     .with_retry(|| {
                         RUNTIME
                             .block_on(
@@ -566,7 +609,13 @@ macro_rules! php_sqlx_impl_driver_inner {
                         x.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
                     })
                     .transpose()?
-                    .unwrap_or_else(Zval::null))
+                    .unwrap_or_else(Zval::null);
+
+                if let Some(t) = timer {
+                    t.finish();
+                }
+
+                Ok(result)
             }
 
             /// Executes an SQL query and returns all results.
@@ -590,9 +639,17 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Vec<Zval>> {
+                let sql_inline = if self.query_hook.is_set() {
+                    self.render_query_inline(query, parameters.clone()).ok()
+                } else {
+                    None
+                };
+
                 let (query, values) = self.render_query(query, parameters)?;
+                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
+
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-                self.with_retry(|| {
+                let result = self.with_retry(|| {
                     RUNTIME
                         .block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
@@ -602,7 +659,13 @@ macro_rules! php_sqlx_impl_driver_inner {
                 })?
                 .into_iter()
                 .map(|row| row.into_zval(assoc))
-                .try_collect()
+                .try_collect();
+
+                if let Some(t) = timer {
+                    t.finish();
+                }
+
+                result
             }
 
             /// Returns the rendered query and its parameters.
