@@ -135,17 +135,18 @@ The above example will throw an exception if `$since` is not set.
 
 ### Type-Safe Placeholders
 
-You can enforce type constraints on placeholders using type suffixes. When a value doesn't match the expected type, an exception is thrown during query rendering.
+You can enforce type constraints on placeholders using type suffixes. When a value doesn't match the expected type, an
+exception is thrown during query rendering.
 
 #### Scalar Types
 
-| Suffix | Named Syntax | Description |
-|--------|--------------|-------------|
-| `?i` | `:id!i`, `$id!i` | Integer |
-| `?u` | `:age!u`, `$age!u` | Unsigned integer (≥ 0) |
-| `?d` | `:score!d`, `$score!d` | Decimal (int, float, or numeric string) |
-| `?ud` | `:price!ud`, `$price!ud` | Unsigned decimal (≥ 0, int/float/numeric string) |
-| `?s` | `:name!s`, `$name!s` | String |
+| Suffix | Named Syntax             | Description                                      |
+|--------|--------------------------|--------------------------------------------------|
+| `?i`   | `:id!i`, `$id!i`         | Integer                                          |
+| `?u`   | `:age!u`, `$age!u`       | Unsigned integer (≥ 0)                           |
+| `?d`   | `:score!d`, `$score!d`   | Decimal (int, float, or numeric string)          |
+| `?ud`  | `:price!ud`, `$price!ud` | Unsigned decimal (≥ 0, int/float/numeric string) |
+| `?s`   | `:name!s`, `$name!s`     | String                                           |
 
 ```php
 // Type validation examples
@@ -162,13 +163,13 @@ $driver->queryAll('SELECT * FROM products WHERE price = ?d', ["abc"]);     // Er
 
 #### Array Types (for IN clauses)
 
-| Suffix | Named Syntax | Description |
-|--------|--------------|-------------|
-| `?ia` | `:ids!ia` | Array of integers |
-| `?ua` | `:ids!ua` | Array of unsigned integers |
-| `?da` | `:scores!da` | Array of decimals |
+| Suffix | Named Syntax  | Description                |
+|--------|---------------|----------------------------|
+| `?ia`  | `:ids!ia`     | Array of integers          |
+| `?ua`  | `:ids!ua`     | Array of unsigned integers |
+| `?da`  | `:scores!da`  | Array of decimals          |
 | `?uda` | `:prices!uda` | Array of unsigned decimals |
-| `?sa` | `:names!sa` | Array of strings |
+| `?sa`  | `:names!sa`   | Array of strings           |
 
 ```php
 $driver->queryAll('SELECT * FROM users WHERE id IN :ids!ia', [
@@ -186,14 +187,14 @@ $driver->queryAll('SELECT * FROM users WHERE id IN :ids!ia', [
 
 By default, typed placeholders reject `null` values. Use the `n` prefix to allow nulls:
 
-| Suffix | Named Syntax | Description |
-|--------|--------------|-------------|
-| `?n` | `:data!n` | Nullable mixed (any type including null) |
-| `?ni` | `:id!ni` | Nullable integer |
-| `?nu` | `:age!nu` | Nullable unsigned integer |
-| `?nd` | `:score!nd` | Nullable decimal |
-| `?nud` | `:price!nud` | Nullable unsigned decimal |
-| `?ns` | `:name!ns` | Nullable string |
+| Suffix | Named Syntax | Description                              |
+|--------|--------------|------------------------------------------|
+| `?n`   | `:data!n`    | Nullable mixed (any type including null) |
+| `?ni`  | `:id!ni`     | Nullable integer                         |
+| `?nu`  | `:age!nu`    | Nullable unsigned integer                |
+| `?nd`  | `:score!nd`  | Nullable decimal                         |
+| `?nud` | `:price!nud` | Nullable unsigned decimal                |
+| `?ns`  | `:name!ns`   | Nullable string                          |
 
 Nullable array types: `?nia`, `?nua`, `?nda`, `?nuda`, `?nsa`
 
@@ -210,13 +211,13 @@ $driver->queryAll('SELECT * FROM users WHERE id = ?ni', [42]);    // OK - render
 
 The nullable flag affects how conditional blocks behave:
 
-| Placeholder | Value | Block Behavior |
-|-------------|-------|----------------|
-| `:status!ni` (nullable) | absent | Block **skipped** |
-| `:status!ni` (nullable) | `null` | Block **rendered** |
-| `:status!ni` (nullable) | `5` | Block **rendered** |
-| `:status!i` (non-nullable) | `null` | Block **skipped** |
-| `:status` (untyped) | `null` | Block **skipped** |
+| Placeholder                | Value  | Block Behavior     |
+|----------------------------|--------|--------------------|
+| `:status!ni` (nullable)    | absent | Block **skipped**  |
+| `:status!ni` (nullable)    | `null` | Block **rendered** |
+| `:status!ni` (nullable)    | `5`    | Block **rendered** |
+| `:status!i` (non-nullable) | `null` | Block **skipped**  |
+| `:status` (untyped)        | `null` | Block **skipped**  |
 
 ```php
 $sql = 'SELECT * FROM users WHERE 1=1 {{ AND status = :status!ni }}';
@@ -238,14 +239,14 @@ This is useful when you want to explicitly query for `NULL` values vs. omitting 
 
 #### Quick Reference Cheat Sheet
 
-| Type | Scalar | Nullable | Array | Nullable Array |
-|------|--------|----------|-------|----------------|
-| **Any** | `?` | `?n` | — | — |
-| **Integer** | `?i` | `?ni` | `?ia` | `?nia` |
-| **Unsigned Int** | `?u` | `?nu` | `?ua` | `?nua` |
-| **Decimal** | `?d` | `?nd` | `?da` | `?nda` |
-| **Unsigned Dec** | `?ud` | `?nud` | `?uda` | `?nuda` |
-| **String** | `?s` | `?ns` | `?sa` | `?nsa` |
+| Type             | Scalar | Nullable | Array  | Nullable Array |
+|------------------|--------|----------|--------|----------------|
+| **Any**          | `?`    | `?n`     | —      | —              |
+| **Integer**      | `?i`   | `?ni`    | `?ia`  | `?nia`         |
+| **Unsigned Int** | `?u`   | `?nu`    | `?ua`  | `?nua`         |
+| **Decimal**      | `?d`   | `?nd`    | `?da`  | `?nda`         |
+| **Unsigned Dec** | `?ud`  | `?nud`   | `?uda` | `?nuda`        |
+| **String**       | `?s`   | `?ns`    | `?sa`  | `?nsa`         |
 
 **Named syntax**: Add `!` before suffix: `$id!i`, `:name!s`, `$prices!uda`
 
@@ -443,7 +444,8 @@ Additional supported methods to be called from inside a closure:
 
 ## Retry Policy
 
-The driver supports automatic retry with exponential backoff for transient failures like connection drops, pool exhaustion, and timeouts.
+The driver supports automatic retry with exponential backoff for transient failures like connection drops, pool
+exhaustion, and timeouts.
 
 ```php
 $driver = Sqlx\DriverFactory::make([
@@ -465,14 +467,14 @@ $driver = Sqlx\DriverFactory::make([
 
 ### Transient vs Non-Transient Errors
 
-| Error Type | Retried? | Examples |
-|------------|----------|----------|
-| Pool exhausted | ✅ Yes | All connections in use |
-| Timeout | ✅ Yes | Connection or query timeout |
-| Connection error | ✅ Yes | Connection dropped, network error |
-| Query error | ❌ No | Syntax error, constraint violation |
-| Transaction error | ❌ No | Deadlock, serialization failure |
-| Parse error | ❌ No | Invalid SQL syntax |
+| Error Type        | Retried? | Examples                           |
+|-------------------|----------|------------------------------------|
+| Pool exhausted    | ✅ Yes    | All connections in use             |
+| Timeout           | ✅ Yes    | Connection or query timeout        |
+| Connection error  | ✅ Yes    | Connection dropped, network error  |
+| Query error       | ❌ No     | Syntax error, constraint violation |
+| Transaction error | ❌ No     | Deadlock, serialization failure    |
+| Parse error       | ❌ No     | Invalid SQL syntax                 |
 
 ---
 
@@ -760,6 +762,7 @@ $driver->onQuery(null);
 ```
 
 The callback receives:
+
 - `$sql` – The rendered SQL with placeholders (`SELECT * FROM users WHERE status = $1`)
 - `$sqlInline` – The SQL with inlined values for logging (`SELECT * FROM users WHERE status = 'active'`)
 - `$durationMs` – Execution time in milliseconds
@@ -786,6 +789,7 @@ $driver->setClientInfo('order-service', [
 ```
 
 **Database-specific visibility**:
+
 - PostgreSQL: Visible in `pg_stat_activity.application_name`
 - MySQL: Stored in session variable `@sqlx_application_name` (queryable via `SELECT @sqlx_application_name`)
 - MSSQL: Stored in session context (queryable via `SELECT SESSION_CONTEXT(N'application_name')`)
@@ -808,6 +812,7 @@ $columns = $driver->describeTable('users', 'public');
 ```
 
 Each column entry contains:
+
 - `name` – Column name (string)
 - `type` – Database-specific type (string), e.g., `varchar(255)`, `integer`, `timestamp`
 - `nullable` – Whether `NULL` is allowed (bool)
@@ -1104,6 +1109,7 @@ cargo +nightly fuzz run ast_postgres -- -max_total_time=60
 ```
 
 Available fuzz targets:
+
 - `ast_postgres` - PostgreSQL parser
 - `ast_mysql` - MySQL parser
 - `ast_mssql` - MSSQL parser
