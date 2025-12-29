@@ -106,7 +106,7 @@ jobs:
         run: |
           EXT_DIR=$(php -r "echo ini_get('extension_dir');")
           echo "Extension directory: $EXT_DIR"
-          sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
+          sudo cp php-sqlx-cdylib/target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
           # Find the correct PHP ini scan directory
           INI_DIR=$(php -r "echo PHP_CONFIG_FILE_SCAN_DIR;")
           echo "INI scan directory: $INI_DIR"
@@ -176,7 +176,7 @@ jobs:
         run: |
           EXT_DIR=$(php -r "echo ini_get('extension_dir');")
           echo "Extension directory: $EXT_DIR"
-          sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
+          sudo cp php-sqlx-cdylib/target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
           INI_DIR=$(php -r "echo PHP_CONFIG_FILE_SCAN_DIR;")
           echo "INI scan directory: $INI_DIR"
           if [ -n "$INI_DIR" ] && [ -d "$INI_DIR" ]; then
@@ -254,7 +254,7 @@ jobs:
         run: |
           EXT_DIR=$(php -r "echo ini_get('extension_dir');")
           echo "Extension directory: $EXT_DIR"
-          sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
+          sudo cp php-sqlx-cdylib/target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
           INI_DIR=$(php -r "echo PHP_CONFIG_FILE_SCAN_DIR;")
           echo "INI scan directory: $INI_DIR"
           if [ -n "$INI_DIR" ] && [ -d "$INI_DIR" ]; then
