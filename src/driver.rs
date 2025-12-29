@@ -1110,6 +1110,22 @@ macro_rules! php_sqlx_impl_driver {
                 self.driver_inner.set_client_info(application_name, &info)
             }
 
+            /// Returns true if read replicas are configured for this driver.
+            ///
+            /// When read replicas are configured, SELECT queries are automatically
+            /// routed to replicas using round-robin selection, while write operations
+            /// (INSERT/UPDATE/DELETE) always go to the primary.
+            ///
+            /// # Example
+            /// ```php
+            /// if ($driver->hasReadReplicas()) {
+            ///     echo "Read queries will be load balanced across replicas";
+            /// }
+            /// ```
+            pub fn has_read_replicas(&self) -> bool {
+                self.driver_inner.has_read_replicas()
+            }
+
             /// Begins a SQL transaction, optionally executing a callable within it.
             ///
             /// This method supports two modes of operation:

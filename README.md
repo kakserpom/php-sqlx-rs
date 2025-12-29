@@ -88,6 +88,7 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - **Schema introspection** via `describeTable()` for table column metadata
 - **Query profiling** via `onQuery()` callback for logging and performance monitoring
 - **Connection tagging** via `setApplicationName()` and `setClientInfo()` for debugging
+- **Read replica support** with automatic query routing and round-robin load balancing
 - **IDE support** for VS Code and PHPStorm (syntax highlighting, live templates)
 
 ---
@@ -794,6 +795,52 @@ $driver->setClientInfo('order-service', [
 - PostgreSQL: Visible in `pg_stat_activity.application_name`
 - MySQL: Stored in session variable `@sqlx_application_name` (queryable via `SELECT @sqlx_application_name`)
 - MSSQL: Stored in session context (queryable via `SELECT SESSION_CONTEXT(N'application_name')`)
+
+#### Read Replicas
+
+Configure read replicas for automatic read/write splitting:
+
+```php
+$driver = Sqlx\DriverFactory::make([
+    Sqlx\DriverOptions::OPT_URL => 'postgres://user:pass@primary/db',
+    Sqlx\DriverOptions::OPT_READ_REPLICAS => [
+        'postgres://user:pass@replica1/db',
+        'postgres://user:pass@replica2/db',
+    ],
+]);
+
+// SELECT queries automatically route to replicas (round-robin)
+$users = $driver->queryAll('SELECT * FROM users');
+
+// Write operations always go to primary
+$driver->execute('INSERT INTO users (name) VALUES (?s)', ['John']);
+```
+
+**Weighted load balancing:** Assign weights to control traffic distribution:
+
+```php
+$driver = Sqlx\DriverFactory::make([
+    Sqlx\DriverOptions::OPT_URL => 'postgres://user:pass@primary/db',
+    Sqlx\DriverOptions::OPT_READ_REPLICAS => [
+        ['url' => 'postgres://user:pass@replica1/db', 'weight' => 3],  // 75% traffic
+        ['url' => 'postgres://user:pass@replica2/db', 'weight' => 1],  // 25% traffic
+    ],
+]);
+```
+
+**Routing rules:**
+- `queryAll`, `queryRow`, `queryMaybeRow`, `queryValue`, `queryColumn` → replicas
+- `execute` → primary
+- All queries inside transactions → primary (consistency guarantee)
+
+**Load balancing:** Weighted round-robin (or simple round-robin if all weights equal).
+
+```php
+// Check if replicas are configured
+if ($driver->hasReadReplicas()) {
+    echo "Read queries are load balanced across replicas";
+}
+```
 
 #### Schema Introspection
 

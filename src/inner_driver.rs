@@ -90,6 +90,7 @@ macro_rules! php_sqlx_impl_driver_inner {
         };
         use std::collections::BTreeMap;
         use std::sync::RwLock;
+        use std::sync::atomic::AtomicUsize;
         use threadsafe_lru::LruCache;
         use $crate::{
             RUNTIME,
@@ -111,8 +112,16 @@ macro_rules! php_sqlx_impl_driver_inner {
         /// This struct is typically wrapped in `Arc` and shared across the outer driver,
         /// prepared queries, and query builders.
         pub struct $struct {
-            /// `SQLx` connection pool for efficient connection reuse.
+            /// `SQLx` connection pool for efficient connection reuse (primary).
             pub pool: Pool<$database>,
+            /// Read replica connection pools for automatic read/write splitting.
+            pub replica_pools: Vec<Pool<$database>>,
+            /// Weights for each replica pool (for weighted load balancing).
+            replica_weights: Vec<u32>,
+            /// Total weight of all replicas (sum of weights).
+            replica_total_weight: u32,
+            /// Counter for weighted round-robin replica selection.
+            replica_counter: AtomicUsize,
             /// LRU cache for parsed SQL AST, reducing parse overhead for repeated queries.
             pub ast_cache: LruCache<String, Ast>,
             /// Driver configuration options.
@@ -146,6 +155,31 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let pool = RUNTIME
                     .block_on(pool_options.connect(url.as_str()))
                     .map_err(|e| SqlxError::connection_with_source("Failed to connect", e))?;
+
+                // Create replica pools with weights
+                let mut replica_pools = Vec::with_capacity(options.read_replicas.len());
+                let mut replica_weights = Vec::with_capacity(options.read_replicas.len());
+                for replica_config in &options.read_replicas {
+                    let mut replica_pool_options = PoolOptions::<$database>::new()
+                        .max_connections(options.max_connections.into())
+                        .min_connections(options.min_connections)
+                        .max_lifetime(options.max_lifetime)
+                        .idle_timeout(options.idle_timeout)
+                        .test_before_acquire(options.test_before_acquire);
+                    if let Some(acquire_timeout) = options.acquire_timeout {
+                        replica_pool_options = replica_pool_options.acquire_timeout(acquire_timeout);
+                    }
+                    let replica_pool = RUNTIME
+                        .block_on(replica_pool_options.connect(replica_config.url.as_str()))
+                        .map_err(|e| SqlxError::connection_with_source(
+                            format!("Failed to connect to replica: {}", replica_config.url),
+                            e,
+                        ))?;
+                    replica_pools.push(replica_pool);
+                    replica_weights.push(replica_config.weight);
+                }
+                let replica_total_weight: u32 = replica_weights.iter().sum();
+
                 let mut settings = SETTINGS.clone();
                 settings.collapsible_in_enabled = options.collapsible_in_enabled;
                 let retry_policy = RetryPolicy {
@@ -157,6 +191,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                 Ok(Self {
                     tx_stack: RwLock::new(Vec::new()),
                     pool,
+                    replica_pools,
+                    replica_weights,
+                    replica_total_weight,
+                    replica_counter: AtomicUsize::new(0),
                     ast_cache: LruCache::new(
                         options.ast_cache_shard_count,
                         options.ast_cache_shard_size,
@@ -183,6 +221,49 @@ macro_rules! php_sqlx_impl_driver_inner {
             #[inline]
             pub fn has_active_transaction(&self) -> bool {
                 !self.tx_stack.read().expect("Poisoned tx_stack").is_empty()
+            }
+
+            /// Returns true if read replicas are configured.
+            #[inline]
+            pub fn has_read_replicas(&self) -> bool {
+                !self.replica_pools.is_empty()
+            }
+
+            /// Returns a reference to a read replica pool using weighted selection.
+            ///
+            /// When weights are configured, replicas receive traffic proportional to their weight.
+            /// For example, with weights [3, 1], the first replica gets ~75% of traffic.
+            ///
+            /// Returns the primary pool if:
+            /// - No replicas are configured
+            /// - There's an active transaction (all queries go to primary)
+            #[inline]
+            pub fn get_read_pool(&self) -> &Pool<$database> {
+                if self.replica_pools.is_empty() || self.has_active_transaction() {
+                    return &self.pool;
+                }
+
+                // Simple round-robin if all weights are equal (optimization)
+                if self.replica_total_weight as usize == self.replica_pools.len() {
+                    let index = self.replica_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    return &self.replica_pools[index % self.replica_pools.len()];
+                }
+
+                // Weighted selection (truncation is intentional for wrapping)
+                let counter = self.replica_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                #[allow(clippy::cast_possible_truncation)]
+                let slot = (counter as u32) % self.replica_total_weight;
+
+                let mut cumulative = 0u32;
+                for (i, &weight) in self.replica_weights.iter().enumerate() {
+                    cumulative += weight;
+                    if slot < cumulative {
+                        return &self.replica_pools[i];
+                    }
+                }
+
+                // Fallback (should never happen if weights are valid)
+                &self.replica_pools[0]
             }
 
             /// Executes an operation with retry logic for transient failures.
@@ -356,7 +437,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let row = self.with_retry(|| {
                     RUNTIME
                         .block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(self.get_read_pool()),
                         )
                         .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?;
@@ -410,7 +491,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         RUNTIME
                             .block_on(
                                 bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_all(&self.pool),
+                                    .fetch_all(self.get_read_pool()),
                             )
                             .map_err(|err| SqlxError::query_with_source(&query, err))
                     })?
@@ -479,7 +560,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         RUNTIME
                             .block_on(
                                 bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(&self.pool),
+                                    .fetch_one(self.get_read_pool()),
                             )
                             .map(Some)
                             .or_else(|err: sqlx_oldapi::Error| match err {
@@ -548,7 +629,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     RUNTIME
                         .block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_one(&self.pool),
+                                .fetch_one(self.get_read_pool()),
                         )
                         .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
@@ -597,7 +678,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         RUNTIME
                             .block_on(
                                 bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(&self.pool),
+                                    .fetch_one(self.get_read_pool()),
                             )
                             .map(Some)
                             .or_else(|err: sqlx_oldapi::Error| match err {
@@ -653,7 +734,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     RUNTIME
                         .block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_all(&self.pool),
+                                .fetch_all(self.get_read_pool()),
                         )
                         .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
@@ -752,7 +833,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     RUNTIME
                         .block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_all(&self.pool),
+                                .fetch_all(self.get_read_pool()),
                         )
                         .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
@@ -826,7 +907,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     } else {
                         RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_all(&self.pool),
+                                .fetch_all(self.get_read_pool()),
                         )
                     }
                     .map_err(|err| SqlxError::query_with_source(&query, err))
@@ -892,7 +973,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     RUNTIME
                         .block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_all(&self.pool),
+                                .fetch_all(self.get_read_pool()),
                         )
                         .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
@@ -949,7 +1030,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                     RUNTIME
                         .block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_all(&self.pool),
+                                .fetch_all(self.get_read_pool()),
                         )
                         .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?

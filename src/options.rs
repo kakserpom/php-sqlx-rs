@@ -48,10 +48,34 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::time::Duration;
 
+/// Configuration for a single read replica.
+#[derive(Debug, Clone)]
+pub struct ReplicaConfig {
+    /// Database connection URL.
+    pub url: String,
+    /// Weight for load balancing (higher = more traffic). Default: 1.
+    pub weight: u32,
+}
+
+impl ReplicaConfig {
+    /// Creates a new replica config with the given URL and default weight of 1.
+    #[must_use]
+    pub fn new(url: String) -> Self {
+        Self { url, weight: 1 }
+    }
+
+    /// Creates a new replica config with the given URL and weight.
+    #[must_use]
+    pub fn with_weight(url: String, weight: u32) -> Self {
+        Self { url, weight: weight.max(1) }
+    }
+}
+
 /// Internal configuration options for database drivers.
 ///
 /// This struct holds all the parsed and validated configuration values
 /// that control driver behavior. It is created by parsing [`DriverOptionsArg`].
+#[derive(Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct DriverInnerOptions {
     /// Database connection URL (e.g., `postgres://user:pass@host/db`).
@@ -80,6 +104,8 @@ pub struct DriverInnerOptions {
     pub(crate) collapsible_in_enabled: bool,
     /// Whether the connection should be read-only (useful for replicas).
     pub(crate) readonly: bool,
+    /// Read replica configurations for automatic read/write splitting.
+    pub(crate) read_replicas: Vec<ReplicaConfig>,
     /// Maximum retry attempts for transient failures (0 = disabled).
     pub(crate) retry_max_attempts: u32,
     /// Initial backoff duration between retry attempts.
@@ -105,6 +131,7 @@ impl Default for DriverInnerOptions {
             test_before_acquire: DEFAULT_TEST_BEFORE_ACQUIRE,
             collapsible_in_enabled: DEFAULT_COLLAPSIBLE_IN,
             readonly: false,
+            read_replicas: Vec::new(),
             retry_max_attempts: DEFAULT_RETRY_MAX_ATTEMPTS,
             retry_initial_backoff: DEFAULT_RETRY_INITIAL_BACKOFF,
             retry_max_backoff: DEFAULT_RETRY_MAX_BACKOFF,
@@ -147,6 +174,10 @@ impl DriverOptions {
 
     /// Enable read-only mode (useful for replicas).
     pub const OPT_READONLY: &'static str = "readonly";
+
+    /// Read replica URLs for automatic read/write splitting.
+    /// Accepts an array of connection URLs: `['postgres://replica1/db', 'postgres://replica2/db']`
+    pub const OPT_READ_REPLICAS: &'static str = "read_replicas";
 
     /// Maximum lifetime of a pooled connection. Accepts string (`"30s"`, `"5 min"`) or integer (seconds).
     pub const OPT_MAX_LIFETIME: &'static str = "max_lifetime";
@@ -356,6 +387,63 @@ impl DriverOptionsArg {
                             Err(SqlxError::config("readonly", "must be a boolean"))
                         }
                     })?,
+                read_replicas: match kv.get(DriverOptions::OPT_READ_REPLICAS) {
+                    None | Some(ParameterValue::Null) => Vec::new(),
+                    Some(ParameterValue::Array(arr)) => {
+                        let mut replicas = Vec::with_capacity(arr.len());
+                        for (i, value) in arr.iter().enumerate() {
+                            match value {
+                                // Simple string format: 'postgres://replica/db'
+                                ParameterValue::String(url) => {
+                                    replicas.push(ReplicaConfig::new(url.clone()));
+                                }
+                                // Object format: ['url' => '...', 'weight' => 3]
+                                ParameterValue::Object(map) => {
+                                    let url = map.get("url").ok_or_else(|| {
+                                        SqlxError::config(
+                                            "read_replicas",
+                                            format!("element at index {i} missing 'url' key"),
+                                        )
+                                    })?;
+                                    let url = if let ParameterValue::String(s) = url {
+                                        s.clone()
+                                    } else {
+                                        return Err(SqlxError::config(
+                                            "read_replicas",
+                                            format!("element at index {i}: 'url' must be a string"),
+                                        ));
+                                    };
+                                    let weight = match map.get("weight") {
+                                        None | Some(ParameterValue::Null) => 1,
+                                        Some(ParameterValue::Int(w)) => {
+                                            u32::try_from(*w).unwrap_or(1).max(1)
+                                        }
+                                        _ => {
+                                            return Err(SqlxError::config(
+                                                "read_replicas",
+                                                format!("element at index {i}: 'weight' must be an integer"),
+                                            ));
+                                        }
+                                    };
+                                    replicas.push(ReplicaConfig::with_weight(url, weight));
+                                }
+                                _ => {
+                                    return Err(SqlxError::config(
+                                        "read_replicas",
+                                        format!("element at index {i} must be a string or ['url' => ..., 'weight' => ...]"),
+                                    ));
+                                }
+                            }
+                        }
+                        replicas
+                    }
+                    _ => {
+                        return Err(SqlxError::config(
+                            "read_replicas",
+                            "must be an array of connection URLs or replica configs",
+                        ));
+                    }
+                },
                 retry_max_attempts: kv.get(DriverOptions::OPT_RETRY_MAX_ATTEMPTS).map_or(
                     Ok(DEFAULT_RETRY_MAX_ATTEMPTS),
                     |value| {
@@ -414,22 +502,220 @@ impl DriverOptionsArg {
     }
 }
 
-#[test]
-fn test_driver_options() {
-    use crate::options::{DriverOptions, DriverOptionsArg};
-    use std::collections::BTreeMap;
+#[cfg(test)]
+mod tests {
+    use super::*;
     use std::time::Duration;
-    let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
-        (
-            DriverOptions::OPT_URL.into(),
-            "postgres://user:pass@host/database".into(),
-        ),
-        (DriverOptions::OPT_MAX_LIFETIME.into(), "1 hour".into()),
-        (DriverOptions::OPT_IDLE_TIMEOUT.into(), "2 min".into()),
-    ]))
-    .parse()
-    .unwrap();
 
-    assert_eq!(driver_options.max_lifetime, Some(Duration::from_secs(3600)));
-    assert_eq!(driver_options.idle_timeout, Some(Duration::from_secs(120)));
+    #[test]
+    fn test_driver_options() {
+        let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
+            (
+                DriverOptions::OPT_URL.into(),
+                "postgres://user:pass@host/database".into(),
+            ),
+            (DriverOptions::OPT_MAX_LIFETIME.into(), "1 hour".into()),
+            (DriverOptions::OPT_IDLE_TIMEOUT.into(), "2 min".into()),
+        ]))
+        .parse()
+        .unwrap();
+
+        assert_eq!(driver_options.max_lifetime, Some(Duration::from_secs(3600)));
+        assert_eq!(driver_options.idle_timeout, Some(Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn test_replica_config_new() {
+        let config = ReplicaConfig::new("postgres://replica/db".to_string());
+        assert_eq!(config.url, "postgres://replica/db");
+        assert_eq!(config.weight, 1);
+    }
+
+    #[test]
+    fn test_replica_config_with_weight() {
+        let config = ReplicaConfig::with_weight("postgres://replica/db".to_string(), 5);
+        assert_eq!(config.url, "postgres://replica/db");
+        assert_eq!(config.weight, 5);
+    }
+
+    #[test]
+    fn test_replica_config_weight_minimum_is_one() {
+        let config = ReplicaConfig::with_weight("postgres://replica/db".to_string(), 0);
+        assert_eq!(config.weight, 1, "weight should be at least 1");
+    }
+
+    #[test]
+    fn test_read_replicas_simple_strings() {
+        let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
+            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_READ_REPLICAS.into(),
+                ParameterValue::Array(vec![
+                    "postgres://replica1/db".into(),
+                    "postgres://replica2/db".into(),
+                ]),
+            ),
+        ]))
+        .parse()
+        .unwrap();
+
+        assert_eq!(driver_options.read_replicas.len(), 2);
+        assert_eq!(driver_options.read_replicas[0].url, "postgres://replica1/db");
+        assert_eq!(driver_options.read_replicas[0].weight, 1);
+        assert_eq!(driver_options.read_replicas[1].url, "postgres://replica2/db");
+        assert_eq!(driver_options.read_replicas[1].weight, 1);
+    }
+
+    #[test]
+    fn test_read_replicas_with_weights() {
+        let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
+            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_READ_REPLICAS.into(),
+                ParameterValue::Array(vec![
+                    ParameterValue::Object(BTreeMap::from_iter([
+                        ("url".to_string(), "postgres://replica1/db".into()),
+                        ("weight".to_string(), ParameterValue::Int(3)),
+                    ])),
+                    ParameterValue::Object(BTreeMap::from_iter([
+                        ("url".to_string(), "postgres://replica2/db".into()),
+                        ("weight".to_string(), ParameterValue::Int(1)),
+                    ])),
+                ]),
+            ),
+        ]))
+        .parse()
+        .unwrap();
+
+        assert_eq!(driver_options.read_replicas.len(), 2);
+        assert_eq!(driver_options.read_replicas[0].url, "postgres://replica1/db");
+        assert_eq!(driver_options.read_replicas[0].weight, 3);
+        assert_eq!(driver_options.read_replicas[1].url, "postgres://replica2/db");
+        assert_eq!(driver_options.read_replicas[1].weight, 1);
+    }
+
+    #[test]
+    fn test_read_replicas_mixed_format() {
+        let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
+            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_READ_REPLICAS.into(),
+                ParameterValue::Array(vec![
+                    "postgres://replica1/db".into(), // simple string
+                    ParameterValue::Object(BTreeMap::from_iter([
+                        ("url".to_string(), "postgres://replica2/db".into()),
+                        ("weight".to_string(), ParameterValue::Int(5)),
+                    ])),
+                ]),
+            ),
+        ]))
+        .parse()
+        .unwrap();
+
+        assert_eq!(driver_options.read_replicas.len(), 2);
+        assert_eq!(driver_options.read_replicas[0].weight, 1);
+        assert_eq!(driver_options.read_replicas[1].weight, 5);
+    }
+
+    #[test]
+    fn test_read_replicas_default_weight_when_missing() {
+        let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
+            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_READ_REPLICAS.into(),
+                ParameterValue::Array(vec![ParameterValue::Object(BTreeMap::from_iter([(
+                    "url".to_string(),
+                    "postgres://replica/db".into(),
+                )]))]),
+            ),
+        ]))
+        .parse()
+        .unwrap();
+
+        assert_eq!(driver_options.read_replicas[0].weight, 1);
+    }
+
+    #[test]
+    fn test_read_replicas_empty_array() {
+        let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
+            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_READ_REPLICAS.into(),
+                ParameterValue::Array(vec![]),
+            ),
+        ]))
+        .parse()
+        .unwrap();
+
+        assert!(driver_options.read_replicas.is_empty());
+    }
+
+    #[test]
+    fn test_read_replicas_missing_url_error() {
+        let result = DriverOptionsArg::Options(BTreeMap::from_iter([
+            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_READ_REPLICAS.into(),
+                ParameterValue::Array(vec![ParameterValue::Object(BTreeMap::from_iter([(
+                    "weight".to_string(),
+                    ParameterValue::Int(3),
+                )]))]),
+            ),
+        ]))
+        .parse();
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("missing 'url'"));
+    }
+
+    #[test]
+    fn test_weighted_selection_distribution() {
+        // Test the weighted selection algorithm logic
+        let weights = vec![3u32, 1u32];
+        let total_weight: u32 = weights.iter().sum();
+
+        let mut counts = vec![0usize; weights.len()];
+
+        // Simulate 1000 selections
+        for counter in 0..1000usize {
+            let slot = (counter as u32) % total_weight;
+            let mut cumulative = 0u32;
+            for (i, &weight) in weights.iter().enumerate() {
+                cumulative += weight;
+                if slot < cumulative {
+                    counts[i] += 1;
+                    break;
+                }
+            }
+        }
+
+        // With weights [3, 1], expect ~75% to replica 0, ~25% to replica 1
+        assert_eq!(counts[0], 750, "replica 0 should get 75% of traffic");
+        assert_eq!(counts[1], 250, "replica 1 should get 25% of traffic");
+    }
+
+    #[test]
+    fn test_weighted_selection_equal_weights() {
+        let weights = vec![1u32, 1u32, 1u32];
+        let total_weight: u32 = weights.iter().sum();
+
+        let mut counts = vec![0usize; weights.len()];
+
+        for counter in 0..300usize {
+            let slot = (counter as u32) % total_weight;
+            let mut cumulative = 0u32;
+            for (i, &weight) in weights.iter().enumerate() {
+                cumulative += weight;
+                if slot < cumulative {
+                    counts[i] += 1;
+                    break;
+                }
+            }
+        }
+
+        // Equal weights should distribute evenly
+        assert_eq!(counts[0], 100);
+        assert_eq!(counts[1], 100);
+        assert_eq!(counts[2], 100);
+    }
 }
