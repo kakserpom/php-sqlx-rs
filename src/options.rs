@@ -1,7 +1,7 @@
 //! Driver configuration options for php-sqlx.
 //!
 //! This module provides configuration types for database drivers, including
-//! connection pooling settings, AST cache configuration, and behavioral options.
+//! connection pooling settings, AST cache configuration, retry policy, and behavioral options.
 //!
 //! # PHP Usage
 //!
@@ -17,14 +17,31 @@
 //!     DriverOptions::OPT_MAX_CONNECTIONS => 10,
 //!     DriverOptions::OPT_ASSOC_ARRAYS => true,
 //! ]);
+//!
+//! // With retry policy for transient failures
+//! $driver = DriverFactory::make([
+//!     DriverOptions::OPT_URL => 'postgres://user:pass@localhost/db',
+//!     DriverOptions::OPT_RETRY_MAX_ATTEMPTS => 3,
+//!     DriverOptions::OPT_RETRY_INITIAL_BACKOFF => '100ms',
+//!     DriverOptions::OPT_RETRY_MAX_BACKOFF => '5s',
+//!     DriverOptions::OPT_RETRY_MULTIPLIER => 2.0,
+//! ]);
 //! ```
+//!
+//! # Retry Policy
+//!
+//! The retry policy automatically retries transient failures (pool exhaustion,
+//! connection drops, timeouts) with exponential backoff. Retry is disabled by
+//! default (`max_attempts = 0`). Retries are skipped inside transactions to
+//! prevent partial commits.
 
 use crate::error::{Error as SqlxError, Result};
 use crate::param_value::ParameterValue;
 use crate::{
     DEFAULT_ASSOC_ARRAYS, DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE,
     DEFAULT_COLLAPSIBLE_IN, DEFAULT_MAX_CONNECTIONS, DEFAULT_MIN_CONNECTIONS,
-    DEFAULT_TEST_BEFORE_ACQUIRE,
+    DEFAULT_RETRY_INITIAL_BACKOFF, DEFAULT_RETRY_MAX_ATTEMPTS, DEFAULT_RETRY_MAX_BACKOFF,
+    DEFAULT_RETRY_MULTIPLIER, DEFAULT_TEST_BEFORE_ACQUIRE,
 };
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::BTreeMap;
@@ -63,6 +80,14 @@ pub struct DriverInnerOptions {
     pub(crate) collapsible_in_enabled: bool,
     /// Whether the connection should be read-only (useful for replicas).
     pub(crate) readonly: bool,
+    /// Maximum retry attempts for transient failures (0 = disabled).
+    pub(crate) retry_max_attempts: u32,
+    /// Initial backoff duration between retry attempts.
+    pub(crate) retry_initial_backoff: Duration,
+    /// Maximum backoff duration between retry attempts.
+    pub(crate) retry_max_backoff: Duration,
+    /// Backoff multiplier for exponential backoff between retries.
+    pub(crate) retry_multiplier: f64,
 }
 impl Default for DriverInnerOptions {
     fn default() -> Self {
@@ -80,6 +105,10 @@ impl Default for DriverInnerOptions {
             test_before_acquire: DEFAULT_TEST_BEFORE_ACQUIRE,
             collapsible_in_enabled: DEFAULT_COLLAPSIBLE_IN,
             readonly: false,
+            retry_max_attempts: DEFAULT_RETRY_MAX_ATTEMPTS,
+            retry_initial_backoff: DEFAULT_RETRY_INITIAL_BACKOFF,
+            retry_max_backoff: DEFAULT_RETRY_MAX_BACKOFF,
+            retry_multiplier: DEFAULT_RETRY_MULTIPLIER,
         }
     }
 }
@@ -130,6 +159,18 @@ impl DriverOptions {
 
     /// Whether to validate connections before acquiring them from the pool.
     pub const OPT_TEST_BEFORE_ACQUIRE: &'static str = "test_before_acquire";
+
+    /// Maximum retry attempts for transient failures (default: 0 = disabled).
+    pub const OPT_RETRY_MAX_ATTEMPTS: &'static str = "retry_max_attempts";
+
+    /// Initial backoff duration between retries. Accepts string (`"100ms"`, `"1s"`) or integer (seconds).
+    pub const OPT_RETRY_INITIAL_BACKOFF: &'static str = "retry_initial_backoff";
+
+    /// Maximum backoff duration between retries. Accepts string (`"5s"`, `"1 min"`) or integer (seconds).
+    pub const OPT_RETRY_MAX_BACKOFF: &'static str = "retry_max_backoff";
+
+    /// Backoff multiplier for exponential backoff (default: 2.0).
+    pub const OPT_RETRY_MULTIPLIER: &'static str = "retry_multiplier";
 }
 
 /// Represents either a simple URL string or a full associative array of driver options.
@@ -315,6 +356,59 @@ impl DriverOptionsArg {
                             Err(SqlxError::config("readonly", "must be a boolean"))
                         }
                     })?,
+                retry_max_attempts: kv.get(DriverOptions::OPT_RETRY_MAX_ATTEMPTS).map_or(
+                    Ok(DEFAULT_RETRY_MAX_ATTEMPTS),
+                    |value| {
+                        if let ParameterValue::Int(n) = value {
+                            Ok(u32::try_from(*n)?)
+                        } else {
+                            Err(SqlxError::config(
+                                "retry_max_attempts",
+                                "must be a non-negative integer",
+                            ))
+                        }
+                    },
+                )?,
+                retry_initial_backoff: match kv.get(DriverOptions::OPT_RETRY_INITIAL_BACKOFF) {
+                    None | Some(ParameterValue::Null) => DEFAULT_RETRY_INITIAL_BACKOFF,
+                    Some(ParameterValue::String(value)) => parse_duration::parse(value)
+                        .map_err(|e| SqlxError::config("retry_initial_backoff", e.to_string()))?,
+                    Some(ParameterValue::Int(value)) => {
+                        Duration::from_secs(u64::try_from(*value)?)
+                    }
+                    _ => {
+                        return Err(SqlxError::config(
+                            "retry_initial_backoff",
+                            "must be a string or a non-negative integer",
+                        ));
+                    }
+                },
+                retry_max_backoff: match kv.get(DriverOptions::OPT_RETRY_MAX_BACKOFF) {
+                    None | Some(ParameterValue::Null) => DEFAULT_RETRY_MAX_BACKOFF,
+                    Some(ParameterValue::String(value)) => parse_duration::parse(value)
+                        .map_err(|e| SqlxError::config("retry_max_backoff", e.to_string()))?,
+                    Some(ParameterValue::Int(value)) => {
+                        Duration::from_secs(u64::try_from(*value)?)
+                    }
+                    _ => {
+                        return Err(SqlxError::config(
+                            "retry_max_backoff",
+                            "must be a string or a non-negative integer",
+                        ));
+                    }
+                },
+                retry_multiplier: kv.get(DriverOptions::OPT_RETRY_MULTIPLIER).map_or(
+                    Ok(DEFAULT_RETRY_MULTIPLIER),
+                    |value| match value {
+                        ParameterValue::Float(f) => Ok(*f),
+                        #[allow(clippy::cast_precision_loss)]
+                        ParameterValue::Int(n) => Ok(*n as f64),
+                        _ => Err(SqlxError::config(
+                            "retry_multiplier",
+                            "must be a number",
+                        )),
+                    },
+                )?,
             },
         })
     }

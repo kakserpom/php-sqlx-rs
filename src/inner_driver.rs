@@ -9,10 +9,56 @@
 //! - AST-based query rendering with LRU caching
 //! - Transaction stack for nested transaction support
 //! - All query execution methods (`query_row`, `query_all`, etc.)
+//! - Automatic retry for transient failures
 //!
 //! This is separated from the outer driver (in `driver.rs`) to allow the PHP bindings
 //! to wrap the inner driver with `Arc` for shared ownership across prepared queries
 //! and query builders.
+
+use crate::error::Error as SqlxError;
+use std::time::Duration;
+
+/// Retry policy configuration for transient database failures.
+///
+/// When enabled (`max_attempts` > 0), transient errors like connection drops,
+/// pool exhaustion, and timeouts will be automatically retried with exponential
+/// backoff.
+#[derive(Debug, Clone)]
+pub struct RetryPolicy {
+    /// Maximum number of retry attempts (0 = disabled).
+    pub max_attempts: u32,
+    /// Initial backoff duration between retries.
+    pub initial_backoff: Duration,
+    /// Maximum backoff duration (caps exponential growth).
+    pub max_backoff: Duration,
+    /// Multiplier for exponential backoff (e.g., 2.0 doubles each time).
+    pub multiplier: f64,
+}
+
+impl RetryPolicy {
+    /// Returns the backoff duration for the given attempt, or None if no retry should occur.
+    ///
+    /// Returns `None` if:
+    /// - `attempt >= max_attempts`
+    /// - The error is not transient
+    #[must_use]
+    pub fn should_retry(&self, attempt: u32, error: &SqlxError) -> Option<Duration> {
+        if attempt >= self.max_attempts || !error.is_transient() {
+            return None;
+        }
+        // Use saturating conversion to avoid wrap-around for very high attempt counts
+        let exponent = i32::try_from(attempt).unwrap_or(i32::MAX);
+        let backoff = self.initial_backoff.mul_f64(self.multiplier.powi(exponent));
+        Some(backoff.min(self.max_backoff))
+    }
+
+    /// Returns true if retry is disabled.
+    #[must_use]
+    #[inline]
+    pub fn is_disabled(&self) -> bool {
+        self.max_attempts == 0
+    }
+}
 
 /// Generates the inner database driver implementation.
 ///
@@ -50,6 +96,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ast::{Ast, Settings},
             conversion::Conversion,
             error::Error as SqlxError,
+            inner_driver::RetryPolicy,
             options::DriverInnerOptions,
             param_value::{ParameterValue, utils::bind_values},
             utils::{
@@ -73,6 +120,8 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub tx_stack: RwLock<Vec<Transaction<'static, $database>>>,
             /// AST rendering settings (placeholder style, collapsible IN, etc.).
             pub settings: Settings,
+            /// Retry policy for transient failures.
+            pub retry_policy: RetryPolicy,
         }
 
         impl $struct {
@@ -96,6 +145,12 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .map_err(|e| SqlxError::connection_with_source("Failed to connect", e))?;
                 let mut settings = SETTINGS.clone();
                 settings.collapsible_in_enabled = options.collapsible_in_enabled;
+                let retry_policy = RetryPolicy {
+                    max_attempts: options.retry_max_attempts,
+                    initial_backoff: options.retry_initial_backoff,
+                    max_backoff: options.retry_max_backoff,
+                    multiplier: options.retry_multiplier,
+                };
                 Ok(Self {
                     tx_stack: RwLock::new(Vec::new()),
                     pool,
@@ -104,6 +159,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                         options.ast_cache_shard_size,
                     ),
                     settings,
+                    retry_policy,
                     options,
                 })
             }
@@ -114,6 +170,48 @@ macro_rules! php_sqlx_impl_driver_inner {
             #[inline]
             pub fn is_readonly(&self) -> bool {
                 self.options.readonly
+            }
+
+            /// Returns true if there is an active transaction.
+            ///
+            /// This is used to disable retry logic inside transactions, as retrying
+            /// partial transaction operations could lead to data inconsistency.
+            #[inline]
+            pub fn has_active_transaction(&self) -> bool {
+                !self.tx_stack.read().expect("Poisoned tx_stack").is_empty()
+            }
+
+            /// Executes an operation with retry logic for transient failures.
+            ///
+            /// Retries are skipped if:
+            /// - Retry is disabled (`max_attempts` = 0)
+            /// - There is an active transaction (to prevent partial commits)
+            /// - The error is not transient
+            ///
+            /// Uses exponential backoff between retries.
+            fn with_retry<F, T>(&self, operation: F) -> $crate::error::Result<T>
+            where
+                F: Fn() -> $crate::error::Result<T>,
+            {
+                // Skip retry if disabled or in transaction
+                if self.retry_policy.is_disabled() || self.has_active_transaction() {
+                    return operation();
+                }
+
+                let mut attempt = 0u32;
+                loop {
+                    match operation() {
+                        Ok(result) => return Ok(result),
+                        Err(e) => {
+                            if let Some(backoff) = self.retry_policy.should_retry(attempt, &e) {
+                                attempt += 1;
+                                std::thread::sleep(backoff);
+                                continue;
+                            }
+                            return Err(e);
+                        }
+                    }
+                }
             }
 
             /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
@@ -137,19 +235,21 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> $crate::error::Result<u64> {
                 let (query, values) = self.render_query(query, parameters)?;
 
-                Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                    let val = RUNTIME.block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *tx),
-                    );
-                    self.place_ongoing_transaction(tx);
-                    val
-                } else {
-                    RUNTIME.block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.execute(&self.pool),
-                    )
-                }
-                .map_err(|err| SqlxError::query_with_source(&query, err))?
-                .rows_affected())
+                self.with_retry(|| {
+                    Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else {
+                        RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.execute(&self.pool),
+                        )
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))?
+                    .rows_affected())
+                })
             }
 
             /// Renders the final SQL query and parameters using the AST cache.
@@ -232,11 +332,13 @@ macro_rules! php_sqlx_impl_driver_inner {
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
-                let row = RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
-                    )
-                    .map_err(|err| SqlxError::query_with_source(&query, err))?;
+                let row = self.with_retry(|| {
+                    RUNTIME
+                        .block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
+                        )
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                })?;
                 let column_idx: usize = match column {
                     Some(ColumnArgument::Index(i)) => i,
                     Some(ColumnArgument::Name(column_name)) => {
@@ -282,11 +384,15 @@ macro_rules! php_sqlx_impl_driver_inner {
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
-                let mut it = RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
-                    )
-                    .map_err(|err| SqlxError::query_with_source(&query, err))?
+                let mut it = self
+                    .with_retry(|| {
+                        RUNTIME
+                            .block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_all(&self.pool),
+                            )
+                            .map_err(|err| SqlxError::query_with_source(&query, err))
+                    })?
                     .into_iter()
                     .peekable();
                 let Some(row) = it.peek() else {
@@ -347,14 +453,18 @@ macro_rules! php_sqlx_impl_driver_inner {
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
-                Ok(RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
-                    )
-                    .map(Some)
-                    .or_else(|err: sqlx_oldapi::Error| match err {
-                        sqlx_oldapi::Error::RowNotFound => Ok(None),
-                        _ => Err(SqlxError::query_with_source(&query, err)),
+                Ok(self
+                    .with_retry(|| {
+                        RUNTIME
+                            .block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&self.pool),
+                            )
+                            .map(Some)
+                            .or_else(|err: sqlx_oldapi::Error| match err {
+                                sqlx_oldapi::Error::RowNotFound => Ok(None),
+                                _ => Err(SqlxError::query_with_source(&query, err)),
+                            })
                     })?
                     .map(|row| {
                         let column_idx: usize = match column {
@@ -405,11 +515,15 @@ macro_rules! php_sqlx_impl_driver_inner {
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
-                RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
-                    )?
-                    .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
+                self.with_retry(|| {
+                    RUNTIME
+                        .block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_one(&self.pool),
+                        )
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                })?
+                .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
             }
 
             /// Executes an SQL query and returns a single row if available, or `null` if no rows are returned.
@@ -435,14 +549,18 @@ macro_rules! php_sqlx_impl_driver_inner {
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
-                Ok(RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&self.pool),
-                    )
-                    .map(Some)
-                    .or_else(|err: sqlx_oldapi::Error| match err {
-                        sqlx_oldapi::Error::RowNotFound => Ok(None),
-                        _ => Err(SqlxError::query_with_source(&query, err)),
+                Ok(self
+                    .with_retry(|| {
+                        RUNTIME
+                            .block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&self.pool),
+                            )
+                            .map(Some)
+                            .or_else(|err: sqlx_oldapi::Error| match err {
+                                sqlx_oldapi::Error::RowNotFound => Ok(None),
+                                _ => Err(SqlxError::query_with_source(&query, err)),
+                            })
                     })?
                     .map(|x| {
                         x.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
@@ -474,14 +592,17 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> $crate::error::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-                RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
-                    )
-                    .map_err(|err| SqlxError::query_with_source(&query, err))?
-                    .into_iter()
-                    .map(|row| row.into_zval(assoc))
-                    .try_collect()
+                self.with_retry(|| {
+                    RUNTIME
+                        .block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_all(&self.pool),
+                        )
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                })?
+                .into_iter()
+                .map(|row| row.into_zval(assoc))
+                .try_collect()
             }
 
             /// Returns the rendered query and its parameters.
@@ -564,23 +685,26 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-                RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
-                    )?
-                    .into_iter()
-                    .map(|row| {
-                        Ok((
-                            //row.column_value_into_zval(row.column(0), false)?,
-                            row.column_value_into_array_key(row.column(0))?,
-                            row.into_zval(assoc)?,
-                        ))
-                    })
-                    .try_fold(zend_array::new(), fold_into_zend_hashmap)?
-                    .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion {
-                        message: format!("{err:?}"),
-                    })
+                self.with_retry(|| {
+                    RUNTIME
+                        .block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_all(&self.pool),
+                        )
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                })?
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        row.column_value_into_array_key(row.column(0))?,
+                        row.into_zval(assoc)?,
+                    ))
+                })
+                .try_fold(zend_array::new(), fold_into_zend_hashmap)?
+                .into_zval(false)
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })
             }
 
             /// Executes an SQL query and returns a dictionary grouping rows by the first column.
@@ -629,18 +753,21 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
 
-                if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                    let val = RUNTIME.block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
-                    );
-                    self.place_ongoing_transaction(tx);
-                    val
-                } else {
-                    RUNTIME.block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
-                    )
-                }
-                .map_err(|err| SqlxError::query_with_source(&query, err))?
+                self.with_retry(|| {
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else {
+                        RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_all(&self.pool),
+                        )
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
+                })?
                 .into_iter()
                 .map(|row| {
                     Ok((
@@ -698,23 +825,26 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-                RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
-                    )
-                    .map_err(|err| SqlxError::query_with_source(&query, err))?
-                    .into_iter()
-                    .map(|row| {
-                        Ok((
-                            row.column_value_into_array_key(row.column(0))?,
-                            row.column_value_into_zval(row.column(1), assoc)?,
-                        ))
-                    })
-                    .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
-                    .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion {
-                        message: format!("{err:?}"),
-                    })
+                self.with_retry(|| {
+                    RUNTIME
+                        .block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_all(&self.pool),
+                        )
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                })?
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        row.column_value_into_array_key(row.column(0))?,
+                        row.column_value_into_zval(row.column(1), assoc)?,
+                    ))
+                })
+                .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
+                .into_zval(false)
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })
             }
 
             /// Executes an SQL query and returns a dictionary mapping the first column to the second column.
@@ -752,21 +882,24 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-                RUNTIME
-                    .block_on(
-                        bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&self.pool),
-                    )
-                    .map_err(|err| SqlxError::query_with_source(&query, err))?
-                    .into_iter()
-                    .map(|row| {
-                        Ok((
-                            row.column_value_into_array_key(row.column(0))?,
-                            row.column_value_into_zval(row.column(1), assoc)?,
-                        ))
-                    })
-                    .try_fold(zend_array::new(), fold_into_zend_hashmap)?
-                    .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion {
+                self.with_retry(|| {
+                    RUNTIME
+                        .block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_all(&self.pool),
+                        )
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                })?
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        row.column_value_into_array_key(row.column(0))?,
+                        row.column_value_into_zval(row.column(1), assoc)?,
+                    ))
+                })
+                .try_fold(zend_array::new(), fold_into_zend_hashmap)?
+                .into_zval(false)
+                .map_err(|err| SqlxError::Conversion {
                         message: format!("{err:?}"),
                     })
             }
@@ -925,4 +1058,137 @@ macro_rules! php_sqlx_impl_driver_inner {
              ($struct, $database)"
         );
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::Error;
+
+    fn test_policy() -> RetryPolicy {
+        RetryPolicy {
+            max_attempts: 3,
+            initial_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(5),
+            multiplier: 2.0,
+        }
+    }
+
+    #[test]
+    fn test_retry_policy_is_disabled() {
+        let disabled = RetryPolicy {
+            max_attempts: 0,
+            initial_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(5),
+            multiplier: 2.0,
+        };
+        assert!(disabled.is_disabled());
+
+        let enabled = test_policy();
+        assert!(!enabled.is_disabled());
+    }
+
+    #[test]
+    fn test_retry_policy_should_retry_transient_error() {
+        let policy = test_policy();
+        let transient_error = Error::PoolExhausted { timeout_ms: 1000 };
+
+        // First attempt (0) should retry
+        let backoff = policy.should_retry(0, &transient_error);
+        assert!(backoff.is_some());
+        assert_eq!(backoff.unwrap(), Duration::from_millis(100));
+
+        // Second attempt (1) should retry with doubled backoff
+        let backoff = policy.should_retry(1, &transient_error);
+        assert!(backoff.is_some());
+        assert_eq!(backoff.unwrap(), Duration::from_millis(200));
+
+        // Third attempt (2) should retry with 4x backoff
+        let backoff = policy.should_retry(2, &transient_error);
+        assert!(backoff.is_some());
+        assert_eq!(backoff.unwrap(), Duration::from_millis(400));
+
+        // Fourth attempt (3) should NOT retry (exceeded max_attempts)
+        let backoff = policy.should_retry(3, &transient_error);
+        assert!(backoff.is_none());
+    }
+
+    #[test]
+    fn test_retry_policy_should_not_retry_non_transient_error() {
+        let policy = test_policy();
+        let non_transient = Error::query("syntax error");
+
+        // Should not retry non-transient errors even on first attempt
+        let backoff = policy.should_retry(0, &non_transient);
+        assert!(backoff.is_none());
+    }
+
+    #[test]
+    fn test_retry_policy_backoff_capped_at_max() {
+        let policy = RetryPolicy {
+            max_attempts: 10,
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(5),
+            multiplier: 10.0,
+        };
+        let error = Error::connection("connection reset");
+
+        // Attempt 0: 1s
+        assert_eq!(
+            policy.should_retry(0, &error),
+            Some(Duration::from_secs(1))
+        );
+
+        // Attempt 1: 10s -> capped to 5s
+        assert_eq!(
+            policy.should_retry(1, &error),
+            Some(Duration::from_secs(5))
+        );
+
+        // Attempt 2: 100s -> capped to 5s
+        assert_eq!(
+            policy.should_retry(2, &error),
+            Some(Duration::from_secs(5))
+        );
+    }
+
+    #[test]
+    fn test_retry_policy_disabled_never_retries() {
+        let disabled = RetryPolicy {
+            max_attempts: 0,
+            initial_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(5),
+            multiplier: 2.0,
+        };
+        let transient_error = Error::PoolExhausted { timeout_ms: 1000 };
+
+        // Should not retry even transient errors when disabled
+        assert!(disabled.should_retry(0, &transient_error).is_none());
+    }
+
+    #[test]
+    fn test_retry_policy_all_transient_error_types() {
+        let policy = test_policy();
+
+        // PoolExhausted
+        assert!(policy
+            .should_retry(0, &Error::PoolExhausted { timeout_ms: 1000 })
+            .is_some());
+
+        // Timeout
+        assert!(policy
+            .should_retry(
+                0,
+                &Error::Timeout {
+                    operation: "acquire".to_string(),
+                    timeout_ms: 5000
+                }
+            )
+            .is_some());
+
+        // Connection
+        assert!(policy
+            .should_retry(0, &Error::connection("connection reset"))
+            .is_some());
+    }
 }

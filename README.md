@@ -54,6 +54,7 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - Powerful Query Builder
 - Native JSON support (with lazy decoding and [SIMD](https://docs.rs/simd-json/latest/simd_json/) 🚀)
 - Optional persistent connections (with connection pooling)
+- **Automatic retry** with exponential backoff for transient failures
 - Custom `SqlxException` class with error codes for precise error handling
 
 ---
@@ -395,6 +396,41 @@ Additional supported methods to be called from inside a closure:
 
 ---
 
+## Retry Policy
+
+The driver supports automatic retry with exponential backoff for transient failures like connection drops, pool exhaustion, and timeouts.
+
+```php
+$driver = Sqlx\DriverFactory::make([
+    Sqlx\DriverOptions::OPT_URL => 'postgres://user:pass@localhost/db',
+    Sqlx\DriverOptions::OPT_RETRY_MAX_ATTEMPTS => 3,
+    Sqlx\DriverOptions::OPT_RETRY_INITIAL_BACKOFF => '100ms',
+    Sqlx\DriverOptions::OPT_RETRY_MAX_BACKOFF => '5s',
+    Sqlx\DriverOptions::OPT_RETRY_MULTIPLIER => 2.0,
+]);
+```
+
+### Retry Behavior
+
+- **Disabled by default** – Set `OPT_RETRY_MAX_ATTEMPTS` > 0 to enable
+- **Exponential backoff** – Each retry waits longer: 100ms → 200ms → 400ms → ...
+- **Capped backoff** – Backoff never exceeds `OPT_RETRY_MAX_BACKOFF`
+- **Transient errors only** – Only retries pool exhaustion, timeouts, and connection errors
+- **No retry in transactions** – Retries are skipped inside `begin()` to prevent partial commits
+
+### Transient vs Non-Transient Errors
+
+| Error Type | Retried? | Examples |
+|------------|----------|----------|
+| Pool exhausted | ✅ Yes | All connections in use |
+| Timeout | ✅ Yes | Connection or query timeout |
+| Connection error | ✅ Yes | Connection dropped, network error |
+| Query error | ❌ No | Syntax error, constraint violation |
+| Transaction error | ❌ No | Deadlock, serialization failure |
+| Parse error | ❌ No | Invalid SQL syntax |
+
+---
+
 ## Error Handling
 
 All errors thrown by the extension are instances of `Sqlx\SqlxException`, which extends PHP's base `Exception` class.
@@ -571,6 +607,15 @@ $driver = Sqlx\DriverFactory::make([
     Sqlx\DriverOptions::OPT_IDLE_TIMEOUT => 120,
     Sqlx\DriverOptions::OPT_ACQUIRE_TIMEOUT => 10,
 ]);
+
+// With automatic retry for transient failures
+$driver = Sqlx\DriverFactory::make([
+    Sqlx\DriverOptions::OPT_URL => 'postgres://user:pass@localhost/db',
+    Sqlx\DriverOptions::OPT_RETRY_MAX_ATTEMPTS => 3,        // retry up to 3 times
+    Sqlx\DriverOptions::OPT_RETRY_INITIAL_BACKOFF => '100ms',
+    Sqlx\DriverOptions::OPT_RETRY_MAX_BACKOFF => '5s',
+    Sqlx\DriverOptions::OPT_RETRY_MULTIPLIER => 2.0,        // exponential backoff
+]);
 ```
 
 <details>
@@ -590,6 +635,10 @@ $driver = Sqlx\DriverFactory::make([
 | `OPT_COLLAPSIBLE_IN`        | `bool`                  | Enables automatic collapsing of `IN ()` / `NOT IN ()` into `FALSE` / `TRUE`         | `true`       |
 | `OPT_AST_CACHE_SHARD_COUNT` | `int > 0`               | Number of internal SQL AST cache shards (advanced tuning)                           | `8`          |
 | `OPT_AST_CACHE_SHARD_SIZE`  | `int > 0`               | Max number of entries per AST cache shard                                           | `256`        |
+| `OPT_RETRY_MAX_ATTEMPTS`    | `int ≥ 0`               | Max retry attempts for transient failures (0 = disabled)                            | `0`          |
+| `OPT_RETRY_INITIAL_BACKOFF` | `string \| int`         | Initial backoff between retries. Accepts `"100ms"`, `"1s"`, or seconds              | `"100ms"`    |
+| `OPT_RETRY_MAX_BACKOFF`     | `string \| int`         | Maximum backoff duration (caps exponential growth)                                  | `"5s"`       |
+| `OPT_RETRY_MULTIPLIER`      | `float`                 | Backoff multiplier for exponential backoff (e.g., 2.0 doubles each retry)           | `2.0`        |
 
 </details>
 

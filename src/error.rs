@@ -192,6 +192,20 @@ impl Error {
         }
     }
 
+    /// Returns true if this error is transient and the operation may succeed on retry.
+    ///
+    /// Transient errors include:
+    /// - `PoolExhausted`: No connections available, may free up
+    /// - `Timeout`: Operation timed out, network may recover
+    /// - `Connection`: Connection dropped, pool can create new one
+    #[must_use]
+    pub const fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::PoolExhausted { .. } | Self::Timeout { .. } | Self::Connection { .. }
+        )
+    }
+
     // Convenience constructors
 
     /// Creates a connection error.
@@ -483,5 +497,31 @@ mod tests {
         let err = Error::query_with_sql("column not found", "SELECT foo FROM bar");
         assert!(err.to_string().contains("column not found"));
         assert!(err.to_string().contains("SELECT foo FROM bar"));
+    }
+
+    #[test]
+    fn test_is_transient() {
+        // Transient errors
+        assert!(Error::PoolExhausted { timeout_ms: 1000 }.is_transient());
+        assert!(
+            Error::Timeout {
+                operation: "acquire".to_string(),
+                timeout_ms: 5000
+            }
+            .is_transient()
+        );
+        assert!(Error::connection("connection reset").is_transient());
+
+        // Non-transient errors
+        assert!(!Error::query("syntax error").is_transient());
+        assert!(!Error::NoActiveTransaction.is_transient());
+        assert!(!Error::parse("invalid SQL").is_transient());
+        assert!(!Error::ReadonlyViolation.is_transient());
+        assert!(
+            !Error::MissingPlaceholder {
+                name: "foo".to_string()
+            }
+            .is_transient()
+        );
     }
 }

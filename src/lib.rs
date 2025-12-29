@@ -7,6 +7,7 @@
 //! - **AST-based SQL augmentation**: Conditional blocks, safe IN clauses, pagination
 //! - **Multiple database support**: `PostgreSQL`, `MySQL`, MS SQL
 //! - **Connection pooling**: Efficient connection management with configurable limits
+//! - **Automatic retry**: Configurable retry with exponential backoff for transient failures
 //! - **Prepared queries**: Cached AST parsing for repeated queries
 //! - **Query builder**: Fluent API for constructing SQL queries safely
 //! - **Transaction support**: Both callback-based and imperative styles
@@ -21,6 +22,7 @@
 //! - [`options`]: Driver configuration options
 //! - [`driver_factory`]: Factory for creating database drivers
 //! - [`error`]: Typed error handling with PHP exception conversion
+//! - [`inner_driver`]: Retry policy and core driver implementation
 //! - Clause modules: [`select_clause`], [`by_clause`], [`paginate_clause`]
 
 #![warn(clippy::pedantic)]
@@ -40,7 +42,7 @@ pub mod by_clause;
 pub mod conversion;
 mod driver;
 pub mod error;
-mod inner_driver;
+pub mod inner_driver;
 #[cfg(feature = "lazy-row")]
 mod lazy_row;
 pub mod options;
@@ -59,8 +61,10 @@ pub mod utils;
 
 use dbms::{mssql, mysql, postgres};
 use ext_php_rs::prelude::*;
+use std::time::Duration;
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
+pub use inner_driver::RetryPolicy;
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
@@ -95,6 +99,18 @@ const DEFAULT_COLLAPSIBLE_IN: bool = true;
 /// Default setting for testing connections before acquiring from pool.
 /// When true, validates connection health before use (adds latency).
 const DEFAULT_TEST_BEFORE_ACQUIRE: bool = false;
+
+/// Default maximum retry attempts for transient failures (0 = disabled).
+const DEFAULT_RETRY_MAX_ATTEMPTS: u32 = 0;
+
+/// Default initial backoff duration between retry attempts.
+const DEFAULT_RETRY_INITIAL_BACKOFF: Duration = Duration::from_millis(100);
+
+/// Default maximum backoff duration between retry attempts.
+const DEFAULT_RETRY_MAX_BACKOFF: Duration = Duration::from_secs(5);
+
+/// Default backoff multiplier for exponential backoff between retries.
+const DEFAULT_RETRY_MULTIPLIER: f64 = 2.0;
 
 #[cfg(feature = "mysql")]
 pub use dbms::mysql::{MySqlDriver, MySqlPreparedQuery};
