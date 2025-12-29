@@ -9,6 +9,35 @@ database access with additional SQL syntax. It comes with a powerful [query buil
 The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
 without any compromise on performance.
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         PHP Application                         │
+├─────────────────────────────────────────────────────────────────┤
+│  DriverFactory  │  QueryBuilder  │  PreparedQuery  │  Clauses   │
+├─────────────────────────────────────────────────────────────────┤
+│                     Driver (PgDriver, MySqlDriver, etc.)        │
+│  ┌────────────┐  ┌─────────────┐  ┌───────────────────────────┐ │
+│  │ Connection │  │ Transaction │  │       Retry Policy        │ │
+│  │    Pool    │  │    Stack    │  │  (exponential backoff)    │ │
+│  └────────────┘  └─────────────┘  └───────────────────────────┘ │
+├─────────────────────────────────────────────────────────────────┤
+│                         AST Engine                              │
+│  ┌────────────┐  ┌─────────────┐  ┌───────────────────────────┐ │
+│  │   Parser   │  │   Renderer  │  │   LRU Cache (per shard)   │ │
+│  │            │  │  (per DBMS) │  │                           │ │
+│  └────────────┘  └─────────────┘  └───────────────────────────┘ │
+├─────────────────────────────────────────────────────────────────┤
+│                      SQLx (Rust)                                │
+│         Async runtime (Tokio) + Native protocol drivers         │
+├─────────────────────────────────────────────────────────────────┤
+│              PostgreSQL  │  MySQL  │  SQL Server                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Data flow:** PHP calls → Driver → AST parse/render (cached) → SQLx async execution → Database
+
 ## Getting Started
 
 ### Installation
