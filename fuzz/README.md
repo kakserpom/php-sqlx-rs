@@ -18,12 +18,12 @@ rustup install nightly
 
 ## Available Fuzz Targets
 
-| Target | Description |
-|--------|-------------|
-| `ast_postgres` | Fuzzes AST parsing with PostgreSQL settings |
-| `ast_mysql` | Fuzzes AST parsing with MySQL settings |
-| `ast_mssql` | Fuzzes AST parsing with MSSQL settings |
-| `ast_render` | Fuzzes both parsing AND rendering with random parameters |
+| Target         | Description                                              |
+|----------------|----------------------------------------------------------|
+| `ast_postgres` | Fuzzes AST parsing with PostgreSQL settings              |
+| `ast_mysql`    | Fuzzes AST parsing with MySQL settings                   |
+| `ast_mssql`    | Fuzzes AST parsing with MSSQL settings                   |
+| `ast_render`   | Fuzzes both parsing AND rendering with random parameters |
 
 ## Running the Fuzzer
 
