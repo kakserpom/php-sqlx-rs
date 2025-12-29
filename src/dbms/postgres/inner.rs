@@ -1,5 +1,20 @@
 #![allow(clippy::needless_pass_by_value)]
 use crate::php_sqlx_impl_driver_inner;
+
+/// SQL query to describe table columns using `information_schema`.
+pub const DESCRIBE_TABLE_QUERY: &str = r"
+SELECT
+    column_name AS name,
+    data_type || COALESCE('(' || character_maximum_length::text || ')', '') AS type,
+    is_nullable = 'YES' AS nullable,
+    column_default AS default,
+    ordinal_position AS ordinal
+FROM information_schema.columns
+WHERE table_name = $table
+  AND table_schema = COALESCE($schema, current_schema())
+ORDER BY ordinal_position
+";
+
 pub const SETTINGS: Settings = Settings {
     collapsible_in_enabled: true,
     escaping_double_single_quotes: true,

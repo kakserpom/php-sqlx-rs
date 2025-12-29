@@ -85,6 +85,7 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - Optional persistent connections (with connection pooling)
 - **Automatic retry** with exponential backoff for transient failures
 - Custom `SqlxException` class with error codes for precise error handling
+- **Schema introspection** via `describeTable()` for table column metadata
 
 ---
 
@@ -725,6 +726,30 @@ $driver = Sqlx\DriverFactory::make([
 - `dry(string $query, array $parameters = null): array` – render final SQL + bound parameters without executing. Handy
   for
   debugging.
+
+#### Schema Introspection
+
+- `describeTable(string $table, ?string $schema = null): array` – returns column metadata for the specified table.
+
+```php
+$columns = $driver->describeTable('users');
+// Returns:
+// [
+//   ['name' => 'id', 'type' => 'integer', 'nullable' => false, 'default' => null, 'ordinal' => 1],
+//   ['name' => 'email', 'type' => 'varchar(255)', 'nullable' => false, 'default' => null, 'ordinal' => 2],
+//   ['name' => 'created_at', 'type' => 'timestamp', 'nullable' => true, 'default' => 'now()', 'ordinal' => 3],
+// ]
+
+// With explicit schema
+$columns = $driver->describeTable('users', 'public');
+```
+
+Each column entry contains:
+- `name` – Column name (string)
+- `type` – Database-specific type (string), e.g., `varchar(255)`, `integer`, `timestamp`
+- `nullable` – Whether `NULL` is allowed (bool)
+- `default` – Default value expression (string|null)
+- `ordinal` – 1-based column position (int)
 
 ---
 

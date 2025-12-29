@@ -921,6 +921,48 @@ macro_rules! php_sqlx_impl_driver {
                     .query_grouped_column_dictionary(query, parameters, None)
             }
 
+            /// Describes table columns with their types and metadata.
+            ///
+            /// Returns information about each column in the specified table, including
+            /// name, type, nullability, default value, and ordinal position.
+            ///
+            /// # Parameters
+            /// - `table`: Name of the table to describe.
+            /// - `schema`: Optional schema name. If `None`, uses the database default schema.
+            ///
+            /// # Returns
+            /// An array of associative arrays, each containing:
+            /// - `name`: Column name (string)
+            /// - `type`: Database-specific column type (string, e.g., "varchar(255)", "int")
+            /// - `nullable`: Whether the column allows NULL values (bool)
+            /// - `default`: Default value for the column (string|null)
+            /// - `ordinal`: Column position, 1-based (int)
+            ///
+            /// # Example
+            /// ```php
+            /// $columns = $driver->describeTable('users');
+            /// // [
+            /// //   ['name' => 'id', 'type' => 'integer', 'nullable' => false, 'default' => null, 'ordinal' => 1],
+            /// //   ['name' => 'email', 'type' => 'varchar(255)', 'nullable' => false, 'default' => null, 'ordinal' => 2],
+            /// // ]
+            ///
+            /// // With schema
+            /// $columns = $driver->describeTable('users', 'public');
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws an exception if:
+            /// - the table or schema name is invalid (contains invalid characters);
+            /// - the query fails to execute;
+            /// - the table does not exist.
+            pub fn describe_table(
+                &self,
+                table: &str,
+                schema: Option<&str>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.describe_table(table, schema)
+            }
+
             /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
             ///
             /// # Arguments

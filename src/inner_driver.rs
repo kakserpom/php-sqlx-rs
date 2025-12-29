@@ -904,6 +904,57 @@ macro_rules! php_sqlx_impl_driver_inner {
                     })
             }
 
+            /// Describes table columns with their types and metadata.
+            ///
+            /// Returns information about each column in the specified table, including
+            /// name, type, nullability, default value, and ordinal position.
+            ///
+            /// # Parameters
+            /// - `table_name`: Name of the table to describe.
+            /// - `schema`: Optional schema name. If `None`, uses the database default schema.
+            ///
+            /// # Returns
+            /// An array of associative arrays, each containing:
+            /// - `name`: Column name
+            /// - `type`: Database-specific column type (e.g., "varchar(255)", "int")
+            /// - `nullable`: Whether the column allows NULL values
+            /// - `default`: Default value for the column, or NULL if none
+            /// - `ordinal`: Column position (1-based)
+            ///
+            /// # Errors
+            /// Returns an error if:
+            /// - the table or schema name is invalid (contains invalid characters);
+            /// - the query fails to execute;
+            /// - the table does not exist.
+            pub fn describe_table(
+                &self,
+                table_name: &str,
+                schema: Option<&str>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                // Validate identifiers to prevent SQL injection
+                if !is_valid_ident(table_name) {
+                    return Err(SqlxError::InvalidIdentifier {
+                        value: table_name.to_string(),
+                    });
+                }
+                if let Some(s) = schema {
+                    if !is_valid_ident(s) {
+                        return Err(SqlxError::InvalidIdentifier {
+                            value: s.to_string(),
+                        });
+                    }
+                }
+
+                let mut params = BTreeMap::new();
+                params.insert("table".to_string(), ParameterValue::String(table_name.to_string()));
+                params.insert(
+                    "schema".to_string(),
+                    schema.map_or(ParameterValue::Null, |s| ParameterValue::String(s.to_string())),
+                );
+
+                self.query_all(DESCRIBE_TABLE_QUERY, Some(params), Some(true))
+            }
+
             /// Begins a new SQL transaction and places it into the transaction stack.
             ///
             /// This method must be called before executing transactional operations
