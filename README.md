@@ -236,6 +236,19 @@ $driver->queryAll($sql, ['status' => 1]);
 
 This is useful when you want to explicitly query for `NULL` values vs. omitting the condition entirely.
 
+#### Quick Reference Cheat Sheet
+
+| Type | Scalar | Nullable | Array | Nullable Array |
+|------|--------|----------|-------|----------------|
+| **Any** | `?` | `?n` | — | — |
+| **Integer** | `?i` | `?ni` | `?ia` | `?nia` |
+| **Unsigned Int** | `?u` | `?nu` | `?ua` | `?nua` |
+| **Decimal** | `?d` | `?nd` | `?da` | `?nda` |
+| **Unsigned Dec** | `?ud` | `?nud` | `?uda` | `?nuda` |
+| **String** | `?s` | `?ns` | `?sa` | `?nsa` |
+
+**Named syntax**: Add `!` before suffix: `$id!i`, `:name!s`, `$prices!uda`
+
 ---
 
 ### Painless `IN (?)` / `NOT IN (?)` clauses expansion and collapse
