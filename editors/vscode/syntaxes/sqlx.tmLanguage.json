@@ -1,0 +1,231 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQLx",
+  "scopeName": "source.sqlx",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#conditional-blocks" },
+    { "include": "#strings" },
+    { "include": "#placeholders" },
+    { "include": "#keywords" },
+    { "include": "#operators" },
+    { "include": "#numbers" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-dash.sqlx",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.line.hash.sqlx",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.block.sqlx",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "captures": {
+            "0": { "name": "punctuation.definition.comment.sqlx" }
+          }
+        }
+      ]
+    },
+    "conditional-blocks": {
+      "patterns": [
+        {
+          "name": "meta.conditional-block.sqlx",
+          "begin": "(\\{\\{)",
+          "end": "(\\}\\})",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.conditional.begin.sqlx keyword.control.conditional.sqlx" }
+          },
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.conditional.end.sqlx keyword.control.conditional.sqlx" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#strings" },
+            { "include": "#placeholders" },
+            { "include": "#keywords" },
+            { "include": "#operators" },
+            { "include": "#numbers" },
+            { "include": "#functions" }
+          ]
+        }
+      ]
+    },
+    "placeholders": {
+      "patterns": [
+        {
+          "comment": "Named placeholder with type suffix: $name!i, $name!ni, $name!ia, etc.",
+          "name": "variable.parameter.placeholder.typed.sqlx",
+          "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*!(n)?(i|u|d|ud|s)(a)?\\b",
+          "captures": {
+            "0": { "name": "variable.parameter.placeholder.typed.sqlx" }
+          }
+        },
+        {
+          "comment": "Named placeholder with type suffix: :name!i, :name!ni, :name!ia, etc.",
+          "name": "variable.parameter.placeholder.typed.sqlx",
+          "match": ":[a-zA-Z_][a-zA-Z0-9_]*!(n)?(i|u|d|ud|s)(a)?\\b",
+          "captures": {
+            "0": { "name": "variable.parameter.placeholder.typed.sqlx" }
+          }
+        },
+        {
+          "comment": "Named placeholder with nullable only: $name!n, :name!n",
+          "name": "variable.parameter.placeholder.typed.sqlx",
+          "match": "(\\$|:)[a-zA-Z_][a-zA-Z0-9_]*!n\\b"
+        },
+        {
+          "comment": "Positional typed placeholder: ?i, ?ni, ?ia, ?nia, etc.",
+          "name": "variable.parameter.placeholder.typed.sqlx",
+          "match": "\\?(n)?(i|u|d|ud|s)(a)?\\b"
+        },
+        {
+          "comment": "Positional nullable placeholder: ?n",
+          "name": "variable.parameter.placeholder.typed.sqlx",
+          "match": "\\?n\\b"
+        },
+        {
+          "comment": "Simple positional placeholder: ?",
+          "name": "variable.parameter.placeholder.sqlx",
+          "match": "\\?(?![a-zA-Z])"
+        },
+        {
+          "comment": "Named placeholder: $name, :name",
+          "name": "variable.parameter.placeholder.sqlx",
+          "match": "(\\$|:)[a-zA-Z_][a-zA-Z0-9_]*\\b(?!!)"
+        },
+        {
+          "comment": "Positional numbered placeholder: $1, :1",
+          "name": "variable.parameter.placeholder.sqlx",
+          "match": "(\\$|:)[0-9]+\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.sqlx",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.sqlx",
+              "match": "''"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.sqlx",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.sqlx",
+              "match": "\\\\\""
+            }
+          ]
+        },
+        {
+          "comment": "PostgreSQL dollar-quoted string",
+          "name": "string.quoted.dollar.sqlx",
+          "begin": "(\\$[a-zA-Z_]*\\$)",
+          "end": "\\1"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.other.DML.sqlx",
+          "match": "(?i)\\b(SELECT|INSERT|UPDATE|DELETE|MERGE|UPSERT|TRUNCATE)\\b"
+        },
+        {
+          "name": "keyword.other.DDL.sqlx",
+          "match": "(?i)\\b(CREATE|ALTER|DROP|RENAME|GRANT|REVOKE)\\b"
+        },
+        {
+          "name": "keyword.other.clause.sqlx",
+          "match": "(?i)\\b(FROM|WHERE|SET|VALUES|INTO|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|ON|USING|GROUP|BY|HAVING|ORDER|ASC|DESC|NULLS|FIRST|LAST|LIMIT|OFFSET|FETCH|NEXT|ROWS|ONLY|UNION|INTERSECT|EXCEPT|ALL|DISTINCT|AS|WITH|RECURSIVE|RETURNING|CONFLICT|DO|NOTHING|EXCLUDED)\\b"
+        },
+        {
+          "name": "keyword.other.logical.sqlx",
+          "match": "(?i)\\b(AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|ILIKE|SIMILAR|IS|ANY|SOME|ALL)\\b"
+        },
+        {
+          "name": "constant.language.null.sqlx",
+          "match": "(?i)\\b(NULL)\\b"
+        },
+        {
+          "name": "constant.language.boolean.sqlx",
+          "match": "(?i)\\b(TRUE|FALSE)\\b"
+        },
+        {
+          "name": "keyword.other.transaction.sqlx",
+          "match": "(?i)\\b(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|TRANSACTION|START|END)\\b"
+        },
+        {
+          "name": "keyword.other.table.sqlx",
+          "match": "(?i)\\b(TABLE|INDEX|VIEW|SCHEMA|DATABASE|SEQUENCE|TRIGGER|FUNCTION|PROCEDURE|TYPE|CONSTRAINT|PRIMARY|FOREIGN|KEY|UNIQUE|CHECK|DEFAULT|REFERENCES|CASCADE|RESTRICT|NO|ACTION)\\b"
+        },
+        {
+          "name": "keyword.other.case.sqlx",
+          "match": "(?i)\\b(CASE|WHEN|THEN|ELSE|END)\\b"
+        },
+        {
+          "name": "storage.type.sqlx",
+          "match": "(?i)\\b(INT|INTEGER|BIGINT|SMALLINT|TINYINT|FLOAT|REAL|DOUBLE|PRECISION|DECIMAL|NUMERIC|VARCHAR|CHAR|CHARACTER|TEXT|NVARCHAR|NCHAR|NTEXT|BOOLEAN|BOOL|DATE|TIME|TIMESTAMP|TIMESTAMPTZ|INTERVAL|UUID|JSON|JSONB|BYTEA|BLOB|BINARY|VARBINARY|ARRAY|SERIAL|BIGSERIAL|SMALLSERIAL)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.sqlx",
+          "match": "(=|<>|!=|<|>|<=|>=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.sqlx",
+          "match": "(\\+|-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.concatenation.sqlx",
+          "match": "\\|\\|"
+        },
+        {
+          "name": "keyword.operator.json.sqlx",
+          "match": "(->|->>|#>|#>>|@>|<@|\\?\\||\\?&)"
+        },
+        {
+          "name": "keyword.operator.cast.sqlx",
+          "match": "::"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.sqlx",
+          "match": "\\b[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.aggregate.sqlx",
+          "match": "(?i)\\b(COUNT|SUM|AVG|MIN|MAX|ARRAY_AGG|STRING_AGG|JSON_AGG|JSONB_AGG|BOOL_AND|BOOL_OR)\\s*(?=\\()"
+        },
+        {
+          "name": "support.function.sqlx",
+          "match": "(?i)\\b(COALESCE|NULLIF|GREATEST|LEAST|CASE|CAST|CONVERT|NOW|CURRENT_DATE|CURRENT_TIME|CURRENT_TIMESTAMP|EXTRACT|DATE_PART|DATE_TRUNC|UPPER|LOWER|TRIM|LTRIM|RTRIM|LENGTH|SUBSTRING|CONCAT|REPLACE|SPLIT_PART|ROW_NUMBER|RANK|DENSE_RANK|LEAD|LAG|FIRST_VALUE|LAST_VALUE|NTH_VALUE|OVER|PARTITION)\\s*(?=\\()"
+        }
+      ]
+    }
+  }
+}

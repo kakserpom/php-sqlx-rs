@@ -88,6 +88,7 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - **Schema introspection** via `describeTable()` for table column metadata
 - **Query profiling** via `onQuery()` callback for logging and performance monitoring
 - **Connection tagging** via `setApplicationName()` and `setClientInfo()` for debugging
+- **IDE support** for VS Code and PHPStorm (syntax highlighting, live templates)
 
 ---
 
@@ -1116,6 +1117,42 @@ Available fuzz targets:
 - `ast_render` - Parser + renderer with random parameters
 
 See [fuzz/README.md](fuzz/README.md) for more details.
+
+---
+
+## IDE Support
+
+Syntax highlighting for conditional blocks (`{{ }}`), type-safe placeholders (`?i`, `?s`), and named parameters.
+
+### VS Code
+
+Install the extension from `editors/vscode`:
+
+```bash
+cd editors/vscode
+npx vsce package
+# Then install the .vsix file in VS Code
+```
+
+Or manually copy/symlink to `~/.vscode/extensions/php-sqlx`.
+
+Features:
+- Highlights `{{ }}` conditional blocks
+- Highlights typed placeholders (`?i`, `?ni`, `?ia`, `$name!s`)
+- Auto-injects into PHP strings starting with SQL keywords
+
+See [editors/vscode/README.md](editors/vscode/README.md) for details.
+
+### PHPStorm / IntelliJ
+
+Import the language injection configuration:
+
+1. **Settings** > **Editor** > **Language Injections**
+2. Click **Import** and select `editors/phpstorm/IntelliLang.xml`
+
+Also includes live templates for common patterns (`sqlxq`, `sqlxcond`, `sqlxtx`).
+
+See [editors/phpstorm/README.md](editors/phpstorm/README.md) for details.
 
 ---
 

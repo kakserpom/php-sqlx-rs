@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PHP-SQLx Language Injection Configuration for PHPStorm/IntelliJ
+
+  Import via: Settings > Editor > Language Injections > Import
+-->
+<LanguageInjectionConfiguration>
+  <!-- Inject SQL into queryAll, queryRow, queryMaybeRow, queryValue, execute methods -->
+  <injection language="SQL" injector-id="php">
+    <display-name>PHP-SQLx Driver Query Methods</display-name>
+    <single-file value="false"/>
+    <place><![CDATA[
+      phpLiteralExpression().withParent(
+        psiElement().withParent(
+          psiElement().methodCallMatcher(
+            phpMethodMatcher()
+              .withName(string().oneOf(
+                "queryAll", "queryRow", "queryMaybeRow", "queryValue",
+                "execute", "prepare", "describeTable"
+              ))
+          )
+        )
+      ).and(
+        phpLiteralExpression().argumentIndex(0)
+      )
+    ]]></place>
+  </injection>
+
+  <!-- Inject SQL into WriteQueryBuilder methods -->
+  <injection language="SQL" injector-id="php">
+    <display-name>PHP-SQLx WriteQueryBuilder</display-name>
+    <single-file value="false"/>
+    <place><![CDATA[
+      phpLiteralExpression().withParent(
+        psiElement().withParent(
+          psiElement().methodCallMatcher(
+            phpMethodMatcher()
+              .withName(string().oneOf(
+                "insert", "insertAll", "upsert", "upsertAll",
+                "update", "updateAll", "delete", "deleteAll"
+              ))
+          )
+        )
+      )
+    ]]></place>
+  </injection>
+
+  <!-- Detect SQL by SELECT/INSERT/UPDATE/DELETE keywords -->
+  <injection language="SQL" injector-id="php">
+    <display-name>PHP-SQLx SQL Detection by Keywords</display-name>
+    <single-file value="false"/>
+    <place><![CDATA[
+      phpLiteralExpression().matches("(?is)^\\s*(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP|TRUNCATE)\\b.*")
+    ]]></place>
+  </injection>
+</LanguageInjectionConfiguration>

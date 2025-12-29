@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQLx Injection",
+  "scopeName": "source.sqlx.injection",
+  "injectionSelector": "L:source.php string.quoted, L:text.html.php string.quoted",
+  "patterns": [
+    {
+      "comment": "Detect SQL strings by common SQL keywords at start",
+      "begin": "(?i)(?<=')\\s*(?=(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP|TRUNCATE|MERGE)\\b)",
+      "end": "(?=')",
+      "name": "meta.embedded.sqlx",
+      "patterns": [
+        { "include": "source.sqlx" }
+      ]
+    },
+    {
+      "comment": "Detect SQL strings by common SQL keywords at start (double quotes)",
+      "begin": "(?i)(?<=\")\\s*(?=(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP|TRUNCATE|MERGE)\\b)",
+      "end": "(?=\")",
+      "name": "meta.embedded.sqlx",
+      "patterns": [
+        { "include": "source.sqlx" }
+      ]
+    },
+    {
+      "comment": "Detect SQLx conditional blocks in any string",
+      "match": "(\\{\\{)[^}]*(\\}\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.conditional.begin.sqlx keyword.control.conditional.sqlx" },
+        "2": { "name": "punctuation.definition.conditional.end.sqlx keyword.control.conditional.sqlx" }
+      }
+    },
+    {
+      "comment": "Highlight typed placeholders in PHP strings",
+      "match": "\\?(n)?(i|u|d|ud|s)(a)?\\b",
+      "name": "variable.parameter.placeholder.typed.sqlx"
+    },
+    {
+      "comment": "Highlight nullable placeholder",
+      "match": "\\?n\\b",
+      "name": "variable.parameter.placeholder.typed.sqlx"
+    },
+    {
+      "comment": "Highlight named typed placeholders",
+      "match": "(\\$|:)[a-zA-Z_][a-zA-Z0-9_]*!(n)?(i|u|d|ud|s)?(a)?\\b",
+      "name": "variable.parameter.placeholder.typed.sqlx"
+    },
+    {
+      "comment": "Highlight named placeholders",
+      "match": "(\\$|:)[a-zA-Z_][a-zA-Z0-9_]*\\b(?!!)",
+      "name": "variable.parameter.placeholder.sqlx"
+    },
+    {
+      "comment": "Highlight positional numbered placeholders",
+      "match": "(\\$|:)[0-9]+\\b",
+      "name": "variable.parameter.placeholder.sqlx"
+    }
+  ]
+}

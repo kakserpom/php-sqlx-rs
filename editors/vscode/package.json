@@ -1,0 +1,51 @@
+{
+  "name": "php-sqlx",
+  "displayName": "PHP-SQLx SQL Syntax",
+  "description": "Syntax highlighting for PHP-SQLx augmented SQL (conditional blocks, type-safe placeholders)",
+  "version": "0.1.0",
+  "publisher": "php-sqlx",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kakserpom/php-sqlx"
+  },
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "sqlx",
+        "aliases": [
+          "SQLx",
+          "sqlx"
+        ],
+        "extensions": [
+          ".sqlx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sqlx",
+        "scopeName": "source.sqlx",
+        "path": "./syntaxes/sqlx.tmLanguage.json"
+      },
+      {
+        "scopeName": "source.sqlx.injection",
+        "path": "./syntaxes/sqlx-injection.tmLanguage.json",
+        "injectTo": [
+          "source.php",
+          "text.html.php"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.sqlx": "sqlx"
+        }
+      }
+    ]
+  }
+}
