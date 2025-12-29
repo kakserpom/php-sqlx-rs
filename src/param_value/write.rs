@@ -119,8 +119,10 @@ mod tests {
 
     #[test]
     fn write_sql_single_placeholder() {
-        let mut settings = Settings::default();
-        settings.max_placeholders = 65535;
+        let settings = Settings {
+            max_placeholders: 65535,
+            ..Settings::default()
+        };
         let mut sql = String::new();
         let mut out_vals = Vec::new();
 
@@ -135,8 +137,10 @@ mod tests {
 
     #[test]
     fn write_sql_array_placeholders() {
-        let mut settings = Settings::default();
-        settings.max_placeholders = 65535;
+        let settings = Settings {
+            max_placeholders: 65535,
+            ..Settings::default()
+        };
         let mut sql = String::new();
         let mut out_vals = Vec::new();
 
@@ -150,8 +154,11 @@ mod tests {
 
     #[test]
     fn write_sql_fallback_to_literal() {
-        let mut settings = Settings::default();
-        settings.max_placeholders = 0; // force fallback to literal
+        // max_placeholders = 0 forces fallback to literal
+        let settings = Settings {
+            max_placeholders: 0,
+            ..Settings::default()
+        };
 
         let mut sql = String::new();
         let mut out_vals = Vec::new();
@@ -166,8 +173,10 @@ mod tests {
 
     #[test]
     fn write_sql_mixed_values() {
-        let mut settings = Settings::default();
-        settings.max_placeholders = 2;
+        let settings = Settings {
+            max_placeholders: 2,
+            ..Settings::default()
+        };
         let mut sql = String::new();
         let mut out_vals = Vec::new();
 

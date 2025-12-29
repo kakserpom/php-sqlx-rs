@@ -24,10 +24,10 @@
 //! # Macro-based Implementation
 //!
 //! The [`php_sqlx_impl_query_builder!`] macro generates database-specific query builders
-//! for each supported database (PostgreSQL, MySQL, MSSQL).
+//! for each supported database (`PostgreSQL`, `MySQL`, MS SQL).
 
-use crate::param_value::{ParameterValue, ParamsMap};
 use crate::error::Error as SqlxError;
+use crate::param_value::{ParameterValue, ParamsMap};
 use ext_php_rs::convert::FromZval;
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ArrayKey, ZendClassObject, ZendHashTable, Zval};
@@ -150,14 +150,20 @@ pub fn or_(or: &ZendHashTable) -> crate::error::Result<OrClause> {
                 if array.has_sequential_keys() {
                     let array_len = array.len();
                     if array_len > 3 {
-                        return Err(SqlxError::Other("condition #{i}: array cannot contain more than 3 elements".to_string()));
+                        return Err(SqlxError::Other(
+                            "condition #{i}: array cannot contain more than 3 elements".to_string(),
+                        ));
                     }
                     let left_operand =
                         array.get_index(0).and_then(Zval::string).ok_or_else(|| {
-                            SqlxError::Other(format!("first element (left operand) of #{i} must be a string"))
+                            SqlxError::Other(format!(
+                                "first element (left operand) of #{i} must be a string"
+                            ))
                         })?;
                     let operator = array.get_index(1).and_then(Zval::string).ok_or_else(|| {
-                        SqlxError::Other(format!("second element (operator) of #{i} must be a string"))
+                        SqlxError::Other(format!(
+                            "second element (operator) of #{i} must be a string"
+                        ))
                     })?;
                     let right_operand = if array_len > 2 {
                         Some(
@@ -165,7 +171,10 @@ pub fn or_(or: &ZendHashTable) -> crate::error::Result<OrClause> {
                                 .get_index(2)
                                 .and_then(ParameterValue::from_zval)
                                 .ok_or_else(|| {
-                                    SqlxError::Other("third element (value) must a valid parameter value".to_string())
+                                    SqlxError::Other(
+                                        "third element (value) must a valid parameter value"
+                                            .to_string(),
+                                    )
                                 })?,
                         )
                     } else {
@@ -180,13 +189,19 @@ pub fn or_(or: &ZendHashTable) -> crate::error::Result<OrClause> {
             {
                 inner.push(OrClauseItem::Nested(or));
             } else {
-                return Err(SqlxError::Other("element must be a string or OrClause".to_string()));
+                return Err(SqlxError::Other(
+                    "element must be a string or OrClause".to_string(),
+                ));
             }
         } else {
             let Some(parameters) = value.array() else {
-                return Err(SqlxError::Other("keyed element's value must be array".to_string()));
+                return Err(SqlxError::Other(
+                    "keyed element's value must be array".to_string(),
+                ));
             };
-            let parameters: ParamsMap = parameters.try_into().map_err(|err| SqlxError::Other(format!("{err}")))?;
+            let parameters: ParamsMap = parameters
+                .try_into()
+                .map_err(|err| SqlxError::Other(format!("{err}")))?;
             inner.push(OrClauseItem::Item((key.to_string(), Some(parameters))));
         }
     }
@@ -195,6 +210,7 @@ pub fn or_(or: &ZendHashTable) -> crate::error::Result<OrClause> {
 }
 
 #[macro_export]
+#[allow(clippy::crate_in_macro_def)]
 macro_rules! php_sqlx_impl_query_builder {
     ( $struct:ident, $class:literal, $interface:literal, $driver: ident, $driver_inner: ident ) => {
 
@@ -1768,7 +1784,7 @@ macro_rules! php_sqlx_impl_query_builder {
             /// ```
             ///
             /// # Notes
-            /// - Only valid in transactional contexts (e.g., PostgreSQL, MySQL with InnoDB).
+            /// - Only valid in transactional contexts (e.g., `PostgreSQL`, `MySQL` with `InnoDB`).
             /// - Useful for implementing pessimistic locking in concurrent systems.
             ///
             /// # Returns

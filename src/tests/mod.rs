@@ -1,14 +1,14 @@
 use crate::error::{Error as SqlxError, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 /// Runs the given PHP script via the `php` CLI and returns an error if it fails.
 #[allow(dead_code)]
-fn run_php_file(php_file: PathBuf) -> Result<String> {
+fn run_php_file(php_file: &Path) -> Result<String> {
     // Spawn `php -f <script_name>`
     let output = Command::new("php")
         .arg("-f")
-        .arg(&php_file)
+        .arg(php_file)
         .output()
         .map_err(|err| SqlxError::Other(format!("Failed to execute php on {php_file:?}: {err}")))?;
 
@@ -40,7 +40,7 @@ fn run_php_file(php_file: PathBuf) -> Result<String> {
 #[allow(dead_code)]
 fn run_php_example(name: &str) -> Result<String> {
     run_php_file(
-        Path::new(
+        &Path::new(
             &std::env::var("CARGO_MANIFEST_DIR")
                 .map_err(|e| SqlxError::Other(format!("env CARGO_MANIFEST_DIR: {e}")))?,
         )
@@ -51,7 +51,7 @@ fn run_php_example(name: &str) -> Result<String> {
 #[allow(dead_code)]
 fn run_php_test(name: &str) -> Result<String> {
     run_php_file(
-        Path::new(
+        &Path::new(
             &std::env::var("CARGO_MANIFEST_DIR")
                 .map_err(|e| SqlxError::Other(format!("env CARGO_MANIFEST_DIR: {e}")))?,
         )

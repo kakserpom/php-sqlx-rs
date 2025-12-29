@@ -1,3 +1,7 @@
+// Allow separate match arms for different SQL types that map to the same Rust type
+// This improves readability by showing all supported SQL types explicitly
+#![allow(clippy::match_same_arms)]
+
 use crate::LazyRowJson;
 use crate::conversion::{Conversion, json_into_zval};
 use crate::error::Error as SqlxError;

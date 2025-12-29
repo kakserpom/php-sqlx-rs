@@ -28,9 +28,9 @@
 //! - `column IN :empty_array` becomes `FALSE`
 //! - `column NOT IN :empty_array` becomes `TRUE`
 
+use crate::error::Error as SqlxError;
 use crate::param_value::{ParameterValue, ParamsMap, Placeholder, write::ParamVecWriteSqlTo};
 use crate::utils::strip_prefix::StripPrefixWordIgnoreAsciiCase;
-use crate::error::Error as SqlxError;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::fmt::Write;
@@ -98,13 +98,13 @@ pub enum PlaceholderType {
 }
 
 impl PlaceholderType {
-    /// Parse a type specifier string into a PlaceholderType.
+    /// Parse a type specifier string into a `PlaceholderType`.
     ///
     /// Returns `Some((type, consumed_len))` for valid specifiers, `None` for invalid ones.
     /// Longer specifiers are checked first to avoid partial matches.
     /// Does NOT handle the `n` (nullable) prefix - use `parse_type_specifier` for that.
     #[must_use]
-    pub fn from_str(s: &str) -> Option<(Self, usize)> {
+    pub fn parse(s: &str) -> Option<(Self, usize)> {
         // Check longest specifiers first (3 chars)
         if s.starts_with("uda") {
             return Some((Self::UnsignedDecimalArray, 3));
@@ -146,14 +146,14 @@ impl PlaceholderType {
     pub fn parse_type_specifier(s: &str) -> Option<(Option<Self>, bool, usize)> {
         if let Some(rest) = s.strip_prefix('n') {
             // Nullable prefix found
-            if let Some((ty, len)) = Self::from_str(rest) {
+            if let Some((ty, len)) = Self::parse(rest) {
                 // n + type (e.g., "ni", "nud", "nuda")
                 Some((Some(ty), true, 1 + len))
             } else {
                 // Just "n" alone - nullable mixed
                 Some((None, true, 1))
             }
-        } else if let Some((ty, len)) = Self::from_str(s) {
+        } else if let Some((ty, len)) = Self::parse(s) {
             // Non-nullable type
             Some((Some(ty), false, len))
         } else {
@@ -204,10 +204,10 @@ impl PlaceholderType {
     /// Check if a string is a valid non-negative numeric value.
     #[must_use]
     fn is_unsigned_numeric_string(s: &str) -> bool {
-        s.trim().parse::<f64>().map_or(false, |f| f >= 0.0)
+        s.trim().parse::<f64>().is_ok_and(|f| f >= 0.0)
     }
 
-    /// Check if a ParameterValue is a valid decimal (int, float, or numeric string).
+    /// Check if a `ParameterValue` is a valid decimal (int, float, or numeric string).
     #[must_use]
     fn is_decimal(value: &ParameterValue) -> bool {
         match value {
@@ -217,7 +217,7 @@ impl PlaceholderType {
         }
     }
 
-    /// Check if a ParameterValue is a valid unsigned decimal (non-negative int, float, or numeric string).
+    /// Check if a `ParameterValue` is a valid unsigned decimal (non-negative int, float, or numeric string).
     #[must_use]
     fn is_unsigned_decimal(value: &ParameterValue) -> bool {
         match value {
@@ -228,7 +228,7 @@ impl PlaceholderType {
         }
     }
 
-    /// Check if a ParameterValue matches this type constraint.
+    /// Check if a `ParameterValue` matches this type constraint.
     ///
     /// # Arguments
     /// * `value` - The value to check
@@ -239,32 +239,31 @@ impl PlaceholderType {
             // Null is only allowed if nullable flag is set
             (_, ParameterValue::Null) => nullable,
             // Scalar types
-            (Self::Int, ParameterValue::Int(_)) => true,
+            (Self::Int, ParameterValue::Int(_)) | (Self::String, ParameterValue::String(_)) => true,
             (Self::UnsignedInt, ParameterValue::Int(n)) => *n >= 0,
             (Self::Decimal, v) => Self::is_decimal(v),
             (Self::UnsignedDecimal, v) => Self::is_unsigned_decimal(v),
-            (Self::String, ParameterValue::String(_)) => true,
             // Array types - validate element types (nulls in arrays always allowed)
-            (Self::IntArray, ParameterValue::Array(arr)) => {
-                arr.iter().all(|v| matches!(v, ParameterValue::Int(_) | ParameterValue::Null))
-            }
-            (Self::UnsignedIntArray, ParameterValue::Array(arr)) => {
-                arr.iter().all(|v| matches!(v, ParameterValue::Int(n) if *n >= 0) || matches!(v, ParameterValue::Null))
-            }
-            (Self::DecimalArray, ParameterValue::Array(arr)) => {
-                arr.iter().all(|v| matches!(v, ParameterValue::Null) || Self::is_decimal(v))
-            }
-            (Self::UnsignedDecimalArray, ParameterValue::Array(arr)) => {
-                arr.iter().all(|v| matches!(v, ParameterValue::Null) || Self::is_unsigned_decimal(v))
-            }
-            (Self::StringArray, ParameterValue::Array(arr)) => {
-                arr.iter().all(|v| matches!(v, ParameterValue::String(_) | ParameterValue::Null))
-            }
+            (Self::IntArray, ParameterValue::Array(arr)) => arr
+                .iter()
+                .all(|v| matches!(v, ParameterValue::Int(_) | ParameterValue::Null)),
+            (Self::UnsignedIntArray, ParameterValue::Array(arr)) => arr.iter().all(|v| {
+                matches!(v, ParameterValue::Int(n) if *n >= 0) || matches!(v, ParameterValue::Null)
+            }),
+            (Self::DecimalArray, ParameterValue::Array(arr)) => arr
+                .iter()
+                .all(|v| matches!(v, ParameterValue::Null) || Self::is_decimal(v)),
+            (Self::UnsignedDecimalArray, ParameterValue::Array(arr)) => arr
+                .iter()
+                .all(|v| matches!(v, ParameterValue::Null) || Self::is_unsigned_decimal(v)),
+            (Self::StringArray, ParameterValue::Array(arr)) => arr
+                .iter()
+                .all(|v| matches!(v, ParameterValue::String(_) | ParameterValue::Null)),
             _ => false,
         }
     }
 
-    /// Get the actual type name of a ParameterValue for error messages.
+    /// Get the actual type name of a `ParameterValue` for error messages.
     #[must_use]
     pub fn value_type_name(value: &ParameterValue) -> &'static str {
         match value {
@@ -557,7 +556,7 @@ impl Ast {
                     if let Some(name) = name_opt {
                         branches.push(Ast::Raw(format!("{buf} ")));
                         buf.clear();
-                        placeholders_out.push((name.to_string(), false));
+                        placeholders_out.push((name.clone(), false));
                         branches.push(Ast::PaginateClause { placeholder: name });
                         rest = &rest[consumed_len..];
                         continue;
@@ -612,14 +611,15 @@ impl Ast {
                         if let Some(name) = name_opt {
                             // Check for type suffix after placeholder name
                             let remaining = &rest[consumed_len..];
-                            let (expected_type, nullable, extra_consumed) =
-                                if let Some(after_bang) = remaining.strip_prefix('!')
-                                    && let Some((pt, nullable, len)) = PlaceholderType::parse_type_specifier(after_bang)
-                                {
-                                    (pt, nullable, 1 + len)
-                                } else {
-                                    (None, false, 0)
-                                };
+                            let (expected_type, nullable, extra_consumed) = if let Some(after_bang) =
+                                remaining.strip_prefix('!')
+                                && let Some((pt, nullable, len)) =
+                                    PlaceholderType::parse_type_specifier(after_bang)
+                            {
+                                (pt, nullable, 1 + len)
+                            } else {
+                                (None, false, 0)
+                            };
                             consumed_len += extra_consumed;
 
                             buf.trim_end_in_place();
@@ -690,14 +690,15 @@ impl Ast {
                         if let Some(name) = name_opt {
                             // Check for type suffix after placeholder name
                             let remaining = &rest[consumed_len..];
-                            let (expected_type, nullable, extra_consumed) =
-                                if let Some(after_bang) = remaining.strip_prefix('!')
-                                    && let Some((pt, nullable, len)) = PlaceholderType::parse_type_specifier(after_bang)
-                                {
-                                    (pt, nullable, 1 + len)
-                                } else {
-                                    (None, false, 0)
-                                };
+                            let (expected_type, nullable, extra_consumed) = if let Some(after_bang) =
+                                remaining.strip_prefix('!')
+                                && let Some((pt, nullable, len)) =
+                                    PlaceholderType::parse_type_specifier(after_bang)
+                            {
+                                (pt, nullable, 1 + len)
+                            } else {
+                                (None, false, 0)
+                            };
                             consumed_len += extra_consumed;
 
                             buf.trim_end_in_place();
@@ -739,8 +740,10 @@ impl Ast {
                         branches.push(Ast::Raw(std::mem::take(&mut buf)));
                     }
                     // Check for type suffix: !n, !ni, !s, !d, !u, !ud, etc.
-                    let (expected_type, nullable, rem) = if let Some(after_bang) = rem.strip_prefix('!')
-                        && let Some((pt, nullable, len)) = PlaceholderType::parse_type_specifier(after_bang)
+                    let (expected_type, nullable, rem) = if let Some(after_bang) =
+                        rem.strip_prefix('!')
+                        && let Some((pt, nullable, len)) =
+                            PlaceholderType::parse_type_specifier(after_bang)
                     {
                         (pt, nullable, &after_bang[len..])
                     } else {
@@ -769,8 +772,10 @@ impl Ast {
                         branches.push(Ast::Raw(std::mem::take(&mut buf)));
                     }
                     // Check for type suffix: !n, !ni, !s, !d, !u, !ud, etc.
-                    let (expected_type, nullable, rem) = if let Some(after_bang) = rem.strip_prefix('!')
-                        && let Some((pt, nullable, len)) = PlaceholderType::parse_type_specifier(after_bang)
+                    let (expected_type, nullable, rem) = if let Some(after_bang) =
+                        rem.strip_prefix('!')
+                        && let Some((pt, nullable, len)) =
+                            PlaceholderType::parse_type_specifier(after_bang)
                     {
                         (pt, nullable, &after_bang[len..])
                     } else {
@@ -794,7 +799,8 @@ impl Ast {
                     *positional_counter += 1;
                     let name = positional_counter.to_string();
                     // Check for type suffix: n, ni, s, d, u, ud, etc.
-                    let (expected_type, nullable, r) = if let Some((pt, nullable, len)) = PlaceholderType::parse_type_specifier(r)
+                    let (expected_type, nullable, r) = if let Some((pt, nullable, len)) =
+                        PlaceholderType::parse_type_specifier(r)
                     {
                         (pt, nullable, &r[len..])
                     } else {
@@ -841,7 +847,9 @@ impl Ast {
             settings,
         )?;
         if !rest.trim().is_empty() {
-            return Err(SqlxError::Other("Unmatched `{{` or extra trailing content".to_string()));
+            return Err(SqlxError::Other(
+                "Unmatched `{{` or extra trailing content".to_string(),
+            ));
         }
 
         Ok(Ast::Root {
@@ -892,8 +900,12 @@ impl Ast {
                     }
                     write!(sql, ":{new_name}")?;
                 }
-                Ast::InClause { expr, placeholder, .. }
-                | Ast::NotInClause { expr, placeholder, .. } => {
+                Ast::InClause {
+                    expr, placeholder, ..
+                }
+                | Ast::NotInClause {
+                    expr, placeholder, ..
+                } => {
                     let new_name = resolve_placeholder_name(placeholder, placeholders, index);
                     if let Some(value) = param_map.remove(placeholder) {
                         parameters_bucket.insert(new_name.clone(), value);
@@ -1009,7 +1021,11 @@ impl Ast {
                     }
                 }
                 Ast::Raw(s) => sql.push_str(s),
-                Ast::Placeholder { name, expected_type, nullable } => {
+                Ast::Placeholder {
+                    name,
+                    expected_type,
+                    nullable,
+                } => {
                     #[cfg(test)]
                     {
                         println!("values = {values:?}");
@@ -1017,14 +1033,14 @@ impl Ast {
                     }
                     if let Some(val) = values.get(name) {
                         // Validate type if constraint is specified
-                        if let Some(expected) = expected_type {
-                            if !expected.matches(val, *nullable) {
-                                return Err(SqlxError::TypeMismatch {
-                                    placeholder: name.clone(),
-                                    expected: expected.description().to_string(),
-                                    actual: PlaceholderType::value_type_name(val).to_string(),
-                                });
-                            }
+                        if let Some(expected) =
+                            expected_type.filter(|expected| !expected.matches(val, *nullable))
+                        {
+                            return Err(SqlxError::TypeMismatch {
+                                placeholder: name.clone(),
+                                expected: expected.description().to_string(),
+                                actual: PlaceholderType::value_type_name(val).to_string(),
+                            });
                         }
                         val.write_sql_to(sql, out_vals, settings)?;
                     }
@@ -1063,14 +1079,14 @@ impl Ast {
                 } => match values.get(placeholder) {
                     Some(val @ ParameterValue::Array(arr)) if !arr.is_empty() => {
                         // Validate type if constraint is specified
-                        if let Some(expected) = expected_type {
-                            if !expected.matches(val, *nullable) {
-                                return Err(SqlxError::TypeMismatch {
-                                    placeholder: placeholder.clone(),
-                                    expected: expected.description().to_string(),
-                                    actual: PlaceholderType::value_type_name(val).to_string(),
-                                });
-                            }
+                        if let Some(expected) =
+                            expected_type.filter(|expected| !expected.matches(val, *nullable))
+                        {
+                            return Err(SqlxError::TypeMismatch {
+                                placeholder: placeholder.clone(),
+                                expected: expected.description().to_string(),
+                                actual: PlaceholderType::value_type_name(val).to_string(),
+                            });
                         }
                         sql.push_str(expr);
                         sql.push_str(" IN (");
@@ -1097,14 +1113,14 @@ impl Ast {
                 } => match values.get(placeholder) {
                     Some(val @ ParameterValue::Array(arr)) if !arr.is_empty() => {
                         // Validate type if constraint is specified
-                        if let Some(expected) = expected_type {
-                            if !expected.matches(val, *nullable) {
-                                return Err(SqlxError::TypeMismatch {
-                                    placeholder: placeholder.clone(),
-                                    expected: expected.description().to_string(),
-                                    actual: PlaceholderType::value_type_name(val).to_string(),
-                                });
-                            }
+                        if let Some(expected) =
+                            expected_type.filter(|expected| !expected.matches(val, *nullable))
+                        {
+                            return Err(SqlxError::TypeMismatch {
+                                placeholder: placeholder.clone(),
+                                expected: expected.description().to_string(),
+                                actual: PlaceholderType::value_type_name(val).to_string(),
+                            });
                         }
                         sql.reserve(expr.len() + 9 + arr.len() * 2 + (arr.len() - 1) * 2);
                         write!(sql, "{expr} NOT IN (")?;

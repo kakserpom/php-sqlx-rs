@@ -27,13 +27,17 @@ pub trait Conversion: Row {
                     let column_name = column.name();
                     let value = self.column_value_into_zval(column, associative_arrays)?;
                     if !column_name.is_empty() && column_name != "?column?" {
-                        array
-                            .insert(column.name(), value)
-                            .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                        array.insert(column.name(), value).map_err(|err| {
+                            SqlxError::Conversion {
+                                message: format!("{err:?}"),
+                            }
+                        })?;
                     } else {
                         array
                             .insert(i64::try_from(column.ordinal())?, value)
-                            .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                            .map_err(|err| SqlxError::Conversion {
+                                message: format!("{err:?}"),
+                            })?;
                     }
                     Ok(array)
                 },
@@ -42,9 +46,15 @@ pub trait Conversion: Row {
             if lazy {
                 return LazyRow::new(array)
                     .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") });
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    });
             }
-            Ok(array.into_zval(false).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?)
+            Ok(array
+                .into_zval(false)
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })?)
         } else {
             Ok(columns
                 .iter()
@@ -55,16 +65,22 @@ pub trait Conversion: Row {
                         object
                             .set_property(column.name(), value)
                             .map(|()| object)
-                            .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+                            .map_err(|err| SqlxError::Conversion {
+                                message: format!("{err:?}"),
+                            })
                     } else {
                         object
                             .set_property(format!("_{}", column.ordinal()).as_str(), value)
                             .map(|()| object)
-                            .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+                            .map_err(|err| SqlxError::Conversion {
+                                message: format!("{err:?}"),
+                            })
                     }
                 })?
                 .into_zval(false)
-                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?)
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })?)
         }
     }
 
@@ -84,7 +100,10 @@ pub trait Conversion: Row {
     where
         C: Column<Database = D>;
 
-    fn column_value_into_array_key<'a, C, D>(&self, column: &C) -> crate::error::Result<ArrayKey<'a>>
+    fn column_value_into_array_key<'a, C, D>(
+        &self,
+        column: &C,
+    ) -> crate::error::Result<ArrayKey<'a>>
     where
         C: Column<Database = D>;
 }
@@ -102,23 +121,33 @@ pub(crate) fn json_into_zval(
     associative_arrays: bool,
 ) -> crate::error::Result<Zval> {
     match value {
-        serde_json::Value::String(str) => str
-            .into_zval(false)
-            .map_err(|err| SqlxError::Conversion { message: format!("String conversion: {err:?}") }),
-        serde_json::Value::Number(number) => number
-            .to_string()
-            .into_zval(false)
-            .map_err(|err| SqlxError::Conversion { message: format!("Number conversion: {err:?}") }),
-        serde_json::Value::Bool(bool) => bool
-            .into_zval(false)
-            .map_err(|err| SqlxError::Conversion { message: format!("Bool conversion: {err:?}") }),
+        serde_json::Value::String(str) => {
+            str.into_zval(false).map_err(|err| SqlxError::Conversion {
+                message: format!("String conversion: {err:?}"),
+            })
+        }
+        serde_json::Value::Number(number) => {
+            number
+                .to_string()
+                .into_zval(false)
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("Number conversion: {err:?}"),
+                })
+        }
+        serde_json::Value::Bool(bool) => {
+            bool.into_zval(false).map_err(|err| SqlxError::Conversion {
+                message: format!("Bool conversion: {err:?}"),
+            })
+        }
         serde_json::Value::Null => Ok(Zval::null()),
         serde_json::Value::Array(array) => Ok(array
             .into_iter()
             .map(|x| json_into_zval(x, associative_arrays))
             .collect::<crate::error::Result<Vec<Zval>>>()?
             .into_zval(false)
-            .map_err(|err| SqlxError::Conversion { message: format!("Array conversion: {err:?}") })?),
+            .map_err(|err| SqlxError::Conversion {
+                message: format!("Array conversion: {err:?}"),
+            })?),
         serde_json::Value::Object(object) => {
             if associative_arrays {
                 Ok(object
@@ -126,7 +155,9 @@ pub(crate) fn json_into_zval(
                     .map(|(key, value)| Ok((key, json_into_zval(value, associative_arrays)?)))
                     .collect::<crate::error::Result<HashMap<String, Zval>>>()?
                     .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion { message: format!("Object conversion: {err:?}") })?)
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("Object conversion: {err:?}"),
+                    })?)
             } else {
                 Ok(object
                     .into_iter()
@@ -136,11 +167,15 @@ pub(crate) fn json_into_zval(
                             std_object
                                 .set_property(&key, json_into_zval(value, associative_arrays))
                                 .map(|()| std_object)
-                                .map_err(|err| SqlxError::Conversion { message: format!("Object conversion: {err:?}") })
+                                .map_err(|err| SqlxError::Conversion {
+                                    message: format!("Object conversion: {err:?}"),
+                                })
                         },
                     )?
                     .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion { message: format!("Object conversion: {err:?}") })?)
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("Object conversion: {err:?}"),
+                    })?)
             }
         }
     }

@@ -212,7 +212,9 @@ fn test_parse_in_not_in_and_string() {
         _ => panic!("Expected Sql at branch 0"),
     }
     match &branches[1] {
-        Ast::InClause { expr, placeholder, .. } => {
+        Ast::InClause {
+            expr, placeholder, ..
+        } => {
             assert_eq!(expr, "status");
             assert_eq!(placeholder, "statuses");
         }
@@ -223,7 +225,9 @@ fn test_parse_in_not_in_and_string() {
         _ => panic!("Expected Sql at branch 2"),
     }
     match &branches[3] {
-        Ast::NotInClause { expr, placeholder, .. } => {
+        Ast::NotInClause {
+            expr, placeholder, ..
+        } => {
             assert_eq!(expr, "age");
             assert_eq!(placeholder, "ages");
         }
@@ -311,7 +315,10 @@ fn test_null_placeholder_is_valid() {
     let mut vals = ParamsMap::default();
     vals.insert("name".into(), ParameterValue::Null);
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Null value should be valid for required placeholder");
+    assert!(
+        result.is_ok(),
+        "Null value should be valid for required placeholder"
+    );
     let (query, params) = result.unwrap();
     collapsed_eq!(&query, "SELECT * FROM users WHERE name = $1");
     assert_eq!(params, vec![ParameterValue::Null]);
@@ -392,7 +399,12 @@ fn test_parse_typed_positional_placeholders() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, .. } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    ..
+                } = b
+                {
                     Some((name.as_str(), *expected_type))
                 } else {
                     None
@@ -418,7 +430,12 @@ fn test_parse_typed_named_placeholders() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, .. } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    ..
+                } = b
+                {
                     Some((name.as_str(), *expected_type))
                 } else {
                     None
@@ -444,7 +461,12 @@ fn test_untyped_placeholders_still_work() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, .. } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    ..
+                } = b
+                {
                     Some((name.as_str(), *expected_type))
                 } else {
                     None
@@ -492,7 +514,7 @@ fn test_typed_placeholder_valid_decimal_float() {
     let sql = "SELECT * FROM users WHERE score = :score!d";
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
-    vals.insert("score".into(), ParameterValue::Float(3.14));
+    vals.insert("score".into(), ParameterValue::Float(3.5));
     let result = ast.render(vals, &SETTINGS);
     assert!(result.is_ok(), "Float should be valid for !d placeholder");
 }
@@ -505,7 +527,10 @@ fn test_typed_placeholder_valid_decimal_int() {
     let mut vals = ParamsMap::default();
     vals.insert("score".into(), ParameterValue::Int(42));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Int should also be valid for !d placeholder");
+    assert!(
+        result.is_ok(),
+        "Int should also be valid for !d placeholder"
+    );
 }
 
 /// Test type validation with correct integer array type
@@ -519,7 +544,10 @@ fn test_typed_placeholder_valid_int_array() {
         ParameterValue::Array(vec![ParameterValue::Int(1), ParameterValue::Int(2)]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Int array should be valid for !ia placeholder");
+    assert!(
+        result.is_ok(),
+        "Int array should be valid for !ia placeholder"
+    );
 }
 
 /// Test type validation with unsigned int constraint
@@ -530,7 +558,10 @@ fn test_typed_placeholder_valid_unsigned_int() {
     let mut vals = ParamsMap::default();
     vals.insert("age".into(), ParameterValue::Int(25));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Positive int should be valid for !u placeholder");
+    assert!(
+        result.is_ok(),
+        "Positive int should be valid for !u placeholder"
+    );
 }
 
 /// Test type validation with unsigned int constraint (zero is valid)
@@ -553,7 +584,10 @@ fn test_typed_placeholder_allows_null() {
     vals.insert("id".into(), ParameterValue::Null);
     vals.insert("name".into(), ParameterValue::Null);
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Null should be valid for nullable typed placeholders");
+    assert!(
+        result.is_ok(),
+        "Null should be valid for nullable typed placeholders"
+    );
 }
 
 /// Test that null is NOT allowed for non-nullable typed placeholders (!i, !s)
@@ -564,7 +598,10 @@ fn test_typed_placeholder_rejects_null() {
     let mut vals = ParamsMap::default();
     vals.insert("id".into(), ParameterValue::Null);
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Null should NOT be valid for non-nullable typed placeholder");
+    assert!(
+        result.is_err(),
+        "Null should NOT be valid for non-nullable typed placeholder"
+    );
     let err = result.unwrap_err();
     assert!(err.to_string().contains("Type mismatch"));
 }
@@ -577,7 +614,10 @@ fn test_typed_placeholder_mismatch_string_for_int() {
     let mut vals = ParamsMap::default();
     vals.insert("id".into(), ParameterValue::String("not-an-int".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "String should not be valid for !i placeholder");
+    assert!(
+        result.is_err(),
+        "String should not be valid for !i placeholder"
+    );
     let err = result.unwrap_err();
     assert!(err.to_string().contains("Type mismatch"));
     assert!(err.to_string().contains("id"));
@@ -591,7 +631,10 @@ fn test_typed_placeholder_mismatch_int_for_string() {
     let sql = "SELECT * FROM users WHERE name = ?s";
     let ast = into_ast(sql);
     let result = ast.render([("0", ParameterValue::Int(42))], &SETTINGS);
-    assert!(result.is_err(), "Int should not be valid for ?s placeholder");
+    assert!(
+        result.is_err(),
+        "Int should not be valid for ?s placeholder"
+    );
     let err = result.unwrap_err();
     assert!(err.to_string().contains("Type mismatch"));
 }
@@ -604,7 +647,10 @@ fn test_typed_placeholder_mismatch_negative_for_unsigned() {
     let mut vals = ParamsMap::default();
     vals.insert("age".into(), ParameterValue::Int(-5));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Negative int should not be valid for !u placeholder");
+    assert!(
+        result.is_err(),
+        "Negative int should not be valid for !u placeholder"
+    );
     let err = result.unwrap_err();
     assert!(err.to_string().contains("Type mismatch"));
 }
@@ -617,7 +663,10 @@ fn test_typed_placeholder_mismatch_string_for_int_array() {
     let mut vals = ParamsMap::default();
     vals.insert("ids".into(), ParameterValue::String("not-an-array".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "String should not be valid for !ia placeholder");
+    assert!(
+        result.is_err(),
+        "String should not be valid for !ia placeholder"
+    );
 }
 
 /// Test type mismatch error: string elements in integer array
@@ -634,7 +683,10 @@ fn test_typed_placeholder_mismatch_string_elements_in_int_array() {
         ]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Array with string elements should not be valid for !ia placeholder");
+    assert!(
+        result.is_err(),
+        "Array with string elements should not be valid for !ia placeholder"
+    );
 }
 
 // ============================================================================
@@ -650,7 +702,12 @@ fn test_parse_unsigned_decimal_positional() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, .. } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    ..
+                } = b
+                {
                     Some((name.as_str(), *expected_type))
                 } else {
                     None
@@ -659,7 +716,10 @@ fn test_parse_unsigned_decimal_positional() {
             .collect();
 
         assert_eq!(placeholders.len(), 1);
-        assert_eq!(placeholders[0], ("1", Some(PlaceholderType::UnsignedDecimal)));
+        assert_eq!(
+            placeholders[0],
+            ("1", Some(PlaceholderType::UnsignedDecimal))
+        );
     } else {
         panic!("Expected Root");
     }
@@ -674,7 +734,12 @@ fn test_parse_unsigned_decimal_named() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, .. } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    ..
+                } = b
+                {
                     Some((name.as_str(), *expected_type))
                 } else {
                     None
@@ -683,7 +748,10 @@ fn test_parse_unsigned_decimal_named() {
             .collect();
 
         assert_eq!(placeholders.len(), 1);
-        assert_eq!(placeholders[0], ("price", Some(PlaceholderType::UnsignedDecimal)));
+        assert_eq!(
+            placeholders[0],
+            ("price", Some(PlaceholderType::UnsignedDecimal))
+        );
     } else {
         panic!("Expected Root");
     }
@@ -697,7 +765,10 @@ fn test_typed_placeholder_valid_unsigned_decimal_float() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Float(19.99));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Positive float should be valid for !ud placeholder");
+    assert!(
+        result.is_ok(),
+        "Positive float should be valid for !ud placeholder"
+    );
 }
 
 /// Test unsigned decimal accepts zero float
@@ -708,7 +779,10 @@ fn test_typed_placeholder_valid_unsigned_decimal_zero_float() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Float(0.0));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Zero float should be valid for !ud placeholder");
+    assert!(
+        result.is_ok(),
+        "Zero float should be valid for !ud placeholder"
+    );
 }
 
 /// Test unsigned decimal accepts positive int
@@ -719,7 +793,10 @@ fn test_typed_placeholder_valid_unsigned_decimal_int() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Int(100));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Positive int should be valid for !ud placeholder");
+    assert!(
+        result.is_ok(),
+        "Positive int should be valid for !ud placeholder"
+    );
 }
 
 /// Test decimal accepts numeric string
@@ -732,25 +809,37 @@ fn test_typed_placeholder_valid_decimal_string() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::String("123.45".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Positive numeric string should be valid for !d placeholder");
+    assert!(
+        result.is_ok(),
+        "Positive numeric string should be valid for !d placeholder"
+    );
 
     // Negative numeric string
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::String("-99.99".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Negative numeric string should be valid for !d placeholder");
+    assert!(
+        result.is_ok(),
+        "Negative numeric string should be valid for !d placeholder"
+    );
 
     // Integer string
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::String("42".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Integer string should be valid for !d placeholder");
+    assert!(
+        result.is_ok(),
+        "Integer string should be valid for !d placeholder"
+    );
 
     // String with whitespace
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::String("  123.45  ".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Numeric string with whitespace should be valid for !d placeholder");
+    assert!(
+        result.is_ok(),
+        "Numeric string with whitespace should be valid for !d placeholder"
+    );
 }
 
 /// Test decimal rejects non-numeric string
@@ -759,9 +848,15 @@ fn test_typed_placeholder_mismatch_non_numeric_string_for_decimal() {
     let sql = "SELECT * FROM products WHERE price = :price!d";
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
-    vals.insert("price".into(), ParameterValue::String("not-a-number".into()));
+    vals.insert(
+        "price".into(),
+        ParameterValue::String("not-a-number".into()),
+    );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Non-numeric string should not be valid for !d placeholder");
+    assert!(
+        result.is_err(),
+        "Non-numeric string should not be valid for !d placeholder"
+    );
 }
 
 /// Test unsigned decimal accepts positive numeric string
@@ -774,13 +869,19 @@ fn test_typed_placeholder_valid_unsigned_decimal_string() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::String("123.45".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Positive numeric string should be valid for !ud placeholder");
+    assert!(
+        result.is_ok(),
+        "Positive numeric string should be valid for !ud placeholder"
+    );
 
     // Zero string
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::String("0".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Zero string should be valid for !ud placeholder");
+    assert!(
+        result.is_ok(),
+        "Zero string should be valid for !ud placeholder"
+    );
 }
 
 /// Test unsigned decimal rejects negative numeric string
@@ -791,7 +892,10 @@ fn test_typed_placeholder_mismatch_negative_string_for_unsigned_decimal() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::String("-5.00".into()));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Negative numeric string should not be valid for !ud placeholder");
+    assert!(
+        result.is_err(),
+        "Negative numeric string should not be valid for !ud placeholder"
+    );
 }
 
 /// Test decimal array accepts numeric strings
@@ -809,7 +913,10 @@ fn test_typed_placeholder_valid_decimal_array_with_strings() {
         ]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Decimal array with numeric strings should be valid for !da placeholder");
+    assert!(
+        result.is_ok(),
+        "Decimal array with numeric strings should be valid for !da placeholder"
+    );
 }
 
 /// Test unsigned decimal rejects negative float
@@ -820,7 +927,10 @@ fn test_typed_placeholder_mismatch_negative_float_for_unsigned_decimal() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Float(-9.99));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Negative float should not be valid for !ud placeholder");
+    assert!(
+        result.is_err(),
+        "Negative float should not be valid for !ud placeholder"
+    );
     let err = result.unwrap_err();
     assert!(err.to_string().contains("Type mismatch"));
 }
@@ -833,7 +943,10 @@ fn test_typed_placeholder_mismatch_negative_int_for_unsigned_decimal() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Int(-100));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Negative int should not be valid for !ud placeholder");
+    assert!(
+        result.is_err(),
+        "Negative int should not be valid for !ud placeholder"
+    );
 }
 
 // ============================================================================
@@ -865,7 +978,10 @@ fn test_parse_typed_array_placeholders() {
         assert_eq!(in_clauses.len(), 3);
         assert_eq!(in_clauses[0], ("ids", Some(PlaceholderType::IntArray)));
         assert_eq!(in_clauses[1], ("names", Some(PlaceholderType::StringArray)));
-        assert_eq!(in_clauses[2], ("scores", Some(PlaceholderType::DecimalArray)));
+        assert_eq!(
+            in_clauses[2],
+            ("scores", Some(PlaceholderType::DecimalArray))
+        );
     } else {
         panic!("Expected Root");
     }
@@ -894,8 +1010,14 @@ fn test_parse_unsigned_typed_array_placeholders() {
             .collect();
 
         assert_eq!(in_clauses.len(), 2);
-        assert_eq!(in_clauses[0], ("ids", Some(PlaceholderType::UnsignedIntArray)));
-        assert_eq!(in_clauses[1], ("prices", Some(PlaceholderType::UnsignedDecimalArray)));
+        assert_eq!(
+            in_clauses[0],
+            ("ids", Some(PlaceholderType::UnsignedIntArray))
+        );
+        assert_eq!(
+            in_clauses[1],
+            ("prices", Some(PlaceholderType::UnsignedDecimalArray))
+        );
     } else {
         panic!("Expected Root");
     }
@@ -915,7 +1037,10 @@ fn test_typed_placeholder_valid_string_array() {
         ]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "String array should be valid for !sa placeholder");
+    assert!(
+        result.is_ok(),
+        "String array should be valid for !sa placeholder"
+    );
 }
 
 /// Test decimal array validation
@@ -926,13 +1051,13 @@ fn test_typed_placeholder_valid_decimal_array() {
     let mut vals = ParamsMap::default();
     vals.insert(
         "prices".into(),
-        ParameterValue::Array(vec![
-            ParameterValue::Float(19.99),
-            ParameterValue::Int(20),
-        ]),
+        ParameterValue::Array(vec![ParameterValue::Float(19.99), ParameterValue::Int(20)]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Decimal array (mixed float/int) should be valid for !da placeholder");
+    assert!(
+        result.is_ok(),
+        "Decimal array (mixed float/int) should be valid for !da placeholder"
+    );
 }
 
 /// Test unsigned int array validation
@@ -946,7 +1071,10 @@ fn test_typed_placeholder_valid_unsigned_int_array() {
         ParameterValue::Array(vec![ParameterValue::Int(0), ParameterValue::Int(25)]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Unsigned int array should be valid for !ua placeholder");
+    assert!(
+        result.is_ok(),
+        "Unsigned int array should be valid for !ua placeholder"
+    );
 }
 
 /// Test unsigned int array rejects negative values
@@ -960,7 +1088,10 @@ fn test_typed_placeholder_mismatch_negative_in_unsigned_int_array() {
         ParameterValue::Array(vec![ParameterValue::Int(25), ParameterValue::Int(-1)]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Array with negative int should not be valid for !ua placeholder");
+    assert!(
+        result.is_err(),
+        "Array with negative int should not be valid for !ua placeholder"
+    );
 }
 
 /// Test unsigned decimal array validation
@@ -978,7 +1109,10 @@ fn test_typed_placeholder_valid_unsigned_decimal_array() {
         ]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Unsigned decimal array should be valid for !uda placeholder");
+    assert!(
+        result.is_ok(),
+        "Unsigned decimal array should be valid for !uda placeholder"
+    );
 }
 
 /// Test unsigned decimal array rejects negative values
@@ -989,10 +1123,16 @@ fn test_typed_placeholder_mismatch_negative_in_unsigned_decimal_array() {
     let mut vals = ParamsMap::default();
     vals.insert(
         "prices".into(),
-        ParameterValue::Array(vec![ParameterValue::Float(19.99), ParameterValue::Float(-0.01)]),
+        ParameterValue::Array(vec![
+            ParameterValue::Float(19.99),
+            ParameterValue::Float(-0.01),
+        ]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Array with negative float should not be valid for !uda placeholder");
+    assert!(
+        result.is_err(),
+        "Array with negative float should not be valid for !uda placeholder"
+    );
 }
 
 /// Test string array rejects integer elements
@@ -1009,7 +1149,10 @@ fn test_typed_placeholder_mismatch_int_in_string_array() {
         ]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Array with int should not be valid for !sa placeholder");
+    assert!(
+        result.is_err(),
+        "Array with int should not be valid for !sa placeholder"
+    );
 }
 
 /// Test null elements are allowed in typed arrays
@@ -1027,7 +1170,10 @@ fn test_typed_array_allows_null_elements() {
         ]),
     );
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Null elements should be allowed in typed arrays");
+    assert!(
+        result.is_ok(),
+        "Null elements should be allowed in typed arrays"
+    );
 }
 
 // ============================================================================
@@ -1043,7 +1189,12 @@ fn test_parse_nullable_mixed() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, nullable } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    nullable,
+                } = b
+                {
                     Some((name.as_str(), *expected_type, *nullable))
                 } else {
                     None
@@ -1067,7 +1218,12 @@ fn test_parse_nullable_int() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, nullable } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    nullable,
+                } = b
+                {
                     Some((name.as_str(), *expected_type, *nullable))
                 } else {
                     None
@@ -1092,7 +1248,12 @@ fn test_parse_nullable_unsigned_decimal() {
         let placeholders: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::Placeholder { name, expected_type, nullable } = b {
+                if let Ast::Placeholder {
+                    name,
+                    expected_type,
+                    nullable,
+                } = b
+                {
                     Some((name.as_str(), *expected_type, *nullable))
                 } else {
                     None
@@ -1101,8 +1262,14 @@ fn test_parse_nullable_unsigned_decimal() {
             .collect();
 
         assert_eq!(placeholders.len(), 2);
-        assert_eq!(placeholders[0], ("1", Some(PlaceholderType::UnsignedDecimal), true));
-        assert_eq!(placeholders[1], ("discount", Some(PlaceholderType::UnsignedDecimal), true));
+        assert_eq!(
+            placeholders[0],
+            ("1", Some(PlaceholderType::UnsignedDecimal), true)
+        );
+        assert_eq!(
+            placeholders[1],
+            ("discount", Some(PlaceholderType::UnsignedDecimal), true)
+        );
     } else {
         panic!("Expected Root");
     }
@@ -1117,7 +1284,13 @@ fn test_parse_nullable_unsigned_decimal_array() {
         let in_clauses: Vec<_> = branches
             .iter()
             .filter_map(|b| {
-                if let Ast::InClause { placeholder, expected_type, nullable, .. } = b {
+                if let Ast::InClause {
+                    placeholder,
+                    expected_type,
+                    nullable,
+                    ..
+                } = b
+                {
                     Some((placeholder.as_str(), *expected_type, *nullable))
                 } else {
                     None
@@ -1126,7 +1299,10 @@ fn test_parse_nullable_unsigned_decimal_array() {
             .collect();
 
         assert_eq!(in_clauses.len(), 1);
-        assert_eq!(in_clauses[0], ("prices", Some(PlaceholderType::UnsignedDecimalArray), true));
+        assert_eq!(
+            in_clauses[0],
+            ("prices", Some(PlaceholderType::UnsignedDecimalArray), true)
+        );
     } else {
         panic!("Expected Root");
     }
@@ -1173,7 +1349,10 @@ fn test_nullable_unsigned_decimal_accepts_null() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Null);
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Nullable unsigned decimal should accept null value");
+    assert!(
+        result.is_ok(),
+        "Nullable unsigned decimal should accept null value"
+    );
 }
 
 /// Test nullable unsigned decimal accepts positive float
@@ -1184,7 +1363,10 @@ fn test_nullable_unsigned_decimal_accepts_positive_float() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Float(19.99));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Nullable unsigned decimal should accept positive float");
+    assert!(
+        result.is_ok(),
+        "Nullable unsigned decimal should accept positive float"
+    );
 }
 
 /// Test nullable unsigned decimal rejects negative float
@@ -1195,7 +1377,10 @@ fn test_nullable_unsigned_decimal_rejects_negative() {
     let mut vals = ParamsMap::default();
     vals.insert("price".into(), ParameterValue::Float(-5.0));
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_err(), "Nullable unsigned decimal should reject negative value");
+    assert!(
+        result.is_err(),
+        "Nullable unsigned decimal should reject negative value"
+    );
 }
 
 /// Test nullable mixed accepts any value including null
@@ -1207,17 +1392,26 @@ fn test_nullable_mixed_accepts_any() {
     // Test null
     let mut vals = ParamsMap::default();
     vals.insert("data".into(), ParameterValue::Null);
-    assert!(ast.render(vals, &SETTINGS).is_ok(), "Nullable mixed should accept null");
+    assert!(
+        ast.render(vals, &SETTINGS).is_ok(),
+        "Nullable mixed should accept null"
+    );
 
     // Test int
     let mut vals = ParamsMap::default();
     vals.insert("data".into(), ParameterValue::Int(42));
-    assert!(ast.render(vals, &SETTINGS).is_ok(), "Nullable mixed should accept int");
+    assert!(
+        ast.render(vals, &SETTINGS).is_ok(),
+        "Nullable mixed should accept int"
+    );
 
     // Test string
     let mut vals = ParamsMap::default();
     vals.insert("data".into(), ParameterValue::String("test".into()));
-    assert!(ast.render(vals, &SETTINGS).is_ok(), "Nullable mixed should accept string");
+    assert!(
+        ast.render(vals, &SETTINGS).is_ok(),
+        "Nullable mixed should accept string"
+    );
 }
 
 /// Test non-nullable (default) still allows untyped placeholders to accept null
@@ -1228,7 +1422,10 @@ fn test_untyped_placeholder_still_accepts_null() {
     let mut vals = ParamsMap::default();
     vals.insert("data".into(), ParameterValue::Null);
     let result = ast.render(vals, &SETTINGS);
-    assert!(result.is_ok(), "Untyped placeholder should still accept null for backwards compatibility");
+    assert!(
+        result.is_ok(),
+        "Untyped placeholder should still accept null for backwards compatibility"
+    );
 }
 
 // ============================================================================
@@ -1241,8 +1438,13 @@ fn test_nullable_in_conditional_block_absent_skips() {
     let sql = "SELECT * FROM users WHERE 1=1 {{ AND status = :status!ni }}";
     let ast = into_ast(sql);
     let vals = ParamsMap::default(); // status not provided
-    let (query, _) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(!query.contains("status"), "Block should be skipped when nullable placeholder is absent");
+    let (query, _) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        !query.contains("status"),
+        "Block should be skipped when nullable placeholder is absent"
+    );
 }
 
 /// Test null value for nullable placeholder in conditional block renders the block
@@ -1252,8 +1454,13 @@ fn test_nullable_in_conditional_block_null_renders() {
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), ParameterValue::Null);
-    let (query, _) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(query.contains("status"), "Block should render when nullable placeholder has null value");
+    let (query, _) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        query.contains("status"),
+        "Block should render when nullable placeholder has null value"
+    );
 }
 
 /// Test non-null value for nullable placeholder in conditional block renders the block
@@ -1263,8 +1470,13 @@ fn test_nullable_in_conditional_block_value_renders() {
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), ParameterValue::Int(1));
-    let (query, params) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(query.contains("status"), "Block should render when nullable placeholder has a value");
+    let (query, params) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        query.contains("status"),
+        "Block should render when nullable placeholder has a value"
+    );
     assert_eq!(params, vec![ParameterValue::Int(1)]);
 }
 
@@ -1275,8 +1487,13 @@ fn test_non_nullable_in_conditional_block_null_skips() {
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), ParameterValue::Null);
-    let (query, _) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(!query.contains("status"), "Block should be skipped when non-nullable placeholder has null value");
+    let (query, _) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        !query.contains("status"),
+        "Block should be skipped when non-nullable placeholder has null value"
+    );
 }
 
 /// Test untyped placeholder in conditional block: null skips the block (backwards compatible)
@@ -1286,8 +1503,13 @@ fn test_untyped_in_conditional_block_null_skips() {
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("status".into(), ParameterValue::Null);
-    let (query, _) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(!query.contains("status"), "Block should be skipped when untyped placeholder has null value (backwards compat)");
+    let (query, _) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        !query.contains("status"),
+        "Block should be skipped when untyped placeholder has null value (backwards compat)"
+    );
 }
 
 /// Test nullable mixed (?n) in conditional block with null value renders the block
@@ -1297,8 +1519,13 @@ fn test_nullable_mixed_in_conditional_block_null_renders() {
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("data".into(), ParameterValue::Null);
-    let (query, _) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(query.contains("data"), "Block should render when nullable mixed placeholder has null value");
+    let (query, _) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        query.contains("data"),
+        "Block should render when nullable mixed placeholder has null value"
+    );
 }
 
 /// Test positional nullable placeholder in conditional block
@@ -1310,13 +1537,23 @@ fn test_positional_nullable_in_conditional_block() {
     // Test with null - should render
     let mut vals = ParamsMap::default();
     vals.insert("0".into(), ParameterValue::Null);
-    let (query, _) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(query.contains("status"), "Block should render for positional nullable with null");
+    let (query, _) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        query.contains("status"),
+        "Block should render for positional nullable with null"
+    );
 
     // Test with value - should render
     let mut vals = ParamsMap::default();
     vals.insert("0".into(), ParameterValue::Int(5));
-    let (query, params) = ast.render(vals, &SETTINGS).expect("Rendering should succeed");
-    assert!(query.contains("status"), "Block should render for positional nullable with value");
+    let (query, params) = ast
+        .render(vals, &SETTINGS)
+        .expect("Rendering should succeed");
+    assert!(
+        query.contains("status"),
+        "Block should render for positional nullable with value"
+    );
     assert_eq!(params, vec![ParameterValue::Int(5)]);
 }

@@ -5,7 +5,7 @@
 //! management. Each database type uses this macro to create its inner driver.
 //!
 //! The inner driver handles:
-//! - Connection pool management with SQLx
+//! - Connection pool management with `SQLx`
 //! - AST-based query rendering with LRU caching
 //! - Transaction stack for nested transaction support
 //! - All query execution methods (`query_row`, `query_all`, etc.)
@@ -22,12 +22,12 @@
 /// # Arguments
 ///
 /// - `$struct` - The Rust struct name for the inner driver (e.g., `PgInnerDriver`)
-/// - `$database` - The SQLx database type (e.g., `Postgres`, `MySql`, `Mssql`)
+/// - `$database` - The `SQLx` database type (e.g., `Postgres`, `MySql`, `Mssql`)
 ///
 /// # Generated Structure
 ///
 /// The macro generates a struct with:
-/// - `pool`: SQLx connection pool
+/// - `pool`: `SQLx` connection pool
 /// - `ast_cache`: LRU cache for parsed AST queries
 /// - `options`: Driver configuration
 /// - `tx_stack`: Transaction stack for nested transaction support
@@ -37,7 +37,11 @@ macro_rules! php_sqlx_impl_driver_inner {
     ( $struct:ident, $database:ident ) => {
         use ext_php_rs::{convert::IntoZval, ffi::zend_array, types::Zval};
         use itertools::Itertools;
-        use sqlx_oldapi::{$database, Column, Row, Transaction, pool::{Pool, PoolOptions}};
+        use sqlx_oldapi::{
+            Column, Row, Transaction,
+            pool::{Pool, PoolOptions},
+            $database,
+        };
         use std::collections::BTreeMap;
         use std::sync::RwLock;
         use threadsafe_lru::LruCache;
@@ -49,17 +53,17 @@ macro_rules! php_sqlx_impl_driver_inner {
             options::DriverInnerOptions,
             param_value::{ParameterValue, utils::bind_values},
             utils::{
-                ident::is_valid_ident,
                 hashmap_fold::{fold_into_zend_hashmap, fold_into_zend_hashmap_grouped},
+                ident::is_valid_ident,
                 types::ColumnArgument,
-            }
+            },
         };
         /// Core database driver containing connection pool and query execution logic.
         ///
         /// This struct is typically wrapped in `Arc` and shared across the outer driver,
         /// prepared queries, and query builders.
         pub struct $struct {
-            /// SQLx connection pool for efficient connection reuse.
+            /// `SQLx` connection pool for efficient connection reuse.
             pub pool: Pool<$database>,
             /// LRU cache for parsed SQL AST, reducing parse overhead for repeated queries.
             pub ast_cache: LruCache<String, Ast>,
@@ -86,11 +90,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                 if let Some(acquire_timeout) = options.acquire_timeout {
                     pool_options = pool_options.acquire_timeout(acquire_timeout);
                 }
-                let url = options
-                    .url
-                    .clone()
-                    .ok_or(SqlxError::UrlRequired)?;
-                let pool = RUNTIME.block_on(pool_options.connect(url.as_str()))
+                let url = options.url.clone().ok_or(SqlxError::UrlRequired)?;
+                let pool = RUNTIME
+                    .block_on(pool_options.connect(url.as_str()))
                     .map_err(|e| SqlxError::connection_with_source("Failed to connect", e))?;
                 let mut settings = SETTINGS.clone();
                 settings.collapsible_in_enabled = options.collapsible_in_enabled;
@@ -246,7 +248,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                         {
                             column_idx
                         } else {
-                            return Err(SqlxError::ColumnNotFound { column: column_name.to_string() });
+                            return Err(SqlxError::ColumnNotFound {
+                                column: column_name.to_string(),
+                            });
                         }
                     }
                     None => 0,
@@ -291,7 +295,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let column_idx: usize = match column {
                     Some(ColumnArgument::Index(i)) => {
                         if row.try_column(i).is_err() {
-                            return Err(SqlxError::ColumnNotFound { column: i.to_string() });
+                            return Err(SqlxError::ColumnNotFound {
+                                column: i.to_string(),
+                            });
                         }
                         i
                     }
@@ -304,7 +310,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                         {
                             column_idx
                         } else {
-                            return Err(SqlxError::ColumnNotFound { column: column_name.to_string() });
+                            return Err(SqlxError::ColumnNotFound {
+                                column: column_name.to_string(),
+                            });
                         }
                     }
                     None => 0,
@@ -360,7 +368,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                                 {
                                     column_idx
                                 } else {
-                                    return Err(SqlxError::ColumnNotFound { column: column_name.to_string() });
+                                    return Err(SqlxError::ColumnNotFound {
+                                        column: column_name.to_string(),
+                                    });
                                 }
                             }
                             None => 0,
@@ -496,8 +506,16 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> $crate::error::Result<Vec<Zval>> {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(vec![
-                    query.into_zval(false).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
-                    values.into_zval(false).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    query
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion {
+                            message: format!("{err:?}"),
+                        })?,
+                    values
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion {
+                            message: format!("{err:?}"),
+                        })?,
                 ])
             }
 
@@ -560,7 +578,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                     })
                     .try_fold(zend_array::new(), fold_into_zend_hashmap)?
                     .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })
             }
 
             /// Executes an SQL query and returns a dictionary grouping rows by the first column.
@@ -630,7 +650,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                 })
                 .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
                 .into_zval(false)
-                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })
             }
 
             /// Executes the given SQL query and returns a grouped dictionary where:
@@ -690,7 +712,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                     })
                     .try_fold(zend_array::new(), fold_into_zend_hashmap_grouped)?
                     .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })
             }
 
             /// Executes an SQL query and returns a dictionary mapping the first column to the second column.
@@ -742,7 +766,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                     })
                     .try_fold(zend_array::new(), fold_into_zend_hashmap)?
                     .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })
             }
 
             /// Begins a new SQL transaction and places it into the transaction stack.
@@ -766,7 +792,9 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// Returns an error if no transaction is active or the name is invalid.
             pub fn savepoint(&self, savepoint: &str) -> $crate::error::Result<()> {
                 if !is_valid_ident(savepoint) {
-                    return Err(SqlxError::InvalidSavepoint { name: savepoint.to_string() });
+                    return Err(SqlxError::InvalidSavepoint {
+                        name: savepoint.to_string(),
+                    });
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
@@ -791,7 +819,9 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// Returns an error if no transaction is active or the name is invalid.
             pub fn rollback_to_savepoint(&self, savepoint: &str) -> $crate::error::Result<()> {
                 if !is_valid_ident(savepoint) {
-                    return Err(SqlxError::InvalidSavepoint { name: savepoint.to_string() });
+                    return Err(SqlxError::InvalidSavepoint {
+                        name: savepoint.to_string(),
+                    });
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME
@@ -817,7 +847,9 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// Returns an error if no transaction is active or the name is invalid.
             pub fn release_savepoint(&self, savepoint: &str) -> $crate::error::Result<()> {
                 if !is_valid_ident(savepoint) {
-                    return Err(SqlxError::InvalidSavepoint { name: savepoint.to_string() });
+                    return Err(SqlxError::InvalidSavepoint {
+                        name: savepoint.to_string(),
+                    });
                 }
                 if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                     let val = RUNTIME

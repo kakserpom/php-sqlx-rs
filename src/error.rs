@@ -119,7 +119,10 @@ pub enum Error {
     },
 
     /// SQL parsing error.
-    Parse { message: String, sql: Option<String> },
+    Parse {
+        message: String,
+        sql: Option<String>,
+    },
 
     /// Missing required placeholder in query.
     MissingPlaceholder { name: String },
@@ -171,7 +174,7 @@ impl Error {
     pub const fn code(&self) -> ErrorCode {
         match self {
             Self::Connection { .. } => ErrorCode::Connection,
-            Self::Query { .. } => ErrorCode::Query,
+            Self::Query { .. } | Self::ColumnNotFound { .. } => ErrorCode::Query,
             Self::NoActiveTransaction
             | Self::CommitFailed { .. }
             | Self::RollbackFailed { .. }
@@ -185,9 +188,7 @@ impl Error {
             Self::ReadonlyViolation => ErrorCode::NotPermitted,
             Self::PoolExhausted { .. } => ErrorCode::PoolExhausted,
             Self::Timeout { .. } => ErrorCode::Timeout,
-            Self::ColumnNotFound { .. } => ErrorCode::Query,
-            Self::Conversion { .. } => ErrorCode::General,
-            Self::Other(_) => ErrorCode::General,
+            Self::Conversion { .. } | Self::Other(_) => ErrorCode::General,
         }
     }
 
@@ -304,11 +305,15 @@ impl fmt::Display for Error {
                 Ok(())
             }
             Self::NoActiveTransaction => write!(f, "No active transaction"),
-            Self::CommitFailed { message, .. } => write!(f, "Failed to commit transaction: {message}"),
+            Self::CommitFailed { message, .. } => {
+                write!(f, "Failed to commit transaction: {message}")
+            }
             Self::RollbackFailed { message, .. } => {
                 write!(f, "Failed to rollback transaction: {message}")
             }
-            Self::BeginFailed { message, .. } => write!(f, "Failed to begin transaction: {message}"),
+            Self::BeginFailed { message, .. } => {
+                write!(f, "Failed to begin transaction: {message}")
+            }
             Self::Parse { message, sql } => {
                 write!(f, "SQL parse error: {message}")?;
                 if let Some(sql) = sql {
@@ -360,9 +365,9 @@ impl std::error::Error for Error {
             | Self::Query { source, .. }
             | Self::CommitFailed { source, .. }
             | Self::RollbackFailed { source, .. }
-            | Self::BeginFailed { source, .. } => {
-                source.as_ref().map(|e| e.as_ref() as &(dyn std::error::Error + 'static))
-            }
+            | Self::BeginFailed { source, .. } => source
+                .as_ref()
+                .map(|e| e.as_ref() as &(dyn std::error::Error + 'static)),
             _ => None,
         }
     }
@@ -376,7 +381,6 @@ impl From<Error> for PhpException {
         PhpException::new(message, code, SqlxException::get_metadata().ce())
     }
 }
-
 
 impl From<std::num::TryFromIntError> for Error {
     fn from(err: std::num::TryFromIntError) -> Self {

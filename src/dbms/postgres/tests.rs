@@ -213,7 +213,9 @@ fn test_parse_in_not_in_and_string() {
         _ => panic!("Expected Sql at branch 0"),
     }
     match &branches[1] {
-        Ast::InClause { expr, placeholder, .. } => {
+        Ast::InClause {
+            expr, placeholder, ..
+        } => {
             assert_eq!(expr, "status");
             assert_eq!(placeholder, "statuses");
         }
@@ -224,7 +226,9 @@ fn test_parse_in_not_in_and_string() {
         _ => panic!("Expected Sql at branch 2"),
     }
     match &branches[3] {
-        Ast::NotInClause { expr, placeholder, .. } => {
+        Ast::NotInClause {
+            expr, placeholder, ..
+        } => {
             assert_eq!(expr, "age");
             assert_eq!(placeholder, "ages");
         }

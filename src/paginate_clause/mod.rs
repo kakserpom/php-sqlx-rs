@@ -24,8 +24,8 @@
 //! users from requesting excessive result sets.
 
 use crate::ast::Settings;
-use crate::param_value::ParameterValue;
 use crate::error::Error as SqlxError;
+use crate::param_value::ParameterValue;
 use ext_php_rs::{php_class, php_impl, prelude::ModuleBuilder};
 
 /// Registers the `PaginateClause` and `PaginateClauseRendered` classes with the PHP module builder.
@@ -125,7 +125,9 @@ impl PaginateClause {
     /// Returns an error if `per_page < 1`.
     pub fn per_page(&mut self, per_page: i64) -> crate::error::Result<()> {
         if per_page < 1 {
-            return Err(SqlxError::Other("per_page must be greater than 0".to_string()));
+            return Err(SqlxError::Other(
+                "per_page must be greater than 0".to_string(),
+            ));
         }
         self.min_per_page = per_page;
         self.max_per_page = per_page;
@@ -142,7 +144,9 @@ impl PaginateClause {
     /// Returns an error if `min_per_page < 1`.
     pub fn min_per_page(&mut self, min_per_page: i64) -> crate::error::Result<()> {
         if min_per_page < 1 {
-            return Err(SqlxError::Other("min_per_page must be greater than 0".to_string()));
+            return Err(SqlxError::Other(
+                "min_per_page must be greater than 0".to_string(),
+            ));
         }
         self.min_per_page = min_per_page;
         self.max_per_page = self.max_per_page.max(min_per_page);
@@ -159,7 +163,9 @@ impl PaginateClause {
     /// Returns an error if `max_per_page < 1`.
     pub fn max_per_page(&mut self, max_per_page: i64) -> crate::error::Result<()> {
         if max_per_page < 1 {
-            return Err(SqlxError::Other("max_per_page must be greater than 0".to_string()));
+            return Err(SqlxError::Other(
+                "max_per_page must be greater than 0".to_string(),
+            ));
         }
         self.min_per_page = self.min_per_page.min(max_per_page);
         self.max_per_page = max_per_page;

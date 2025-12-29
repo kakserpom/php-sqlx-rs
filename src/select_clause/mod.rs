@@ -21,8 +21,8 @@
 //! ```
 
 use crate::ast::Settings;
-use crate::utils::ident::is_valid_ident;
 use crate::error::Error as SqlxError;
+use crate::utils::ident::is_valid_ident;
 use ext_php_rs::{ZvalConvert, php_class, php_impl, prelude::ModuleBuilder};
 use itertools::Itertools;
 use std::collections::BTreeMap;
@@ -57,7 +57,9 @@ impl SelectClause {
     /// Returns an error if any provided expression is not a valid SQL identifier
     /// when the key is numeric.
     #[inline]
-    pub fn _new<K, V>(allowed_columns: impl IntoIterator<Item = (K, V)>) -> crate::error::Result<Self>
+    pub fn _new<K, V>(
+        allowed_columns: impl IntoIterator<Item = (K, V)>,
+    ) -> crate::error::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
@@ -71,7 +73,7 @@ impl SelectClause {
                     // Numeric keys mean value is the column name
                     if key.parse::<u32>().is_ok() {
                         if !is_valid_ident(&value) {
-                            return Err(SqlxError::Other(format!("Invalid identifier: {}", value)));
+                            return Err(SqlxError::Other(format!("Invalid identifier: {value}")));
                         }
                         Ok((value, None))
                     } else {
@@ -191,7 +193,11 @@ impl SelectClauseRendered {
     }
 
     #[inline]
-    pub(crate) fn write_sql_to(&self, sql: &mut String, settings: &Settings) -> crate::error::Result<()> {
+    pub(crate) fn write_sql_to(
+        &self,
+        sql: &mut String,
+        settings: &Settings,
+    ) -> crate::error::Result<()> {
         for (
             i,
             SelectClauseRenderedColumn {

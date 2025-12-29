@@ -26,8 +26,8 @@
 //! The `ByClause` class exposes `ASC` and `DESC` constants for sort direction.
 
 use crate::ast::Settings;
-use crate::utils::ident::is_valid_ident;
 use crate::error::Error as SqlxError;
+use crate::utils::ident::is_valid_ident;
 use ext_php_rs::builders::ModuleBuilder;
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use itertools::Itertools;
@@ -82,7 +82,9 @@ impl ByClause {
     ///
     /// # Errors
     /// Returns an error if a numeric key maps to an invalid SQL identifier.
-    pub fn allowed<K, V>(allowed_columns: impl IntoIterator<Item = (K, V)>) -> crate::error::Result<Self>
+    pub fn allowed<K, V>(
+        allowed_columns: impl IntoIterator<Item = (K, V)>,
+    ) -> crate::error::Result<Self>
     where
         K: Into<String>,
         V: Into<String>,
@@ -95,7 +97,7 @@ impl ByClause {
                     let value: String = value.into();
                     if key.parse::<u32>().is_ok() {
                         if !is_valid_ident(&value) {
-                            return Err(SqlxError::Other(format!("Invalid identifier: {}", value)));
+                            return Err(SqlxError::Other(format!("Invalid identifier: {value}")));
                         }
                         Ok((value, None))
                     } else {
@@ -223,7 +225,11 @@ impl ByClauseRendered {
     }
 
     #[inline]
-    pub(crate) fn write_sql_to(&self, sql: &mut String, settings: &Settings) -> crate::error::Result<()> {
+    pub(crate) fn write_sql_to(
+        &self,
+        sql: &mut String,
+        settings: &Settings,
+    ) -> crate::error::Result<()> {
         for (
             i,
             ByClauseRenderedField {

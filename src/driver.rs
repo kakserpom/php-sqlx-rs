@@ -1,8 +1,8 @@
 //! Database driver implementation macro for php-sqlx.
 //!
 //! This module provides the [`php_sqlx_impl_driver!`] macro that generates complete
-//! database driver implementations with PHP bindings. Each database type (PostgreSQL,
-//! MySQL, MSSQL) uses this macro to create a driver with consistent API.
+//! database driver implementations with PHP bindings. Each database type (`PostgreSQL`,
+//! `MySQL`, MS SQL) uses this macro to create a driver with consistent API.
 //!
 //! # Generated API
 //!
@@ -31,7 +31,7 @@
 ///
 /// This macro creates a driver struct, PHP class bindings, and all query methods
 /// for a specific database backend. It reduces boilerplate by providing a consistent
-/// API across PostgreSQL, MySQL, and MSSQL drivers.
+/// API across `PostgreSQL`, `MySQL`, and MS SQL drivers.
 ///
 /// # Arguments
 ///
@@ -130,7 +130,7 @@ macro_rules! php_sqlx_impl_driver {
 
         #[php_impl]
         impl $struct {
-            /// Constructs a new SQLx driver instance.
+            /// Constructs a new `SQLx` driver instance.
             ///
             /// # Arguments
             /// - `options`: Connection URL as string or associative array with options:
@@ -333,7 +333,7 @@ macro_rules! php_sqlx_impl_driver {
             /// - `column`: Optional column name or index to extract from the result row.
             ///
             /// # Returns
-            /// The value from the specified column of the first row as a PHP value`, or `null` if no row was found.
+            /// The value from the specified column of the first row as a PHP value, or `null` if no row was found.
             ///
             /// # Exceptions
             /// Throws an exception if:

@@ -45,14 +45,9 @@ impl Conversion for MssqlRow {
             "REAL" => try_cast_into_zval::<f32>(self, column_ordinal)?,
             "FLOAT" => try_cast_into_zval::<f64>(self, column_ordinal)?,
 
-            "DECIMAL" | "NUMERIC" | "MONEY" | "SMALLMONEY" => {
-                try_cast_into_zval::<String>(self, column_ordinal)?
-            }
-
-            "CHAR" | "VARCHAR" | "TEXT" | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML"
-            | "UNIQUEIDENTIFIER" => try_cast_into_zval::<String>(self, column_ordinal)?,
-
-            "DATE" | "TIME" | "DATETIME" | "DATETIME2" | "SMALLDATETIME" | "DATETIMEOFFSET" => {
+            "DECIMAL" | "NUMERIC" | "MONEY" | "SMALLMONEY" | "CHAR" | "VARCHAR" | "TEXT"
+            | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML" | "UNIQUEIDENTIFIER" | "DATE" | "TIME"
+            | "DATETIME" | "DATETIME2" | "SMALLDATETIME" | "DATETIMEOFFSET" => {
                 try_cast_into_zval::<String>(self, column_ordinal)?
             }
 
@@ -64,7 +59,7 @@ impl Conversion for MssqlRow {
                 .into_zval(false)
                 .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
 
-            other => return Err(SqlxError::Conversion { message: format!("unsupported type: {}", other) }),
+            other => return Err(SqlxError::Conversion { message: format!("unsupported type: {other}") }),
         })
     }
 
@@ -84,18 +79,17 @@ impl Conversion for MssqlRow {
             "INT" | "INTEGER" => ArrayKey::Long(i64::from(self.try_get::<i32, _>(column_ordinal)?)),
             "BIGINT" => ArrayKey::Long(self.try_get::<i64, _>(column_ordinal)?),
 
-            "DECIMAL" | "NUMERIC" | "MONEY" | "SMALLMONEY" => {
+            "DECIMAL" | "NUMERIC" | "MONEY" | "SMALLMONEY" | "CHAR" | "VARCHAR" | "TEXT"
+            | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML" | "UNIQUEIDENTIFIER" | "DATE" | "TIME"
+            | "DATETIME" | "DATETIME2" | "SMALLDATETIME" | "DATETIMEOFFSET" => {
                 ArrayKey::String(self.try_get::<String, _>(column_ordinal)?)
             }
 
-            "CHAR" | "VARCHAR" | "TEXT" | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML"
-            | "UNIQUEIDENTIFIER" => ArrayKey::String(self.try_get::<String, _>(column_ordinal)?),
-
-            "DATE" | "TIME" | "DATETIME" | "DATETIME2" | "SMALLDATETIME" | "DATETIMEOFFSET" => {
-                ArrayKey::String(self.try_get::<String, _>(column_ordinal)?)
+            other => {
+                return Err(SqlxError::Conversion {
+                    message: format!("unsupported type for array key: {other}"),
+                })
             }
-
-            other => return Err(SqlxError::Conversion { message: format!("unsupported type for array key: {}", other) }),
         })
     }
 }

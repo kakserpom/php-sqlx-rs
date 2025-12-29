@@ -31,7 +31,8 @@ impl<T: AsRef<str> + ?Sized> StripPrefixWordIgnoreAsciiCase for T {
                 return None;
             }
             if let Some(c) = &s[prefix_len..].chars().next()
-                && !c.is_whitespace() && !c.is_ascii_punctuation()
+                && !c.is_whitespace()
+                && !c.is_ascii_punctuation()
             {
                 return None;
             }

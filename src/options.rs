@@ -19,13 +19,13 @@
 //! ]);
 //! ```
 
+use crate::error::{Error as SqlxError, Result};
 use crate::param_value::ParameterValue;
 use crate::{
     DEFAULT_ASSOC_ARRAYS, DEFAULT_AST_CACHE_SHARD_COUNT, DEFAULT_AST_CACHE_SHARD_SIZE,
     DEFAULT_COLLAPSIBLE_IN, DEFAULT_MAX_CONNECTIONS, DEFAULT_MIN_CONNECTIONS,
     DEFAULT_TEST_BEFORE_ACQUIRE,
 };
-use crate::error::{Error as SqlxError, Result};
 use ext_php_rs::{ZvalConvert, php_class, php_impl};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
@@ -179,7 +179,10 @@ impl DriverOptionsArg {
                         if let ParameterValue::Int(n) = value {
                             Ok(usize::try_from(*n)?)
                         } else {
-                            Err(SqlxError::config("ast_cache_shard_count", "must be an integer"))
+                            Err(SqlxError::config(
+                                "ast_cache_shard_count",
+                                "must be an integer",
+                            ))
                         }
                     },
                 )?,
@@ -189,7 +192,10 @@ impl DriverOptionsArg {
                         if let ParameterValue::Int(n) = value {
                             Ok(usize::try_from(*n)?)
                         } else {
-                            Err(SqlxError::config("ast_cache_shard_size", "must be an integer"))
+                            Err(SqlxError::config(
+                                "ast_cache_shard_size",
+                                "must be an integer",
+                            ))
                         }
                     },
                 )?,
@@ -209,7 +215,10 @@ impl DriverOptionsArg {
                         if let ParameterValue::Int(n) = value {
                             Ok(NonZeroU32::try_from(u32::try_from(*n)?)?)
                         } else {
-                            Err(SqlxError::config("max_connections", "must be a positive integer"))
+                            Err(SqlxError::config(
+                                "max_connections",
+                                "must be a positive integer",
+                            ))
                         }
                     },
                 )?,
@@ -219,36 +228,60 @@ impl DriverOptionsArg {
                         if let ParameterValue::Int(n) = value {
                             Ok(u32::try_from(*n)?)
                         } else {
-                            Err(SqlxError::config("min_connections", "must be a non-negative integer"))
+                            Err(SqlxError::config(
+                                "min_connections",
+                                "must be a non-negative integer",
+                            ))
                         }
                     },
                 )?,
                 max_lifetime: match kv.get(DriverOptions::OPT_MAX_LIFETIME) {
                     None | Some(ParameterValue::Null) => None,
-                    Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)
-                        .map_err(|e| SqlxError::config("max_lifetime", e.to_string()))?),
+                    Some(ParameterValue::String(value)) => Some(
+                        parse_duration::parse(value)
+                            .map_err(|e| SqlxError::config("max_lifetime", e.to_string()))?,
+                    ),
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }
-                    _ => return Err(SqlxError::config("max_lifetime", "must be a string or a non-negative integer")),
+                    _ => {
+                        return Err(SqlxError::config(
+                            "max_lifetime",
+                            "must be a string or a non-negative integer",
+                        ));
+                    }
                 },
                 idle_timeout: match kv.get(DriverOptions::OPT_IDLE_TIMEOUT) {
                     None | Some(ParameterValue::Null) => None,
-                    Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)
-                        .map_err(|e| SqlxError::config("idle_timeout", e.to_string()))?),
+                    Some(ParameterValue::String(value)) => Some(
+                        parse_duration::parse(value)
+                            .map_err(|e| SqlxError::config("idle_timeout", e.to_string()))?,
+                    ),
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }
-                    _ => return Err(SqlxError::config("idle_timeout", "must be a string or a non-negative integer")),
+                    _ => {
+                        return Err(SqlxError::config(
+                            "idle_timeout",
+                            "must be a string or a non-negative integer",
+                        ));
+                    }
                 },
                 acquire_timeout: match kv.get(DriverOptions::OPT_ACQUIRE_TIMEOUT) {
                     None | Some(ParameterValue::Null) => None,
-                    Some(ParameterValue::String(value)) => Some(parse_duration::parse(value)
-                        .map_err(|e| SqlxError::config("acquire_timeout", e.to_string()))?),
+                    Some(ParameterValue::String(value)) => Some(
+                        parse_duration::parse(value)
+                            .map_err(|e| SqlxError::config("acquire_timeout", e.to_string()))?,
+                    ),
                     Some(ParameterValue::Int(value)) => {
                         Some(Duration::from_secs(u64::try_from(*value)?))
                     }
-                    _ => return Err(SqlxError::config("acquire_timeout", "must be a string or a non-negative integer")),
+                    _ => {
+                        return Err(SqlxError::config(
+                            "acquire_timeout",
+                            "must be a string or a non-negative integer",
+                        ));
+                    }
                 },
                 test_before_acquire: kv.get(DriverOptions::OPT_TEST_BEFORE_ACQUIRE).map_or(
                     Ok(DEFAULT_TEST_BEFORE_ACQUIRE),
@@ -256,7 +289,10 @@ impl DriverOptionsArg {
                         if let ParameterValue::Bool(bool) = value {
                             Ok(*bool)
                         } else {
-                            Err(SqlxError::config("test_before_acquire", "must be a boolean"))
+                            Err(SqlxError::config(
+                                "test_before_acquire",
+                                "must be a boolean",
+                            ))
                         }
                     },
                 )?,

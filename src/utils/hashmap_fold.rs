@@ -20,7 +20,11 @@ pub fn fold_into_zend_hashmap(
     item: Result<(ArrayKey, Zval)>,
 ) -> Result<ZBox<ZendHashTable>> {
     let (key, value) = item?;
-    array.insert(key, value).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+    array
+        .insert(key, value)
+        .map_err(|err| SqlxError::Conversion {
+            message: format!("{err:?}"),
+        })?;
     Ok(array)
 }
 
@@ -39,25 +43,41 @@ pub fn fold_into_zend_hashmap_grouped(
     match key {
         ArrayKey::Long(_) | ArrayKey::Str(_) => {
             if let Some(entry) = array.get_mut(key.clone()).and_then(Zval::array_mut) {
-                entry.push(value).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                entry.push(value).map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })?;
             } else {
                 let mut entry_array = zend_array::new();
-                entry_array.push(value).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                entry_array
+                    .push(value)
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })?;
                 array
                     .insert(key, entry_array)
-                    .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })?;
             }
         }
         ArrayKey::String(key) => {
             let key = key.as_str();
             if let Some(entry) = array.get_mut(key).and_then(Zval::array_mut) {
-                entry.push(value).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                entry.push(value).map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })?;
             } else {
                 let mut entry_array = zend_array::new();
-                entry_array.push(value).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                entry_array
+                    .push(value)
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })?;
                 array
                     .insert(key, entry_array)
-                    .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })?;
             }
         }
     }

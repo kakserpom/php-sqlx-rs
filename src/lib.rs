@@ -1,11 +1,11 @@
 //! # php-sqlx
 //!
-//! A high-performance PHP extension for database access, built with Rust and SQLx.
+//! A high-performance PHP extension for database access, built with Rust and `SQLx`.
 //!
 //! ## Features
 //!
 //! - **AST-based SQL augmentation**: Conditional blocks, safe IN clauses, pagination
-//! - **Multiple database support**: PostgreSQL, MySQL, MSSQL
+//! - **Multiple database support**: `PostgreSQL`, `MySQL`, MS SQL
 //! - **Connection pooling**: Efficient connection management with configurable limits
 //! - **Prepared queries**: Cached AST parsing for repeated queries
 //! - **Query builder**: Fluent API for constructing SQL queries safely
@@ -65,13 +65,12 @@ use std::num::NonZeroU32;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
 
-/// Global Tokio runtime for executing async SQLx queries from synchronous PHP context.
+/// Global Tokio runtime for executing async `SQLx` queries from synchronous PHP context.
 ///
 /// This runtime is lazily initialized on first use and shared across all database
-/// operations. It bridges the async SQLx API with PHP's synchronous execution model.
-static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
-    Runtime::new().expect("Failed to create Tokio runtime")
-});
+/// operations. It bridges the async `SQLx` API with PHP's synchronous execution model.
+static RUNTIME: LazyLock<Runtime> =
+    LazyLock::new(|| Runtime::new().expect("Failed to create Tokio runtime"));
 
 /// Default number of shards in the AST LRU cache for concurrent access.
 const DEFAULT_AST_CACHE_SHARD_COUNT: usize = 8;

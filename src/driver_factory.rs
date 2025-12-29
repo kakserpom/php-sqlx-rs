@@ -1,8 +1,8 @@
 use crate::dbms::mssql::MssqlDriver;
 use crate::dbms::mysql::MySqlDriver;
 use crate::dbms::postgres::PgDriver;
-use crate::options::{DriverOptions, DriverOptionsArg};
 use crate::error::Error as SqlxError;
+use crate::options::{DriverOptions, DriverOptionsArg};
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ZendClassObject, Zval};
@@ -36,28 +36,27 @@ impl DriverFactory {
     /// Instance of `Sqlx\PgDriver`, `Sqlx\MySqlDriver`, or `Sqlx\MssqlDriver`
     pub fn make(url_or_options: DriverOptionsArg) -> crate::error::Result<Zval> {
         let options = url_or_options.parse()?;
-        let url = Url::parse(
-            options
-                .url
-                .as_ref()
-                .ok_or(SqlxError::UrlRequired)?,
-        )?;
+        let url = Url::parse(options.url.as_ref().ok_or(SqlxError::UrlRequired)?)?;
         let scheme = url.scheme();
         match scheme.to_lowercase().as_str() {
             "postgres" | "postgresql" | "pgsql" => {
                 Ok(ZendClassObject::new(PgDriver::new(options)?)
                     .into_zval(false)
-                    .map_err(|err| SqlxError::Conversion { message: format!("{err}") })?)
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err}"),
+                    })?)
             }
             "mysql" => Ok(ZendClassObject::new(MySqlDriver::new(options)?)
                 .into_zval(false)
-                .map_err(|err| SqlxError::Conversion { message: format!("{err}") })?),
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err}"),
+                })?),
             "mssql" | "sqlserver" => Ok(ZendClassObject::new(MssqlDriver::new(options)?)
                 .into_zval(false)
-                .map_err(|err| SqlxError::Conversion { message: format!("{err}") })?),
-            _ => {
-                return Err(SqlxError::Other(format!("Unsupported scheme: {scheme}")))
-            }
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err}"),
+                })?),
+            _ => Err(SqlxError::Other(format!("Unsupported scheme: {scheme}"))),
         }
     }
 }

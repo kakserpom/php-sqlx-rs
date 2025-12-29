@@ -69,7 +69,9 @@ where
             | ParameterValue::PaginateClauseRendered(_)
             | ParameterValue::Builder(_)
             | ParameterValue::Null => {
-                return Err(SqlxError::Other("Internal error: cannot bind parameter of this type".to_string()))
+                return Err(SqlxError::Other(
+                    "Internal error: cannot bind parameter of this type".to_string(),
+                ));
             }
         })
     }

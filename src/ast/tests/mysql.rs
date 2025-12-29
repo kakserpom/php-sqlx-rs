@@ -93,7 +93,7 @@ fn test_render_order_by_apply() {
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
     ])
-        .unwrap();
+    .unwrap();
 
     let rendered = ob.render(vec![
         ByClauseColumnDefinition::Short("name".into()),
@@ -123,7 +123,7 @@ fn test_render_order_by_apply_empty() {
         ("age", "users.age"),
         ("posts", "COUNT(posts.id)"),
     ])
-        .unwrap();
+    .unwrap();
 
     let rendered = ob.render(vec![]);
 
@@ -164,7 +164,9 @@ fn test_parse_in_not_in_and_string() {
     }
     // 1: InClause
     match &branches[1] {
-        Ast::InClause { expr, placeholder, .. } => {
+        Ast::InClause {
+            expr, placeholder, ..
+        } => {
             assert_eq!(expr, "status");
             assert_eq!(placeholder, "statuses");
         }
@@ -177,7 +179,9 @@ fn test_parse_in_not_in_and_string() {
     }
     // 3: NotInClause
     match &branches[3] {
-        Ast::NotInClause { expr, placeholder, .. } => {
+        Ast::NotInClause {
+            expr, placeholder, ..
+        } => {
             assert_eq!(expr, "age");
             assert_eq!(placeholder, "ages");
         }

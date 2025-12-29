@@ -1,6 +1,6 @@
 use crate::ast::Settings;
-use crate::param_value::ParameterValue;
 use crate::error::Error as SqlxError;
+use crate::param_value::ParameterValue;
 
 impl ParameterValue {
     /// Escapes `%`, `_`, and `\` characters in the input string by prefixing them with a backslash,
@@ -10,7 +10,9 @@ impl ParameterValue {
     /// A new `String` where all occurrences of `%`, `_`, and `\` are escaped.
     pub fn meta_quote_like(&self) -> crate::error::Result<String> {
         let Self::String(input) = self else {
-            return Err(SqlxError::Other("meta_quote_like called on non-string parameter".to_string()));
+            return Err(SqlxError::Other(
+                "meta_quote_like called on non-string parameter".to_string(),
+            ));
         };
 
         let mut escaped = String::with_capacity(input.len());
@@ -92,7 +94,9 @@ impl ParameterValue {
             | Self::SelectClauseRendered(_)
             | Self::PaginateClauseRendered(_)
             | Self::Builder(_) => {
-                return Err(SqlxError::Other("Cannot quote a clause as a value".to_string()))
+                return Err(SqlxError::Other(
+                    "Cannot quote a clause as a value".to_string(),
+                ));
             }
         })
     }
@@ -129,21 +133,22 @@ mod tests {
     fn test_quote_numbers() {
         let settings = Settings::default();
         assert_eq!(ParameterValue::Int(123).quote(&settings).unwrap(), "123");
-        assert_eq!(
-            ParameterValue::Float(3.14).quote(&settings).unwrap(),
-            "3.14"
-        );
+        assert_eq!(ParameterValue::Float(3.5).quote(&settings).unwrap(), "3.5");
     }
 
     #[test]
     fn test_quote_bool() {
-        let mut settings = Settings::default();
-
-        settings.booleans_as_literals = false;
+        let settings = Settings {
+            booleans_as_literals: false,
+            ..Settings::default()
+        };
         assert_eq!(ParameterValue::Bool(true).quote(&settings).unwrap(), "1");
         assert_eq!(ParameterValue::Bool(false).quote(&settings).unwrap(), "0");
 
-        settings.booleans_as_literals = true;
+        let settings = Settings {
+            booleans_as_literals: true,
+            ..Settings::default()
+        };
         assert_eq!(ParameterValue::Bool(true).quote(&settings).unwrap(), "TRUE");
         assert_eq!(
             ParameterValue::Bool(false).quote(&settings).unwrap(),
@@ -153,15 +158,19 @@ mod tests {
 
     #[test]
     fn test_quote_string() {
-        let mut settings = Settings::default();
-
-        settings.strings_as_ntext = false;
+        let settings = Settings {
+            strings_as_ntext: false,
+            ..Settings::default()
+        };
         let quoted = ParameterValue::String("O'Reilly".into())
             .quote(&settings)
             .unwrap();
         assert_eq!(quoted, "'O''Reilly'");
 
-        settings.strings_as_ntext = true;
+        let settings = Settings {
+            strings_as_ntext: true,
+            ..Settings::default()
+        };
         let quoted = ParameterValue::String("line1\nline2".into())
             .quote(&settings)
             .unwrap();
