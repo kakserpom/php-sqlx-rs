@@ -187,7 +187,7 @@ jobs:
           fi
           php -m | grep -i sqlx
 
-      - name: Run integration tests
+      - name: Run basic integration test
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
         run: |
@@ -201,6 +201,16 @@ jobs:
             }
             echo 'SUCCESS: PostgreSQL connection works' . PHP_EOL;
           "
+
+      - name: Install PHPUnit
+        working-directory: tests
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Run PHPUnit tests (PostgreSQL)
+        working-directory: tests
+        env:
+          POSTGRES_URL: postgres://postgres:postgres@localhost:5432/test_db
+        run: vendor/bin/phpunit --testsuite PostgreSQL --colors=always
 
       - name: Test describeTable
         env:
@@ -328,7 +338,7 @@ jobs:
           fi
           php -m | grep -i sqlx
 
-      - name: Run integration tests
+      - name: Run basic integration test
         env:
           DATABASE_URL: mysql://root:root@localhost:3306/test_db
         run: |
@@ -342,6 +352,16 @@ jobs:
             }
             echo 'SUCCESS: MySQL connection works' . PHP_EOL;
           "
+
+      - name: Install PHPUnit
+        working-directory: tests
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Run PHPUnit tests (MySQL)
+        working-directory: tests
+        env:
+          MYSQL_URL: mysql://root:root@localhost:3306/test_db
+        run: vendor/bin/phpunit --testsuite MySQL --colors=always
 
       - name: Test describeTable (MySQL)
         env:
@@ -454,7 +474,7 @@ jobs:
           # Create test database
           /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPassword123!' -C -Q "CREATE DATABASE test_db"
 
-      - name: Run integration tests
+      - name: Run basic integration test
         run: |
           php -r "
             \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true');
@@ -465,6 +485,16 @@ jobs:
             }
             echo 'SUCCESS: MSSQL connection works' . PHP_EOL;
           "
+
+      - name: Install PHPUnit
+        working-directory: tests
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Run PHPUnit tests (MSSQL)
+        working-directory: tests
+        env:
+          MSSQL_URL: mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true
+        run: vendor/bin/phpunit --testsuite MSSQL --colors=always
 
       - name: Test describeTable (MSSQL)
         run: |

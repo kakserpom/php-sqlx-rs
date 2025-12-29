@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
+         bootstrap="bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         executionOrder="depends,defects"
+         requireCoverageMetadata="false"
+         beStrictAboutCoverageMetadata="false"
+         beStrictAboutOutputDuringTests="true"
+         failOnRisky="true"
+         failOnWarning="true">
+    <testsuites>
+        <testsuite name="PostgreSQL">
+            <directory>Integration/PostgreSQL</directory>
+        </testsuite>
+        <testsuite name="MySQL">
+            <directory>Integration/MySQL</directory>
+        </testsuite>
+        <testsuite name="MSSQL">
+            <directory>Integration/MSSQL</directory>
+        </testsuite>
+        <testsuite name="All">
+            <directory>Integration</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="POSTGRES_URL" value="postgres://postgres:postgres@localhost:5432/test_db"/>
+        <env name="MYSQL_URL" value="mysql://root:root@localhost:3306/test_db"/>
+        <env name="MSSQL_URL" value="mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true"/>
+    </php>
+</phpunit>

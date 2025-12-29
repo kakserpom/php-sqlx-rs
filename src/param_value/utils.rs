@@ -3,6 +3,7 @@ use crate::param_value::ParameterValue;
 use sqlx_oldapi::database::HasArguments;
 use sqlx_oldapi::query::Query;
 use sqlx_oldapi::{Database, Encode, Type};
+use std::option::Option as StdOption;
 
 /// Binds a list of `ParameterValue` items to an `SQLx` query.
 ///
@@ -14,8 +15,9 @@ use sqlx_oldapi::{Database, Encode, Type};
 /// - `Array`, `Object` — recursively expanded and flattened into positional bindings
 ///
 /// # Unsupported types
-/// - `ByClauseRendered`, `SelectClauseRendered`, `PaginateClauseRendered`, and `Null` are not bindable and will
+/// - `ByClauseRendered`, `SelectClauseRendered`, `PaginateClauseRendered`, and `Builder` are not bindable and will
 ///   result in an error
+/// - `Null` — bound as `Option<String>::None`
 ///
 /// # Errors
 /// Returns a `crate::error::Error` if an unsupported value is encountered or if recursive binding fails.
@@ -41,6 +43,8 @@ where
     bool: Encode<'a, D>,
     String: Type<D>,
     String: Encode<'a, D>,
+    StdOption<String>: Type<D>,
+    StdOption<String>: Encode<'a, D>,
 {
     fn walker<'a, D: Database>(
         q: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
@@ -55,6 +59,8 @@ where
         bool: Encode<'a, D>,
         String: Type<D>,
         String: Encode<'a, D>,
+        StdOption<String>: Type<D>,
+        StdOption<String>: Encode<'a, D>,
     {
         Ok(match value {
             ParameterValue::Json(pv) => q.bind(pv.to_json()?),
@@ -64,11 +70,11 @@ where
             ParameterValue::Float(s) => q.bind(s),
             ParameterValue::Array(s) => s.iter().try_fold(q, walker)?,
             ParameterValue::Object(_) => q.bind(value.to_json()?),
+            ParameterValue::Null => q.bind(StdOption::<String>::None),
             ParameterValue::ByClauseRendered(_)
             | ParameterValue::SelectClauseRendered(_)
             | ParameterValue::PaginateClauseRendered(_)
-            | ParameterValue::Builder(_)
-            | ParameterValue::Null => {
+            | ParameterValue::Builder(_) => {
                 return Err(SqlxError::Other(
                     "Internal error: cannot bind parameter of this type".to_string(),
                 ));

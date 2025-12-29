@@ -1,0 +1,19 @@
+{
+    "name": "php-sqlx/tests",
+    "description": "Integration tests for php-sqlx",
+    "type": "project",
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "PhpSqlx\\Tests\\": ""
+        }
+    },
+    "scripts": {
+        "test": "phpunit --configuration phpunit.xml",
+        "test:postgres": "phpunit --configuration phpunit.xml --testsuite PostgreSQL",
+        "test:mysql": "phpunit --configuration phpunit.xml --testsuite MySQL",
+        "test:mssql": "phpunit --configuration phpunit.xml --testsuite MSSQL"
+    }
+}

@@ -1167,12 +1167,12 @@ macro_rules! php_sqlx_impl_driver {
             /// Throws an exception if transaction start, commit, rollback,
             /// or callable invocation fails.
             ///
-            pub fn begin(&self, callable: Option<ZendCallable>) -> PhpResult<()> {
+            pub fn begin(&self, callable: Option<ZendCallable>) -> PhpResult<bool> {
                 self.driver_inner.begin()?;
 
                 // If no callable provided, leave transaction active for manual control
                 if callable.is_none() {
-                    return Ok(());
+                    return Ok(true);
                 }
 
                 // Callback-based transaction with automatic commit/rollback
@@ -1190,7 +1190,7 @@ macro_rules! php_sqlx_impl_driver {
                                 .block_on(tx.commit())
                                 .map_err(SqlxError::commit_failed)?;
                         }
-                        Ok(())
+                        Ok(true)
                     }
                     Err(err) => {
                         $crate::RUNTIME

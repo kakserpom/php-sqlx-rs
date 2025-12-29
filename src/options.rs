@@ -669,14 +669,15 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn test_weighted_selection_distribution() {
         // Test the weighted selection algorithm logic
-        let weights = vec![3u32, 1u32];
+        let weights: &[u32] = &[3, 1];
         let total_weight: u32 = weights.iter().sum();
 
         let mut counts = vec![0usize; weights.len()];
 
-        // Simulate 1000 selections
+        // Simulate 1000 selections - truncation is intentional for modulo wrapping
         for counter in 0..1000usize {
             let slot = (counter as u32) % total_weight;
             let mut cumulative = 0u32;
@@ -695,12 +696,14 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn test_weighted_selection_equal_weights() {
-        let weights = vec![1u32, 1u32, 1u32];
+        let weights: &[u32] = &[1, 1, 1];
         let total_weight: u32 = weights.iter().sum();
 
         let mut counts = vec![0usize; weights.len()];
 
+        // Truncation is intentional for modulo wrapping
         for counter in 0..300usize {
             let slot = (counter as u32) % total_weight;
             let mut cumulative = 0u32;

@@ -6,6 +6,7 @@ use crate::conversion::{Conversion, json_into_zval};
 use crate::error::Error as SqlxError;
 #[cfg(feature = "lazy-row")]
 use crate::lazy_row::LazyRowJson;
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
@@ -15,6 +16,7 @@ use sqlx_oldapi::TypeInfo;
 use sqlx_oldapi::error::UnexpectedNullError;
 use sqlx_oldapi::postgres::{PgRow, PgValueRef};
 use sqlx_oldapi::{Decode, Row, Type};
+use uuid::Uuid;
 
 impl Conversion for PgRow {
     fn column_value_into_zval<PgColumn: Column, Postgres>(
@@ -54,7 +56,14 @@ impl Conversion for PgRow {
             "FLOAT4" => try_cast_into_zval::<f32>(self, column_ordinal)?,
             "FLOAT8" | "F64" => try_cast_into_zval::<f64>(self, column_ordinal)?,
             "NUMERIC" | "MONEY" => try_cast_into_zval::<String>(self, column_ordinal)?,
-            "UUID" => try_cast_into_zval::<String>(self, column_ordinal)?,
+            "UUID" => {
+                match self.try_get::<Uuid, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
             "JSON" => self
                 .try_get_raw::<_>(column_ordinal)
                 .map(|val_ref: PgValueRef| {
@@ -87,25 +96,27 @@ impl Conversion for PgRow {
                     if buf.is_empty() {
                         return Err(SqlxError::Conversion { message: format!("empty JSONB raw value in {:?}", column.name()) });
                     }
-                    if buf[0] != 1 {
-                        return Err(SqlxError::Conversion {
-                            message: format!("unsupported JSONB format version {}; please open an issue", buf[0]),
-                        });
-                    }
+                    // JSONB binary format starts with version byte 1, text format starts with '{' (123) or '[' (91)
+                    let json_data = if buf[0] == 1 {
+                        &buf[1..]
+                    } else {
+                        // Text format - no version header
+                        buf
+                    };
                     #[cfg(not(feature = "lazy-row"))]
                     {
                         #[cfg(feature = "simd-json")]
                         return json_into_zval(
-                            simd_json::from_slice::<serde_json::Value>(&mut buf[1..].to_vec())?,
+                            simd_json::from_slice::<serde_json::Value>(&mut json_data.to_vec())?,
                             associative_arrays,
                         );
                         #[cfg(not(feature = "simd-json"))]
-                        return serde_json::from_slice(&mut buf[1..].to_vec())?
+                        return serde_json::from_slice(&mut json_data.to_vec())?
                             .into_zval(associative_arrays)
                             .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") });
                     }
                     #[cfg(feature = "lazy-row")]
-                    LazyRowJson::new(&buf[1..], associative_arrays)
+                    LazyRowJson::new(json_data, associative_arrays)
                         .into_zval(associative_arrays)
                         .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
                 })??,
@@ -119,9 +130,39 @@ impl Conversion for PgRow {
                 })?
                 .into_zval(false)
                 .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
-            "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ" | "INTERVAL" | "TIMETZ" => {
-                try_cast_into_zval::<String>(self, column_ordinal)?
+            "DATE" => {
+                match self.try_get::<NaiveDate, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
             }
+            "TIME" | "TIMETZ" => {
+                match self.try_get::<NaiveTime, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "TIMESTAMP" => {
+                match self.try_get::<NaiveDateTime, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "TIMESTAMPTZ" => {
+                match self.try_get::<DateTime<Utc>, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "INTERVAL" => try_cast_into_zval::<String>(self, column_ordinal)?,
             "INET" | "CIDR" | "MACADDR" | "MACADDR8" => {
                 try_cast_into_zval::<String>(self, column_ordinal)?
             }
@@ -148,8 +189,52 @@ impl Conversion for PgRow {
             "_FLOAT4" => try_cast_into_zval::<Vec<f32>>(self, column_ordinal)?,
             "_FLOAT8" => try_cast_into_zval::<Vec<f64>>(self, column_ordinal)?,
             "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
-            "_UUID" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
-            "_DATE" | "_TIME" | "_TIMESTAMP" | "_TIMESTAMPTZ" | "_INTERVAL" | "_TIMETZ" => {
+            "_UUID" => {
+                match self.try_get::<Vec<Uuid>, _>(column_ordinal) {
+                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "_DATE" => {
+                match self.try_get::<Vec<NaiveDate>, _>(column_ordinal) {
+                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "_TIME" | "_TIMETZ" => {
+                match self.try_get::<Vec<NaiveTime>, _>(column_ordinal) {
+                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "_TIMESTAMP" => {
+                match self.try_get::<Vec<NaiveDateTime>, _>(column_ordinal) {
+                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "_TIMESTAMPTZ" => {
+                match self.try_get::<Vec<DateTime<Utc>>, _>(column_ordinal) {
+                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "_INTERVAL" => {
                 try_cast_into_zval::<Vec<String>>(self, column_ordinal)?
             }
             "_INET" | "_CIDR" | "_MACADDR" | "_MACADDR8" => {
@@ -164,6 +249,10 @@ impl Conversion for PgRow {
             "_RECORD" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
             "_JSONPATH" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
 
+            // Handle array types with "TYPE[]" format (alternative to "_TYPE" format)
+            other if other.ends_with("[]") => {
+                try_cast_into_zval::<Vec<String>>(self, column_ordinal)?
+            }
             other => return Err(SqlxError::Conversion { message: format!("unsupported type: {other}") }),
         })
     }

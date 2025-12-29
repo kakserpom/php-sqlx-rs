@@ -1203,6 +1203,60 @@ See [editors/phpstorm/README.md](editors/phpstorm/README.md) for details.
 
 ---
 
+## Testing
+
+### Running Unit Tests (Rust)
+
+```bash
+cargo test --all-features
+```
+
+### Running Integration Tests (PHPUnit)
+
+Start the test databases with Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+Install PHPUnit and run tests:
+
+```bash
+cd tests
+composer install
+vendor/bin/phpunit                       # Run all tests
+vendor/bin/phpunit --testsuite PostgreSQL  # PostgreSQL only
+vendor/bin/phpunit --testsuite MySQL       # MySQL only
+vendor/bin/phpunit --testsuite MSSQL       # MSSQL only
+```
+
+#### Test Configuration
+
+Database URLs are configured in `tests/phpunit.xml`:
+
+```xml
+<env name="POSTGRES_URL" value="postgres://postgres:postgres@localhost:5432/test_db"/>
+<env name="MYSQL_URL" value="mysql://root:root@localhost:3306/test_db"/>
+<env name="MSSQL_URL" value="mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true"/>
+```
+
+#### Test Coverage
+
+The integration tests cover:
+- Connection handling
+- Basic queries (queryAll, queryRow, queryMaybeRow, queryValue, queryColumn)
+- Named and positional parameters
+- Type-safe placeholders
+- IN clause expansion
+- Conditional blocks
+- Transactions (commit, rollback, callback)
+- Schema introspection (describeTable)
+- Query hooks
+- Connection tagging
+- Database-specific features (RETURNING, OUTPUT, JSON types, etc.)
+
+---
+
 ## License
 
 MIT

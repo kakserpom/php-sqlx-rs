@@ -8,3 +8,8 @@ php-sqlx = { path = ".." }
 
 [lib]
 crate-type = ["cdylib"]
+
+# Patch clang-sys and bindgen for preserve_none and Swift calling convention support
+[patch.crates-io]
+clang-sys = { git = "https://github.com/extphprs/clang-sys.git", branch = "preserve-none-support" }
+bindgen = { git = "https://github.com/extphprs/rust-bindgen.git", branch = "preserve-none-support" }
