@@ -105,11 +105,23 @@ jobs:
       - name: Install PHP extension
         run: |
           EXT_DIR=$(php -r "echo ini_get('extension_dir');")
+          echo "Extension directory: $EXT_DIR"
           sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
-          echo "extension=sqlx.so" | sudo tee /etc/php/${{ matrix.php }}/cli/conf.d/99-sqlx.ini
+          # Find the correct PHP ini scan directory
+          INI_DIR=$(php -r "echo PHP_CONFIG_FILE_SCAN_DIR;")
+          echo "INI scan directory: $INI_DIR"
+          if [ -n "$INI_DIR" ] && [ -d "$INI_DIR" ]; then
+            echo "extension=sqlx.so" | sudo tee "$INI_DIR/99-sqlx.ini"
+          else
+            # Fallback: add to main php.ini
+            PHP_INI=$(php -r "echo php_ini_loaded_file();")
+            echo "extension=sqlx.so" | sudo tee -a "$PHP_INI"
+          fi
 
       - name: Verify extension loads
-        run: php -m | grep -i sqlx
+        run: |
+          php -m
+          php -m | grep -i sqlx
 
   integration-postgres:
     name: Integration Tests (PostgreSQL)
@@ -163,8 +175,17 @@ jobs:
       - name: Install PHP extension
         run: |
           EXT_DIR=$(php -r "echo ini_get('extension_dir');")
+          echo "Extension directory: $EXT_DIR"
           sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
-          echo "extension=sqlx.so" | sudo tee /etc/php/8.4/cli/conf.d/99-sqlx.ini
+          INI_DIR=$(php -r "echo PHP_CONFIG_FILE_SCAN_DIR;")
+          echo "INI scan directory: $INI_DIR"
+          if [ -n "$INI_DIR" ] && [ -d "$INI_DIR" ]; then
+            echo "extension=sqlx.so" | sudo tee "$INI_DIR/99-sqlx.ini"
+          else
+            PHP_INI=$(php -r "echo php_ini_loaded_file();")
+            echo "extension=sqlx.so" | sudo tee -a "$PHP_INI"
+          fi
+          php -m | grep -i sqlx
 
       - name: Run integration tests
         env:
@@ -232,8 +253,17 @@ jobs:
       - name: Install PHP extension
         run: |
           EXT_DIR=$(php -r "echo ini_get('extension_dir');")
+          echo "Extension directory: $EXT_DIR"
           sudo cp target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
-          echo "extension=sqlx.so" | sudo tee /etc/php/8.4/cli/conf.d/99-sqlx.ini
+          INI_DIR=$(php -r "echo PHP_CONFIG_FILE_SCAN_DIR;")
+          echo "INI scan directory: $INI_DIR"
+          if [ -n "$INI_DIR" ] && [ -d "$INI_DIR" ]; then
+            echo "extension=sqlx.so" | sudo tee "$INI_DIR/99-sqlx.ini"
+          else
+            PHP_INI=$(php -r "echo php_ini_loaded_file();")
+            echo "extension=sqlx.so" | sudo tee -a "$PHP_INI"
+          fi
+          php -m | grep -i sqlx
 
       - name: Run integration tests
         env:
