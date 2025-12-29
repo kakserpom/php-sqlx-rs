@@ -199,7 +199,70 @@ jobs:
               echo 'FAILED: Unexpected result';
               exit(1);
             }
-            echo 'SUCCESS: PostgreSQL connection works';
+            echo 'SUCCESS: PostgreSQL connection works' . PHP_EOL;
+          "
+
+      - name: Test describeTable
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+        run: |
+          php -r "
+            \$driver = Sqlx\DriverFactory::make('postgres://postgres:postgres@localhost:5432/test_db');
+
+            // Create a test table
+            \$driver->execute('DROP TABLE IF EXISTS test_describe_table');
+            \$driver->execute('CREATE TABLE test_describe_table (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              email VARCHAR(255),
+              created_at TIMESTAMP DEFAULT NOW()
+            )');
+
+            // Test describeTable
+            \$columns = \$driver->describeTable('test_describe_table');
+
+            if (count(\$columns) !== 4) {
+              echo 'FAILED: Expected 4 columns, got ' . count(\$columns);
+              exit(1);
+            }
+
+            // Verify column structure
+            \$idCol = \$columns[0];
+            if (\$idCol['name'] !== 'id') {
+              echo 'FAILED: First column should be id';
+              exit(1);
+            }
+            if (\$idCol['ordinal'] !== 1) {
+              echo 'FAILED: First column ordinal should be 1';
+              exit(1);
+            }
+
+            // Cleanup
+            \$driver->execute('DROP TABLE test_describe_table');
+
+            echo 'SUCCESS: describeTable works correctly' . PHP_EOL;
+          "
+
+      - name: Test describeTable validation
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+        run: |
+          php -r "
+            \$driver = Sqlx\DriverFactory::make('postgres://postgres:postgres@localhost:5432/test_db');
+
+            // Test invalid table name (SQL injection attempt)
+            try {
+              \$driver->describeTable('users; DROP TABLE users;--');
+              echo 'FAILED: Should have thrown exception for invalid table name';
+              exit(1);
+            } catch (Sqlx\SqlxException \$e) {
+              if (\$e->getCode() !== Sqlx\SqlxException::VALIDATION) {
+                echo 'FAILED: Expected VALIDATION error code';
+                exit(1);
+              }
+            }
+
+            echo 'SUCCESS: describeTable validation works' . PHP_EOL;
           "
 
   integration-mysql:
@@ -277,5 +340,163 @@ jobs:
               echo 'FAILED: Unexpected result';
               exit(1);
             }
-            echo 'SUCCESS: MySQL connection works';
+            echo 'SUCCESS: MySQL connection works' . PHP_EOL;
+          "
+
+      - name: Test describeTable (MySQL)
+        env:
+          DATABASE_URL: mysql://root:root@localhost:3306/test_db
+        run: |
+          php -r "
+            \$driver = Sqlx\DriverFactory::make('mysql://root:root@localhost:3306/test_db');
+
+            // Create a test table
+            \$driver->execute('DROP TABLE IF EXISTS test_describe_table');
+            \$driver->execute('CREATE TABLE test_describe_table (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              email VARCHAR(255),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )');
+
+            // Test describeTable
+            \$columns = \$driver->describeTable('test_describe_table');
+
+            if (count(\$columns) !== 4) {
+              echo 'FAILED: Expected 4 columns, got ' . count(\$columns);
+              exit(1);
+            }
+
+            // Verify column structure
+            \$idCol = \$columns[0];
+            if (\$idCol['name'] !== 'id') {
+              echo 'FAILED: First column should be id';
+              exit(1);
+            }
+
+            // Cleanup
+            \$driver->execute('DROP TABLE test_describe_table');
+
+            echo 'SUCCESS: describeTable works correctly on MySQL' . PHP_EOL;
+          "
+
+  integration-mssql:
+    name: Integration Tests (MSSQL)
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: TestPassword123!
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P TestPassword123! -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: none
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-mssql-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-mssql-
+
+      - name: Build PHP extension
+        working-directory: php-sqlx-cdylib
+        run: cargo build --release
+
+      - name: Install PHP extension
+        run: |
+          EXT_DIR=$(php -r "echo ini_get('extension_dir');")
+          echo "Extension directory: $EXT_DIR"
+          sudo cp php-sqlx-cdylib/target/release/libphp_sqlx_cdylib.so "$EXT_DIR/sqlx.so"
+          INI_DIR=$(php -r "echo PHP_CONFIG_FILE_SCAN_DIR;")
+          echo "INI scan directory: $INI_DIR"
+          if [ -n "$INI_DIR" ] && [ -d "$INI_DIR" ]; then
+            echo "extension=sqlx.so" | sudo tee "$INI_DIR/99-sqlx.ini"
+          else
+            PHP_INI=$(php -r "echo php_ini_loaded_file();")
+            echo "extension=sqlx.so" | sudo tee -a "$PHP_INI"
+          fi
+          php -m | grep -i sqlx
+
+      - name: Create test database
+        run: |
+          # Install sqlcmd
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc
+          sudo add-apt-repository "$(wget -qO- https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list)"
+          sudo apt-get update
+          sudo apt-get install -y mssql-tools18 unixodbc-dev
+          # Create test database
+          /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPassword123!' -C -Q "CREATE DATABASE test_db"
+
+      - name: Run integration tests
+        run: |
+          php -r "
+            \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true');
+            \$result = \$driver->queryRow('SELECT 1 as test');
+            if (\$result->test != 1) {
+              echo 'FAILED: Unexpected result';
+              exit(1);
+            }
+            echo 'SUCCESS: MSSQL connection works' . PHP_EOL;
+          "
+
+      - name: Test describeTable (MSSQL)
+        run: |
+          php -r "
+            \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true');
+
+            // Create a test table
+            \$driver->execute('IF OBJECT_ID(N\"test_describe_table\", N\"U\") IS NOT NULL DROP TABLE test_describe_table');
+            \$driver->execute('CREATE TABLE test_describe_table (
+              id INT IDENTITY(1,1) PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              email VARCHAR(255),
+              created_at DATETIME DEFAULT GETDATE()
+            )');
+
+            // Test describeTable
+            \$columns = \$driver->describeTable('test_describe_table');
+
+            if (count(\$columns) !== 4) {
+              echo 'FAILED: Expected 4 columns, got ' . count(\$columns);
+              exit(1);
+            }
+
+            // Verify column structure
+            \$idCol = \$columns[0];
+            if (\$idCol['name'] !== 'id') {
+              echo 'FAILED: First column should be id';
+              exit(1);
+            }
+
+            // Cleanup
+            \$driver->execute('DROP TABLE test_describe_table');
+
+            echo 'SUCCESS: describeTable works correctly on MSSQL' . PHP_EOL;
           "

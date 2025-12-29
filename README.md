@@ -1025,6 +1025,31 @@ cargo test
 
 ---
 
+## Fuzzing
+
+The AST parser can be fuzzed to find edge cases and potential security issues:
+
+```bash
+# Install cargo-fuzz (requires nightly)
+cargo install cargo-fuzz
+
+# Run the PostgreSQL parser fuzzer
+cargo +nightly fuzz run ast_postgres
+
+# Run for 60 seconds
+cargo +nightly fuzz run ast_postgres -- -max_total_time=60
+```
+
+Available fuzz targets:
+- `ast_postgres` - PostgreSQL parser
+- `ast_mysql` - MySQL parser
+- `ast_mssql` - MSSQL parser
+- `ast_render` - Parser + renderer with random parameters
+
+See [fuzz/README.md](fuzz/README.md) for more details.
+
+---
+
 ## License
 
 MIT

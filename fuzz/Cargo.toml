@@ -1,0 +1,51 @@
+[package]
+name = "php-sqlx-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.php-sqlx]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "ast_postgres"
+path = "fuzz_targets/ast_postgres.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ast_mysql"
+path = "fuzz_targets/ast_mysql.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ast_mssql"
+path = "fuzz_targets/ast_mssql.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ast_render"
+path = "fuzz_targets/ast_render.rs"
+test = false
+doc = false
+bench = false

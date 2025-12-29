@@ -2,3 +2,7 @@
 /.idea
 /benches/composer.*
 /benches/vendor
+/fuzz/target
+/fuzz/artifacts
+/fuzz/corpus/**/crash-*
+/fuzz/corpus/**/leak-*
