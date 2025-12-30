@@ -11,7 +11,7 @@ database access with additional SQL syntax. It comes with a powerful [query buil
 
 **Postgres**, **MySQL** and **Mssql** protocols are natively supported. Other protocols may require a custom wrapper.
 
-The project's goals are centered on providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
+The project's goals are centered o----n providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
 without any compromise on performance.
 
 ## Architecture
@@ -594,39 +594,53 @@ $driver = Sqlx\DriverFactory::make([
 
 ## Error Handling
 
-All errors thrown by the extension are instances of `Sqlx\SqlxException`, which extends PHP's base `Exception` class.
+All errors thrown by the extension are instances of exception classes in the `Sqlx\Exceptions` namespace.
+Each error type has its own exception class for precise `catch` handling:
 
 ```php
+use Sqlx\Exceptions\{SqlxException, QueryException, ConnectionException};
+
 try {
     $driver->queryRow('SELECT * FROM non_existent_table');
-} catch (\Sqlx\SqlxException $e) {
-    echo "Error code: " . $e->getCode() . "\n";
-    echo "Message: " . $e->getMessage() . "\n";
-
-    // Use class constants to check error type
-    if ($e->getCode() === \Sqlx\SqlxException::CONNECTION) {
-        echo "Connection failed!\n";
-    }
+} catch (QueryException $e) {
+    // Handle query-specific errors
+    echo "Query failed: " . $e->getMessage() . "\n";
+} catch (ConnectionException $e) {
+    // Handle connection errors
+    echo "Connection failed: " . $e->getMessage() . "\n";
+} catch (SqlxException $e) {
+    // Catch-all for any other sqlx errors
+    echo "Error: " . $e->getMessage() . "\n";
 }
 ```
 
-### Error Codes
+### Exception Classes
 
-The exception code indicates the error category. Use class constants for readable code:
+All exceptions extend `Sqlx\Exceptions\SqlxException`, which extends PHP's base `Exception`:
 
-| Code | Class Constant                  | Description                                       |
-|------|---------------------------------|---------------------------------------------------|
-| 0    | `SqlxException::GENERAL`        | General/unknown error                             |
-| 1    | `SqlxException::CONNECTION`     | Database connection failed                        |
-| 2    | `SqlxException::QUERY`          | Query execution failed                            |
-| 3    | `SqlxException::TRANSACTION`    | Transaction-related error                         |
-| 4    | `SqlxException::PARSE`          | SQL parsing/AST error                             |
-| 5    | `SqlxException::PARAMETER`      | Missing or invalid parameter                      |
-| 6    | `SqlxException::CONFIGURATION`  | Configuration/options error                       |
-| 7    | `SqlxException::VALIDATION`     | Invalid identifier or input validation error      |
-| 8    | `SqlxException::NOT_PERMITTED`  | Operation not permitted (e.g., write on readonly) |
-| 9    | `SqlxException::TIMEOUT`        | Operation timed out                               |
-| 10   | `SqlxException::POOL_EXHAUSTED` | Connection pool exhausted                         |
+| Exception Class                          | Error Code | Description                                       |
+|------------------------------------------|------------|---------------------------------------------------|
+| `Sqlx\Exceptions\SqlxException`          | 0          | Base class / General error                        |
+| `Sqlx\Exceptions\ConnectionException`    | 1          | Database connection failed                        |
+| `Sqlx\Exceptions\QueryException`         | 2          | Query execution failed                            |
+| `Sqlx\Exceptions\TransactionException`   | 3          | Transaction-related error                         |
+| `Sqlx\Exceptions\ParseException`         | 4          | SQL parsing/AST error                             |
+| `Sqlx\Exceptions\ParameterException`     | 5          | Missing or invalid parameter                      |
+| `Sqlx\Exceptions\ConfigurationException` | 6          | Configuration/options error                       |
+| `Sqlx\Exceptions\ValidationException`    | 7          | Invalid identifier or input validation error      |
+| `Sqlx\Exceptions\NotPermittedException`  | 8          | Operation not permitted (e.g., write on readonly) |
+| `Sqlx\Exceptions\TimeoutException`       | 9          | Operation timed out                               |
+| `Sqlx\Exceptions\PoolExhaustedException` | 10         | Connection pool exhausted                         |
+
+Error codes are also available as constants on `SqlxException` for backwards compatibility:
+
+```php
+use Sqlx\Exceptions\SqlxException;
+
+if ($e->getCode() === SqlxException::CONNECTION) {
+    // Handle connection error
+}
+```
 
 ---
 
