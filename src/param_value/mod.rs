@@ -19,7 +19,7 @@
 
 mod conversion;
 mod json;
-mod quote;
+pub mod quote;
 pub mod utils;
 pub mod write;
 

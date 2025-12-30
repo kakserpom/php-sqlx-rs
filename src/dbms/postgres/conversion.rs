@@ -249,7 +249,18 @@ impl Conversion for PgRow {
             "_RECORD" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
             "_JSONPATH" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
 
-            // Handle array types with "TYPE[]" format (alternative to "_TYPE" format)
+            // Handle JSON array types with "TYPE[]" format
+            "JSON[]" | "JSONB[]" => self
+                .try_get::<Vec<serde_json::Value>, _>(column_ordinal)
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+                .map(|x| -> Vec<_> {
+                    x.into_iter()
+                        .map(|x| json_into_zval(x, associative_arrays))
+                        .collect()
+                })?
+                .into_zval(false)
+                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+            // Handle other array types with "TYPE[]" format (alternative to "_TYPE" format)
             other if other.ends_with("[]") => {
                 try_cast_into_zval::<Vec<String>>(self, column_ordinal)?
             }

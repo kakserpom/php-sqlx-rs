@@ -1,5 +1,5 @@
 #![allow(clippy::needless_pass_by_value)]
-
+use crate::ast::{IdentifierQuoteStyle, UpsertStyle};
 use crate::php_sqlx_impl_driver_inner;
 
 /// SQL query to set the application name as a session variable.
@@ -35,6 +35,8 @@ pub const SETTINGS: Settings = Settings {
     strings_as_ntext: false,     // MySQL doesn't support N'...' (but MariaDB does)
     cast_json: Some("AS JSON"),  // optional, supported in MySQL 5.7+
     escape_backslash: true,      // MySQL interprets \ as escape
+    upsert_style: UpsertStyle::OnDuplicateKey,
+    identifier_quote_style: IdentifierQuoteStyle::Backtick,
 };
 
 php_sqlx_impl_driver_inner!(MySqlDriverInner, MySql);

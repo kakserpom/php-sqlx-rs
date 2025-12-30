@@ -51,6 +51,7 @@ mod tests;
 /// - `?d`, `:score!d` - decimal (int, float, or numeric string; rejects null)
 /// - `?ud`, `:price!ud` - unsigned decimal (>= 0, int/float/numeric string; rejects null)
 /// - `?s`, `:name!s` - string (rejects null)
+/// - `?j`, `:data!j` - JSON (object, array, or explicit Json wrapper; rejects null)
 ///
 /// ## Nullable types (use `n` prefix)
 /// - `?n`, `:data!n` - nullable mixed (any type including null)
@@ -59,6 +60,7 @@ mod tests;
 /// - `?nd`, `:score!nd` - nullable decimal
 /// - `?nud`, `:price!nud` - nullable unsigned decimal
 /// - `?ns`, `:name!ns` - nullable string
+/// - `?nj`, `:data!nj` - nullable JSON
 ///
 /// ## Array types (for IN clauses)
 /// - `?ia`, `:ids!ia` - array of integers
@@ -66,6 +68,7 @@ mod tests;
 /// - `?da`, `:ids!da` - array of decimals
 /// - `?uda`, `:ids!uda` - array of unsigned decimals
 /// - `?sa`, `:names!sa` - array of strings
+/// - `?ja`, `:data!ja` - array of JSON values (each element serialized as JSON)
 ///
 /// ## Nullable array types
 /// - `?nia`, `:ids!nia` - nullable array of integers
@@ -73,6 +76,7 @@ mod tests;
 /// - `?nda`, `:ids!nda` - nullable array of decimals
 /// - `?nuda`, `:ids!nuda` - nullable array of unsigned decimals
 /// - `?nsa`, `:names!nsa` - nullable array of strings
+/// - `?nja`, `:data!nja` - nullable array of JSON values
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaceholderType {
     /// Integer type (`i`). Accepts `ParameterValue::Int`.
@@ -95,6 +99,10 @@ pub enum PlaceholderType {
     UnsignedDecimalArray,
     /// Array of strings (`sa`). Accepts `ParameterValue::Array` where all elements are `String`.
     StringArray,
+    /// JSON type (`j`). Accepts `ParameterValue::Json`, `ParameterValue::Object`, or `ParameterValue::Array`.
+    Json,
+    /// Array of JSON values (`ja`). Accepts `ParameterValue::Array` where all elements are JSON-compatible.
+    JsonArray,
 }
 
 impl PlaceholderType {
@@ -125,12 +133,16 @@ impl PlaceholderType {
         if s.starts_with("sa") {
             return Some((Self::StringArray, 2));
         }
+        if s.starts_with("ja") {
+            return Some((Self::JsonArray, 2));
+        }
         // Then single-character specifiers
         match s.chars().next()? {
             'i' => Some((Self::Int, 1)),
             'u' => Some((Self::UnsignedInt, 1)),
             'd' => Some((Self::Decimal, 1)),
             's' => Some((Self::String, 1)),
+            'j' => Some((Self::Json, 1)),
             _ => None,
         }
     }
@@ -175,6 +187,8 @@ impl PlaceholderType {
             Self::DecimalArray => "da",
             Self::UnsignedDecimalArray => "uda",
             Self::StringArray => "sa",
+            Self::Json => "j",
+            Self::JsonArray => "ja",
         }
     }
 
@@ -192,6 +206,8 @@ impl PlaceholderType {
             Self::DecimalArray => "decimal array",
             Self::UnsignedDecimalArray => "unsigned decimal array",
             Self::StringArray => "string array",
+            Self::Json => "JSON",
+            Self::JsonArray => "JSON array",
         }
     }
 
@@ -259,6 +275,20 @@ impl PlaceholderType {
             (Self::StringArray, ParameterValue::Array(arr)) => arr
                 .iter()
                 .all(|v| matches!(v, ParameterValue::String(_) | ParameterValue::Null)),
+            // JSON type - accepts explicit Json wrapper, Object, or Array
+            (Self::Json, ParameterValue::Json(_))
+            | (Self::Json, ParameterValue::Object(_))
+            | (Self::Json, ParameterValue::Array(_)) => true,
+            // JSON array - each element must be JSON-compatible
+            (Self::JsonArray, ParameterValue::Array(arr)) => arr.iter().all(|v| {
+                matches!(
+                    v,
+                    ParameterValue::Json(_)
+                        | ParameterValue::Object(_)
+                        | ParameterValue::Array(_)
+                        | ParameterValue::Null
+                )
+            }),
             _ => false,
         }
     }
@@ -365,6 +395,30 @@ pub enum Ast {
     },
 }
 
+/// Upsert SQL style for different databases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UpsertStyle {
+    /// PostgreSQL: `INSERT ... ON CONFLICT (cols) DO UPDATE SET col = EXCLUDED.col`
+    #[default]
+    OnConflict,
+    /// MySQL: `INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)`
+    OnDuplicateKey,
+    /// Database does not support upsert (e.g., MSSQL requires MERGE)
+    Unsupported,
+}
+
+/// Identifier quoting style for different databases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IdentifierQuoteStyle {
+    /// PostgreSQL/ANSI SQL: `"identifier"`
+    #[default]
+    DoubleQuote,
+    /// MySQL/MariaDB: `` `identifier` ``
+    Backtick,
+    /// Microsoft SQL Server: `[identifier]`
+    Bracket,
+}
+
 /// Settings that control how the SQL parser handles comments, escaping, and
 /// optional features like collapsible `IN` clauses.
 /// Settings that determine how placeholders and identifiers are rendered:
@@ -395,6 +449,10 @@ pub struct Settings {
     pub cast_json: Option<&'static str>, // e.g. Some("::jsonb") or Some("AS JSON")
     /// Escape `\` in strings (`MySQL` legacy)
     pub escape_backslash: bool,
+    /// Upsert SQL style (ON CONFLICT, ON DUPLICATE KEY, or unsupported)
+    pub upsert_style: UpsertStyle,
+    /// Identifier quoting style (double quotes, backticks, or brackets)
+    pub identifier_quote_style: IdentifierQuoteStyle,
 }
 
 impl Ast {
@@ -1043,7 +1101,39 @@ impl Ast {
                                 actual: PlaceholderType::value_type_name(val).to_string(),
                             });
                         }
-                        val.write_sql_to(sql, out_vals, settings)?;
+                        // Wrap Array/Object in Json when ?j placeholder is used
+                        if *expected_type == Some(PlaceholderType::Json)
+                            && matches!(
+                                val,
+                                ParameterValue::Array(_) | ParameterValue::Object(_)
+                            )
+                        {
+                            ParameterValue::Json(Box::new(val.clone()))
+                                .write_sql_to(sql, out_vals, settings)?;
+                        } else if *expected_type == Some(PlaceholderType::JsonArray) {
+                            // Wrap each element in Json when ?ja placeholder is used
+                            if let ParameterValue::Array(arr) = val {
+                                let json_arr: Vec<ParameterValue> = arr
+                                    .iter()
+                                    .map(|v| {
+                                        if matches!(
+                                            v,
+                                            ParameterValue::Array(_) | ParameterValue::Object(_)
+                                        ) {
+                                            ParameterValue::Json(Box::new(v.clone()))
+                                        } else {
+                                            v.clone()
+                                        }
+                                    })
+                                    .collect();
+                                ParameterValue::Array(json_arr)
+                                    .write_sql_to(sql, out_vals, settings)?;
+                            } else {
+                                val.write_sql_to(sql, out_vals, settings)?;
+                            }
+                        } else {
+                            val.write_sql_to(sql, out_vals, settings)?;
+                        }
                     }
                 }
                 Ast::ConditionalBlock {

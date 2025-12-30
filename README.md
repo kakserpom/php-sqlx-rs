@@ -80,6 +80,8 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - Pagination with `PAGINATE`
 - Safe and robust `SELECT`
 - SQL transactions are supported in full
+- **Upsert support** with `upsert()` (PostgreSQL `ON CONFLICT`, MySQL `ON DUPLICATE KEY`)
+- **Batch inserts** with `insertMany()` for efficient multi-row inserts
 - Powerful Query Builder
 - Native JSON support (with lazy decoding and [SIMD](https://docs.rs/simd-json/latest/simd_json/) 🚀)
 - Optional persistent connections (with connection pooling)
@@ -149,6 +151,7 @@ exception is thrown during query rendering.
 | `?d`   | `:score!d`, `$score!d`   | Decimal (int, float, or numeric string)          |
 | `?ud`  | `:price!ud`, `$price!ud` | Unsigned decimal (≥ 0, int/float/numeric string) |
 | `?s`   | `:name!s`, `$name!s`     | String                                           |
+| `?j`   | `:data!j`, `$data!j`     | JSON (object, array, or Json wrapper)            |
 
 ```php
 // Type validation examples
@@ -161,17 +164,22 @@ $driver->queryAll('SELECT * FROM products WHERE price = ?d', [19.99]);     // OK
 $driver->queryAll('SELECT * FROM products WHERE price = ?d', [20]);        // OK (int)
 $driver->queryAll('SELECT * FROM products WHERE price = ?d', ["19.99"]);   // OK (numeric string)
 $driver->queryAll('SELECT * FROM products WHERE price = ?d', ["abc"]);     // Error: not numeric
+
+// JSON serializes arrays/objects as JSON strings
+$driver->execute('INSERT INTO events (data) VALUES (?j)', [['event' => 'click', 'count' => 5]]);
+// Bound value: '{"event":"click","count":5}'
 ```
 
 #### Array Types (for IN clauses)
 
-| Suffix | Named Syntax  | Description                |
-|--------|---------------|----------------------------|
-| `?ia`  | `:ids!ia`     | Array of integers          |
-| `?ua`  | `:ids!ua`     | Array of unsigned integers |
-| `?da`  | `:scores!da`  | Array of decimals          |
-| `?uda` | `:prices!uda` | Array of unsigned decimals |
-| `?sa`  | `:names!sa`   | Array of strings           |
+| Suffix | Named Syntax  | Description                                     |
+|--------|---------------|-------------------------------------------------|
+| `?ia`  | `:ids!ia`     | Array of integers                               |
+| `?ua`  | `:ids!ua`     | Array of unsigned integers                      |
+| `?da`  | `:scores!da`  | Array of decimals                               |
+| `?uda` | `:prices!uda` | Array of unsigned decimals                      |
+| `?sa`  | `:names!sa`   | Array of strings                                |
+| `?ja`  | `:items!ja`   | Array of JSON (each element serialized as JSON) |
 
 ```php
 $driver->queryAll('SELECT * FROM users WHERE id IN :ids!ia', [
@@ -181,6 +189,14 @@ $driver->queryAll('SELECT * FROM users WHERE id IN :ids!ia', [
 $driver->queryAll('SELECT * FROM users WHERE id IN :ids!ia', [
     'ids' => [1, "two", 3]
 ]); // Error: Type mismatch
+
+// JSON array - each element is serialized as JSON (useful for PostgreSQL JSONB[])
+$driver->execute(
+    'INSERT INTO logs (items) VALUES (ARRAY[?ja]::jsonb[])',
+    [[['type' => 'click'], ['type' => 'view']]]
+);
+// Expands to: ARRAY[$1, $2]::jsonb[]
+// Bound values: '{"type":"click"}', '{"type":"view"}'
 ```
 
 ---
@@ -197,8 +213,9 @@ By default, typed placeholders reject `null` values. Use the `n` prefix to allow
 | `?nd`  | `:score!nd`  | Nullable decimal                         |
 | `?nud` | `:price!nud` | Nullable unsigned decimal                |
 | `?ns`  | `:name!ns`   | Nullable string                          |
+| `?nj`  | `:data!nj`   | Nullable JSON                            |
 
-Nullable array types: `?nia`, `?nua`, `?nda`, `?nuda`, `?nsa`
+Nullable array types: `?nia`, `?nua`, `?nda`, `?nuda`, `?nsa`, `?nja`
 
 ```php
 // Non-nullable rejects null
@@ -249,8 +266,9 @@ This is useful when you want to explicitly query for `NULL` values vs. omitting 
 | **Decimal**      | `?d`   | `?nd`    | `?da`  | `?nda`         |
 | **Unsigned Dec** | `?ud`  | `?nud`   | `?uda` | `?nuda`        |
 | **String**       | `?s`   | `?ns`    | `?sa`  | `?nsa`         |
+| **JSON**         | `?j`   | `?nj`    | `?ja`  | `?nja`         |
 
-**Named syntax**: Add `!` before suffix: `$id!i`, `:name!s`, `$prices!uda`
+**Named syntax**: Add `!` before suffix: `$id!i`, `:name!s`, `$prices!uda`, `$data!j`
 
 ---
 
@@ -441,6 +459,95 @@ Additional supported methods to be called from inside a closure:
 - `savepoint(name: String)`
 - `rollbackToSavepoint(name: String)`
 - `releaseSavepoint(name: String)`
+
+---
+
+## Pinned Connections
+
+For session-scoped operations that require multiple queries to run on the **same connection** without a database
+transaction, use `withConnection`:
+
+```php
+$lastId = $driver->withConnection(function($driver) {
+    $driver->execute("INSERT INTO users (name) VALUES ('Alice')");
+    return $driver->queryValue('SELECT LAST_INSERT_ID()');
+});
+```
+
+**Use cases:**
+
+- `LAST_INSERT_ID()` in MySQL (session-scoped)
+- Temporary tables (connection-scoped)
+- Session variables (`SET @var = ...`)
+- Advisory locks
+
+**Key differences from transactions:**
+
+- No `BEGIN`/`COMMIT` is issued
+- Each query is auto-committed immediately
+- No rollback on failure
+
+If you need transactional semantics (atomicity, rollback), use `begin()` instead.
+
+---
+
+## Batch Insert
+
+The `insertMany()` method inserts multiple rows in a single statement for better performance:
+
+```php
+$driver->insertMany('users', [
+    ['name' => 'Alice', 'email' => 'alice@example.com'],
+    ['name' => 'Bob', 'email' => 'bob@example.com'],
+    ['name' => 'Carol', 'email' => 'carol@example.com'],
+]);
+```
+
+**Generated SQL:**
+
+```sql
+INSERT INTO users (email, name)
+VALUES ($email_0, $name_0),
+       ($email_1, $name_1),
+       ($email_2, $name_2)
+```
+
+- Columns are determined from the first row
+- Missing columns in subsequent rows default to `NULL`
+- Returns the number of inserted rows
+
+---
+
+## Upsert (Insert or Update)
+
+The `upsert()` method inserts a row or updates it if a conflict occurs on the specified columns:
+
+```php
+// Insert or update user by email (unique constraint)
+$driver->upsert('users', [
+    'email' => 'alice@example.com',
+    'name' => 'Alice',
+    'login_count' => 1
+], ['email'], ['name', 'login_count']);
+
+// Update all non-key columns on conflict (auto-detect)
+$driver->upsert('users', $userData, ['email']);
+```
+
+**Database-specific SQL generated:**
+
+| Database   | SQL Pattern                                                      |
+|------------|------------------------------------------------------------------|
+| PostgreSQL | `INSERT ... ON CONFLICT (cols) DO UPDATE SET col = EXCLUDED.col` |
+| MySQL      | `INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)`           |
+| MSSQL      | Not supported (use `MERGE` statement directly)                   |
+
+**Parameters:**
+
+- `$table` – Table name
+- `$row` – Associative array of column → value
+- `$conflictColumns` – Columns that form the unique constraint
+- `$updateColumns` – (Optional) Columns to update on conflict. If omitted, updates all non-conflict columns.
 
 ---
 
@@ -739,12 +846,33 @@ $driver = Sqlx\DriverFactory::make([
 
 - `execute(string $query, array $parameters = null): int` – run **INSERT/UPDATE/DELETE** and return affected count.
 - `insert(string $table, array $row): int` – convenience wrapper around `INSERT`.
+- `insertMany(string $table, array $rows): int` – insert multiple rows in a single statement.
+- `upsert(string $table, array $row, array $conflictColumns, ?array $updateColumns = null): int` – insert or update on
+  conflict.
 
 #### Utilities
 
 - `dry(string $query, array $parameters = null): array` – render final SQL + bound parameters without executing. Handy
-  for
-  debugging.
+  for debugging.
+
+#### Quoting helpers
+
+- `quote(mixed $value): string` – quote a value as a SQL literal (e.g., `'O''Reilly'`, `123`, `TRUE`).
+- `quoteLike(string $value): string` – quote with LIKE metacharacter escaping (`%` and `_` escaped).
+- `quoteIdentifier(string $name): string` – quote an identifier (table/column name) using database-specific style.
+
+```php
+// PostgreSQL
+$driver->quote("O'Reilly");        // 'O''Reilly'
+$driver->quoteLike("100%_safe");   // '100\%\_safe'
+$driver->quoteIdentifier("user");  // "user"
+
+// MySQL
+$driver->quoteIdentifier("user");  // `user`
+
+// MSSQL
+$driver->quoteIdentifier("user");  // [user]
+```
 
 #### Query Profiling
 
@@ -829,6 +957,7 @@ $driver = Sqlx\DriverFactory::make([
 ```
 
 **Routing rules:**
+
 - `queryAll`, `queryRow`, `queryMaybeRow`, `queryValue`, `queryColumn` → replicas
 - `execute` → primary
 - All queries inside transactions → primary (consistency guarantee)
@@ -1184,6 +1313,7 @@ npx vsce package
 Or manually copy/symlink to `~/.vscode/extensions/php-sqlx`.
 
 Features:
+
 - Highlights `{{ }}` conditional blocks
 - Highlights typed placeholders (`?i`, `?ni`, `?ia`, `$name!s`)
 - Auto-injects into PHP strings starting with SQL keywords
@@ -1235,6 +1365,7 @@ vendor/bin/phpunit --testsuite MSSQL       # MSSQL only
 Database URLs are configured in `tests/phpunit.xml`:
 
 ```xml
+
 <env name="POSTGRES_URL" value="postgres://postgres:postgres@localhost:5432/test_db"/>
 <env name="MYSQL_URL" value="mysql://root:root@localhost:3306/test_db"/>
 <env name="MSSQL_URL" value="mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true"/>
@@ -1243,6 +1374,7 @@ Database URLs are configured in `tests/phpunit.xml`:
 #### Test Coverage
 
 The integration tests cover:
+
 - Connection handling
 - Basic queries (queryAll, queryRow, queryMaybeRow, queryValue, queryColumn)
 - Named and positional parameters

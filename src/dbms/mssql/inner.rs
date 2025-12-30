@@ -1,4 +1,5 @@
 #![allow(clippy::needless_pass_by_value)]
+use crate::ast::{IdentifierQuoteStyle, UpsertStyle};
 use crate::php_sqlx_impl_driver_inner;
 
 /// SQL query to set the application name in session context.
@@ -33,6 +34,8 @@ pub const SETTINGS: Settings = Settings {
     strings_as_ntext: true,      // use N'string' for Unicode
     cast_json: Some("AS NVARCHAR(MAX)"), // or omit, depending on query
     escape_backslash: false,
+    upsert_style: UpsertStyle::Unsupported,
+    identifier_quote_style: IdentifierQuoteStyle::Bracket,
 };
 
 php_sqlx_impl_driver_inner!(MssqlDriverInner, Mssql);

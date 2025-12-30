@@ -61,6 +61,7 @@ macro_rules! php_sqlx_impl_driver {
         use std::collections::BTreeMap;
         use std::sync::{Arc, LazyLock, Once};
         use write_query_builder::$write_query_builder;
+        use $crate::ast::UpsertStyle;
         use $crate::options::DriverInnerOptions;
         use $crate::options::DriverOptionsArg;
         use $crate::param_value::ParameterValue;
@@ -201,32 +202,54 @@ macro_rules! php_sqlx_impl_driver {
                 param.quote(&self.driver_inner.settings)
             }
 
-            /// Escapes `%` and `_` characters in a string for safe use in a LIKE/ILIKE pattern.
+            /// Quotes a string for use in a LIKE/ILIKE pattern, escaping both SQL special
+            /// characters (like single quotes) and LIKE metacharacters (`%` and `_`).
             ///
-            /// This helper is designed for safely preparing user input for use with
-            /// pattern-matching operators like `CONTAINS`, `STARTS_WITH`, or `ENDS_WITH`.
-            ///
-            /// ⚠️ **Warning:** This method does **not** quote or escape the full string for raw SQL.
-            /// It only escapes `%` and `_` characters. You must still pass the result as a bound parameter,
-            /// not interpolate it directly into the query string.
+            /// This is like `quote()` but additionally escapes `%` and `_` so they match literally.
             ///
             /// # Arguments
-            /// * `param` – The parameter to escape (must be a string).
+            /// * `param` – The parameter to quote (must be a string).
             ///
             /// # Returns
-            /// A string with `%` and `_` escaped for LIKE (e.g., `foo\%bar\_baz`)
+            /// A fully quoted SQL string with LIKE metacharacters escaped.
             ///
             /// # Errors
             /// Returns an error if the input is not a string.
             ///
             /// # Example
             /// ```php
-            /// $escaped = $builder->metaQuoteLike("100%_safe");
-            /// // Use like:
-            /// $builder->where([["name", "LIKE", "%{$escaped}%"]]);
+            /// $quoted = $driver->quoteLike("O'Reilly%");
+            /// // Returns: 'O''Reilly\%'
             /// ```
-            pub fn meta_quote_like(&self, param: ParameterValue) -> $crate::error::Result<String> {
-                param.meta_quote_like()
+            pub fn quote_like(&self, param: ParameterValue) -> $crate::error::Result<String> {
+                param.quote_like(&self.driver_inner.settings)
+            }
+
+            /// Quotes an identifier (table name, column name) using the appropriate quote style.
+            ///
+            /// - PostgreSQL: `"identifier"` (double quotes)
+            /// - MySQL: `` `identifier` `` (backticks)
+            /// - MSSQL: `[identifier]` (brackets)
+            ///
+            /// Special characters in the identifier are properly escaped.
+            ///
+            /// # Arguments
+            /// * `name` – The identifier to quote.
+            ///
+            /// # Returns
+            /// The quoted identifier string.
+            ///
+            /// # Example
+            /// ```php
+            /// // PostgreSQL
+            /// $driver->quoteIdentifier("user"); // Returns: "user"
+            /// $driver->quoteIdentifier('my"column'); // Returns: "my""column"
+            ///
+            /// // MySQL
+            /// $driver->quoteIdentifier("user"); // Returns: `user`
+            /// ```
+            pub fn quote_identifier(&self, name: &str) -> String {
+                $crate::param_value::quote::quote_identifier(name, &self.driver_inner.settings)
             }
 
             /// Returns whether results are returned as associative arrays.
@@ -1014,6 +1037,184 @@ macro_rules! php_sqlx_impl_driver {
                 )
             }
 
+            /// Inserts multiple rows into the given table in a single statement.
+            ///
+            /// All rows must have the same columns (determined by the first row).
+            /// Missing columns in subsequent rows will use `NULL`.
+            ///
+            /// # Arguments
+            /// - `table`: Table name
+            /// - `rows`: Vector of maps, each representing a row (column name → value)
+            ///
+            /// # Returns
+            /// Number of inserted rows
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->insertMany('users', [
+            ///     ['name' => 'Alice', 'email' => 'alice@example.com'],
+            ///     ['name' => 'Bob', 'email' => 'bob@example.com'],
+            ///     ['name' => 'Carol', 'email' => 'carol@example.com'],
+            /// ]);
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws an exception if:
+            /// - the rows array is empty;
+            /// - the SQL query fails to execute;
+            /// - parameters contain unsupported types.
+            pub fn insert_many(
+                &self,
+                table: &str,
+                rows: Vec<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<u64> {
+                if rows.is_empty() {
+                    return Err(SqlxError::Other("insertMany requires at least one row".to_string()));
+                }
+
+                // Get columns from first row (clone to avoid borrow issues)
+                let columns: Vec<String> = rows[0].keys().cloned().collect();
+                let num_rows = rows.len();
+
+                // Build VALUES tuples with unique parameter names
+                let values_clauses: Vec<String> = (0..num_rows)
+                    .map(|i| {
+                        let placeholders: Vec<String> = columns
+                            .iter()
+                            .map(|col| format!("${col}_{i}"))
+                            .collect();
+                        format!("({})", placeholders.join(", "))
+                    })
+                    .collect();
+
+                // Collect all parameters with unique names
+                let mut all_params = BTreeMap::new();
+                for (i, row) in rows.into_iter().enumerate() {
+                    for col in &columns {
+                        let param_name = format!("{col}_{i}");
+                        let value = row.get(col).cloned().unwrap_or(ParameterValue::Null);
+                        all_params.insert(param_name, value);
+                    }
+                }
+
+                let sql = format!(
+                    "INSERT INTO {table} ({}) VALUES {}",
+                    columns.iter().join(", "),
+                    values_clauses.join(", ")
+                );
+
+                self.execute(&sql, Some(all_params))
+            }
+
+            /// Inserts a row or updates it if a conflict occurs on the specified columns.
+            ///
+            /// This method generates database-specific SQL for upsert operations:
+            /// - **PostgreSQL**: `INSERT ... ON CONFLICT (cols) DO UPDATE SET ...`
+            /// - **MySQL**: `INSERT ... ON DUPLICATE KEY UPDATE ...`
+            /// - **MSSQL**: Not currently supported (returns an error)
+            ///
+            /// # Arguments
+            /// - `table`: Table name to insert into
+            /// - `row`: Map of column names to values for the row to insert
+            /// - `conflict_columns`: Columns that form the unique constraint for conflict detection
+            /// - `update_columns`: Optional list of columns to update on conflict.
+            ///   If `None` or empty, all non-conflict columns from `row` are updated.
+            ///
+            /// # Returns
+            /// Number of affected rows (1 for insert, 2 for update on some databases)
+            ///
+            /// # Example
+            /// ```php
+            /// // Insert or update user by email (unique constraint)
+            /// $driver->upsert('users', [
+            ///     'email' => 'alice@example.com',
+            ///     'name' => 'Alice',
+            ///     'login_count' => 1
+            /// ], ['email'], ['name', 'login_count']);
+            ///
+            /// // Update all non-key columns on conflict
+            /// $driver->upsert('users', $userData, ['email']);
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws an exception if:
+            /// - the database type doesn't support upsert (MSSQL);
+            /// - the SQL query fails to execute;
+            /// - parameters contain unsupported types.
+            pub fn upsert(
+                &self,
+                table: &str,
+                row: BTreeMap<String, ParameterValue>,
+                conflict_columns: Vec<String>,
+                update_columns: Option<Vec<String>>,
+            ) -> $crate::error::Result<u64> {
+                // Determine which columns to update on conflict
+                let conflict_set: std::collections::BTreeSet<_> = conflict_columns.iter().collect();
+                let update_cols: Vec<&String> = match &update_columns {
+                    Some(cols) if !cols.is_empty() => cols.iter().collect(),
+                    _ => row.keys().filter(|k| !conflict_set.contains(k)).collect(),
+                };
+
+                // Build SQL based on upsert_style setting
+                let query = match self.driver_inner.settings.upsert_style {
+                    UpsertStyle::OnConflict => {
+                        // PostgreSQL: INSERT ... ON CONFLICT (cols) DO UPDATE SET col = EXCLUDED.col
+                        let update_set = update_cols
+                            .iter()
+                            .map(|c| format!("{c} = EXCLUDED.{c}"))
+                            .join(", ");
+
+                        if update_set.is_empty() {
+                            // No columns to update - use DO NOTHING
+                            format!(
+                                "INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT ({}) DO NOTHING",
+                                row.keys().join(", "),
+                                row.keys().map(|k| format!("${k}")).join(", "),
+                                conflict_columns.join(", ")
+                            )
+                        } else {
+                            format!(
+                                "INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {}",
+                                row.keys().join(", "),
+                                row.keys().map(|k| format!("${k}")).join(", "),
+                                conflict_columns.join(", "),
+                                update_set
+                            )
+                        }
+                    }
+                    UpsertStyle::OnDuplicateKey => {
+                        // MySQL: INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)
+                        let update_set = update_cols
+                            .iter()
+                            .map(|c| format!("{c} = VALUES({c})"))
+                            .join(", ");
+
+                        if update_set.is_empty() {
+                            // No columns to update - use INSERT IGNORE
+                            format!(
+                                "INSERT IGNORE INTO {table} ({}) VALUES ({})",
+                                row.keys().join(", "),
+                                row.keys().map(|k| format!("${k}")).join(", ")
+                            )
+                        } else {
+                            format!(
+                                "INSERT INTO {table} ({}) VALUES ({}) ON DUPLICATE KEY UPDATE {}",
+                                row.keys().join(", "),
+                                row.keys().map(|k| format!("${k}")).join(", "),
+                                update_set
+                            )
+                        }
+                    }
+                    UpsertStyle::Unsupported => {
+                        return Err(SqlxError::Other(
+                            "upsert() is not supported for this database. Use MERGE statement directly.".to_string()
+                        ));
+                    }
+                };
+
+                self.execute(&query, Some(row))
+            }
+
             /// Executes an SQL query and returns the rendered query and its parameters.
             ///
             /// This method does not execute the query but returns the SQL string with placeholders
@@ -1297,36 +1498,34 @@ macro_rules! php_sqlx_impl_driver {
                 self.driver_inner.rollback()
             }
 
-            /**
-             * Executes a callback with a pinned connection from the pool.
-             *
-             * All queries executed within the callback will use the same database connection,
-             * which is required for session-scoped operations like:
-             * - `LAST_INSERT_ID()` in MySQL
-             * - Temporary tables
-             * - Session variables
-             * - Advisory locks
-             *
-             * Unlike `begin()`, this does NOT start a database transaction - each query is
-             * auto-committed. Use `begin()` if you need transactional semantics.
-             *
-             * # Parameters
-             * - `callable`: A callback function that receives the driver and executes queries.
-             *
-             * # Returns
-             * The value returned by the callback.
-             *
-             * # Example
-             * ```php
-             * $lastId = $driver->withConnection(function($driver) {
-             *     $driver->execute("INSERT INTO users (name) VALUES ('Alice')");
-             *     return $driver->queryValue('SELECT LAST_INSERT_ID()');
-             * });
-             * ```
-             *
-             * # Exceptions
-             * Throws an exception if connection acquisition fails or the callback throws.
-             */
+            /// Executes a callback with a pinned connection from the pool.
+            ///
+            /// All queries executed within the callback will use the same database connection,
+            /// which is required for session-scoped operations like:
+            /// - `LAST_INSERT_ID()` in MySQL
+            /// - Temporary tables
+            /// - Session variables
+            /// - Advisory locks
+            ///
+            /// Unlike `begin()`, this does NOT start a database transaction - each query is
+            /// auto-committed. Use `begin()` if you need transactional semantics.
+            ///
+            /// # Parameters
+            /// - `callable`: A callback function that receives the driver and executes queries.
+            ///
+            /// # Returns
+            /// The value returned by the callback.
+            ///
+            /// # Example
+            /// ```php
+            /// $lastId = $driver->withConnection(function($driver) {
+            ///     $driver->execute("INSERT INTO users (name) VALUES ('Alice')");
+            ///     return $driver->queryValue('SELECT LAST_INSERT_ID()');
+            /// });
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws an exception if connection acquisition fails or the callback throws.
             pub fn with_connection(&self, callable: ZendCallable) -> PhpResult<Zval> {
                 self.driver_inner.pin_connection()?;
 

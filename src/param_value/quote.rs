@@ -1,6 +1,31 @@
-use crate::ast::Settings;
+use crate::ast::{IdentifierQuoteStyle, Settings};
 use crate::error::Error as SqlxError;
 use crate::param_value::ParameterValue;
+
+/// Quotes an identifier (table name, column name) according to the database's quoting style.
+///
+/// - PostgreSQL: `"identifier"` (escapes `"` by doubling)
+/// - MySQL: `` `identifier` `` (escapes `` ` `` by doubling)
+/// - MSSQL: `[identifier]` (escapes `]` by doubling)
+pub fn quote_identifier(name: &str, settings: &Settings) -> String {
+    match settings.identifier_quote_style {
+        IdentifierQuoteStyle::DoubleQuote => {
+            // PostgreSQL/ANSI: escape " by doubling
+            let escaped = name.replace('"', "\"\"");
+            format!("\"{escaped}\"")
+        }
+        IdentifierQuoteStyle::Backtick => {
+            // MySQL: escape ` by doubling
+            let escaped = name.replace('`', "``");
+            format!("`{escaped}`")
+        }
+        IdentifierQuoteStyle::Bracket => {
+            // MSSQL: escape ] by doubling
+            let escaped = name.replace(']', "]]");
+            format!("[{escaped}]")
+        }
+    }
+}
 
 impl ParameterValue {
     /// Escapes `%`, `_`, and `\` characters in the input string by prefixing them with a backslash,
@@ -25,6 +50,18 @@ impl ParameterValue {
         }
 
         Ok(escaped)
+    }
+
+    /// Quotes the value as a SQL literal string with LIKE metacharacters escaped.
+    ///
+    /// This combines `quote()` and metacharacter escaping for `%` and `_`.
+    /// Use this when embedding user input directly in a LIKE pattern.
+    ///
+    /// # Example
+    /// For input `"O'Reilly%"` returns `'O''Reilly\%'`
+    pub fn quote_like(&self, settings: &Settings) -> crate::error::Result<String> {
+        let escaped = self.meta_quote_like()?;
+        Self::String(escaped).quote(settings)
     }
 
     /// Quotes the value as a SQL literal string, number, or boolean,
@@ -125,6 +162,25 @@ mod tests {
     }
 
     #[test]
+    fn test_quote_like() {
+        let settings = Settings::default();
+
+        // Test with LIKE metacharacters and SQL special chars
+        let value = ParameterValue::String("O'Reilly%".to_string());
+        let quoted = value.quote_like(&settings).unwrap();
+        assert_eq!(quoted, "'O''Reilly\\%'");
+
+        // Test with underscore
+        let value = ParameterValue::String("foo_bar".to_string());
+        let quoted = value.quote_like(&settings).unwrap();
+        assert_eq!(quoted, "'foo\\_bar'");
+
+        // Non-string should error
+        let value = ParameterValue::Int(42);
+        assert!(value.quote_like(&settings).is_err());
+    }
+
+    #[test]
     fn test_quote_null() {
         let settings = Settings::default();
         let value = ParameterValue::Null;
@@ -200,5 +256,41 @@ mod tests {
         let value = ParameterValue::Object(map);
         let quoted = value.quote(&settings).unwrap();
         assert_eq!(quoted, "'{\"key\":\"val\"}'");
+    }
+
+    #[test]
+    fn test_quote_identifier_postgres() {
+        use crate::ast::IdentifierQuoteStyle;
+
+        let settings = Settings {
+            identifier_quote_style: IdentifierQuoteStyle::DoubleQuote,
+            ..Settings::default()
+        };
+        assert_eq!(super::quote_identifier("user", &settings), "\"user\"");
+        assert_eq!(super::quote_identifier("my\"col", &settings), "\"my\"\"col\"");
+    }
+
+    #[test]
+    fn test_quote_identifier_mysql() {
+        use crate::ast::IdentifierQuoteStyle;
+
+        let settings = Settings {
+            identifier_quote_style: IdentifierQuoteStyle::Backtick,
+            ..Settings::default()
+        };
+        assert_eq!(super::quote_identifier("user", &settings), "`user`");
+        assert_eq!(super::quote_identifier("my`col", &settings), "`my``col`");
+    }
+
+    #[test]
+    fn test_quote_identifier_mssql() {
+        use crate::ast::IdentifierQuoteStyle;
+
+        let settings = Settings {
+            identifier_quote_style: IdentifierQuoteStyle::Bracket,
+            ..Settings::default()
+        };
+        assert_eq!(super::quote_identifier("user", &settings), "[user]");
+        assert_eq!(super::quote_identifier("my]col", &settings), "[my]]col]");
     }
 }

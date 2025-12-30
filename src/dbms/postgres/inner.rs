@@ -1,4 +1,5 @@
 #![allow(clippy::needless_pass_by_value)]
+use crate::ast::{IdentifierQuoteStyle, UpsertStyle};
 use crate::php_sqlx_impl_driver_inner;
 
 /// SQL query to set the application name for connection identification.
@@ -33,5 +34,7 @@ pub const SETTINGS: Settings = Settings {
     strings_as_ntext: false,    // N'' not used
     cast_json: Some("::jsonb"), // or ::json if jsonb not desired
     escape_backslash: false,    // unnecessary
+    upsert_style: UpsertStyle::OnConflict,
+    identifier_quote_style: IdentifierQuoteStyle::DoubleQuote,
 };
 php_sqlx_impl_driver_inner!(PgDriverInner, Postgres);
