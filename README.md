@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://rust-lang.org)
 
 The extension is powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), built
-using [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It enables safe, fast, and expressive
+using [ext-php-rs](https://github.com/extphprs/ext-php-rs). It enables safe, fast, and expressive
 database access with additional SQL syntax. It comes with a powerful [query builder](QUERY-BUILDER.md).
 
 **Postgres**, **MySQL** and **Mssql** protocols are natively supported. Other protocols may require a custom wrapper.
