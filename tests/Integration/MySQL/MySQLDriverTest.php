@@ -80,9 +80,13 @@ class MySQLDriverTest extends AbstractDriverTest
         $this->createTestTable();
 
         try {
-            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+            // LAST_INSERT_ID() requires a pinned connection to ensure the INSERT and SELECT
+            // run on the same connection (connection pooling uses different connections otherwise)
+            $lastId = $this->driver->withConnection(function ($driver) {
+                $driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+                return $driver->queryValue('SELECT LAST_INSERT_ID()');
+            });
 
-            $lastId = $this->driver->queryValue('SELECT LAST_INSERT_ID()');
             $this->assertGreaterThan(0, $lastId);
         } finally {
             $this->dropTestTable();

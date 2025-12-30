@@ -1,5 +1,6 @@
 use crate::conversion::Conversion;
 use crate::error::Error as SqlxError;
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
@@ -46,9 +47,44 @@ impl Conversion for MssqlRow {
             "FLOAT" => try_cast_into_zval::<f64>(self, column_ordinal)?,
 
             "DECIMAL" | "NUMERIC" | "MONEY" | "SMALLMONEY" | "CHAR" | "VARCHAR" | "TEXT"
-            | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML" | "UNIQUEIDENTIFIER" | "DATE" | "TIME"
-            | "DATETIME" | "DATETIME2" | "SMALLDATETIME" | "DATETIMEOFFSET" => {
+            | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML" | "UNIQUEIDENTIFIER" => {
                 try_cast_into_zval::<String>(self, column_ordinal)?
+            }
+
+            "DATE" => {
+                match self.try_get::<NaiveDate, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+
+            "TIME" => {
+                match self.try_get::<NaiveTime, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+
+            "DATETIME" | "DATETIME2" | "SMALLDATETIME" => {
+                match self.try_get::<NaiveDateTime, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+
+            "DATETIMEOFFSET" => {
+                match self.try_get::<DateTime<Utc>, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
             }
 
             "BINARY" | "VARBINARY" | "IMAGE" | "TIMESTAMP" | "ROWVERSION" => self
@@ -80,9 +116,17 @@ impl Conversion for MssqlRow {
             "BIGINT" => ArrayKey::Long(self.try_get::<i64, _>(column_ordinal)?),
 
             "DECIMAL" | "NUMERIC" | "MONEY" | "SMALLMONEY" | "CHAR" | "VARCHAR" | "TEXT"
-            | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML" | "UNIQUEIDENTIFIER" | "DATE" | "TIME"
-            | "DATETIME" | "DATETIME2" | "SMALLDATETIME" | "DATETIMEOFFSET" => {
+            | "NCHAR" | "NVARCHAR" | "NTEXT" | "XML" | "UNIQUEIDENTIFIER" => {
                 ArrayKey::String(self.try_get::<String, _>(column_ordinal)?)
+            }
+
+            "DATE" => ArrayKey::String(self.try_get::<NaiveDate, _>(column_ordinal)?.to_string()),
+            "TIME" => ArrayKey::String(self.try_get::<NaiveTime, _>(column_ordinal)?.to_string()),
+            "DATETIME" | "DATETIME2" | "SMALLDATETIME" => {
+                ArrayKey::String(self.try_get::<NaiveDateTime, _>(column_ordinal)?.to_string())
+            }
+            "DATETIMEOFFSET" => {
+                ArrayKey::String(self.try_get::<DateTime<Utc>, _>(column_ordinal)?.to_string())
             }
 
             other => {

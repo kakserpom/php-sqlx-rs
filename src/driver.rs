@@ -1296,6 +1296,61 @@ macro_rules! php_sqlx_impl_driver {
             pub fn rollback(&self) -> $crate::error::Result<()> {
                 self.driver_inner.rollback()
             }
+
+            /**
+             * Executes a callback with a pinned connection from the pool.
+             *
+             * All queries executed within the callback will use the same database connection,
+             * which is required for session-scoped operations like:
+             * - `LAST_INSERT_ID()` in MySQL
+             * - Temporary tables
+             * - Session variables
+             * - Advisory locks
+             *
+             * Unlike `begin()`, this does NOT start a database transaction - each query is
+             * auto-committed. Use `begin()` if you need transactional semantics.
+             *
+             * # Parameters
+             * - `callable`: A callback function that receives the driver and executes queries.
+             *
+             * # Returns
+             * The value returned by the callback.
+             *
+             * # Example
+             * ```php
+             * $lastId = $driver->withConnection(function($driver) {
+             *     $driver->execute("INSERT INTO users (name) VALUES ('Alice')");
+             *     return $driver->queryValue('SELECT LAST_INSERT_ID()');
+             * });
+             * ```
+             *
+             * # Exceptions
+             * Throws an exception if connection acquisition fails or the callback throws.
+             */
+            pub fn with_connection(&self, callable: ZendCallable) -> PhpResult<Zval> {
+                self.driver_inner.pin_connection()?;
+
+                let callable_ret = callable.try_call(vec![self]);
+
+                // Always unpin, even if callback failed
+                let _ = self.driver_inner.unpin_connection();
+
+                match callable_ret {
+                    Ok(value) => Ok(value),
+                    Err(err) => {
+                        match err {
+                            ext_php_rs::error::Error::Exception(exception) => Err(exception
+                                .properties_table[0]
+                                .string()
+                                .as_ref()
+                                .map(String::as_str)
+                                .unwrap_or("Unknown error inside callback.")
+                                .into()),
+                            _ => Err(err.into()),
+                        }
+                    }
+                }
+            }
         }
     };
 

@@ -275,6 +275,7 @@ impl PlaceholderType {
             ParameterValue::Array(_) => "array",
             ParameterValue::Object(_) => "object",
             ParameterValue::Json(_) => "json",
+            ParameterValue::DateTime(_) => "datetime",
             ParameterValue::ByClauseRendered(_) => "ByClause",
             ParameterValue::SelectClauseRendered(_) => "SelectClause",
             ParameterValue::PaginateClauseRendered(_) => "PaginateClause",

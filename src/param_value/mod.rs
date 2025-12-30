@@ -57,6 +57,8 @@ pub enum ParameterValue {
     Object(BTreeMap<String, ParameterValue>),
     /// Explicit JSON wrapper that forces JSON serialization.
     Json(Box<ParameterValue>),
+    /// DateTime value from PHP DateTimeInterface, stored as NaiveDateTime.
+    DateTime(chrono::NaiveDateTime),
     /// Pre-rendered ORDER BY clause from `ByClause`.
     ByClauseRendered(ByClauseRendered),
     /// Pre-rendered SELECT clause from `SelectClause`.
@@ -84,6 +86,7 @@ impl ParameterValue {
             | Self::Float(_)
             | Self::Bool(_)
             | Self::Object(_)
+            | Self::DateTime(_)
             | Self::PaginateClauseRendered(_)
             | Self::Builder(_) => false,
             Self::Null => true,

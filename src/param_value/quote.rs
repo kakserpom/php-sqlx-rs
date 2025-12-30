@@ -75,6 +75,8 @@ impl ParameterValue {
 
             Self::String(s) => escape_sql_string(s, settings),
 
+            Self::DateTime(dt) => escape_sql_string(&dt.format("%Y-%m-%d %H:%M:%S").to_string(), settings),
+
             Self::Array(values) => {
                 let elements = values
                     .iter()

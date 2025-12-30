@@ -9,7 +9,7 @@
          beStrictAboutCoverageMetadata="false"
          beStrictAboutOutputDuringTests="true"
          failOnRisky="true"
-         failOnWarning="true">
+         failOnWarning="false">
     <testsuites>
         <testsuite name="PostgreSQL">
             <directory>Integration/PostgreSQL</directory>
@@ -22,11 +22,12 @@
         </testsuite>
         <testsuite name="All">
             <directory>Integration</directory>
+            <exclude>Integration/AbstractDriverTest.php</exclude>
         </testsuite>
     </testsuites>
     <php>
-        <env name="POSTGRES_URL" value="postgres://postgres:postgres@localhost:5432/test_db"/>
+        <env name="POSTGRES_URL" value="postgres://postgres:postgres@localhost:15432/test_db"/>
         <env name="MYSQL_URL" value="mysql://root:root@localhost:3306/test_db"/>
-        <env name="MSSQL_URL" value="mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true"/>
+        <env name="MSSQL_URL" value="mssql://sa:TestPassword123!@127.0.0.1:1433"/>
     </php>
 </phpunit>

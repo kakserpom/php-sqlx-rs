@@ -85,7 +85,7 @@ macro_rules! php_sqlx_impl_driver_inner {
         use itertools::Itertools;
         use sqlx_oldapi::{
             Column, Row, Transaction,
-            pool::{Pool, PoolOptions},
+            pool::{Pool, PoolConnection, PoolOptions},
             $database,
         };
         use std::collections::BTreeMap;
@@ -128,6 +128,8 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub options: DriverInnerOptions,
             /// Stack of active transactions for nested transaction support.
             pub tx_stack: RwLock<Vec<Transaction<'static, $database>>>,
+            /// Pinned connection for session-scoped operations (LAST_INSERT_ID, temp tables, etc.).
+            pub pinned_conn: RwLock<Option<PoolConnection<$database>>>,
             /// AST rendering settings (placeholder style, collapsible IN, etc.).
             pub settings: Settings,
             /// Retry policy for transient failures.
@@ -190,6 +192,7 @@ macro_rules! php_sqlx_impl_driver_inner {
                 };
                 Ok(Self {
                     tx_stack: RwLock::new(Vec::new()),
+                    pinned_conn: RwLock::new(None),
                     pool,
                     replica_pools,
                     replica_weights,
@@ -221,6 +224,22 @@ macro_rules! php_sqlx_impl_driver_inner {
             #[inline]
             pub fn has_active_transaction(&self) -> bool {
                 !self.tx_stack.read().expect("Poisoned tx_stack").is_empty()
+            }
+
+            /// Returns true if there is a pinned connection.
+            ///
+            /// A pinned connection ensures all queries run on the same connection,
+            /// which is required for session-scoped operations like LAST_INSERT_ID(),
+            /// temporary tables, and session variables.
+            #[inline]
+            pub fn has_pinned_connection(&self) -> bool {
+                self.pinned_conn.read().expect("Poisoned pinned_conn").is_some()
+            }
+
+            /// Returns true if queries should use a dedicated connection (transaction or pinned).
+            #[inline]
+            pub fn has_dedicated_connection(&self) -> bool {
+                self.has_active_transaction() || self.has_pinned_connection()
             }
 
             /// Returns true if read replicas are configured.
@@ -337,6 +356,12 @@ macro_rules! php_sqlx_impl_driver_inner {
                         );
                         self.place_ongoing_transaction(tx);
                         val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
                     } else {
                         RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?.execute(&self.pool),
@@ -435,11 +460,24 @@ macro_rules! php_sqlx_impl_driver_inner {
             ) -> $crate::error::Result<Zval> {
                 let (query, values) = self.render_query(query, parameters)?;
                 let row = self.with_retry(|| {
-                    RUNTIME
-                        .block_on(
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(self.get_read_pool()),
                         )
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?;
                 let column_idx: usize = match column {
                     Some(ColumnArgument::Index(i)) => i,
@@ -488,12 +526,25 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let mut it = self
                     .with_retry(|| {
-                        RUNTIME
-                            .block_on(
+                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                            );
+                            self.place_ongoing_transaction(tx);
+                            val
+                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                            );
+                            self.return_pinned_connection(conn);
+                            val
+                        } else {
+                            RUNTIME.block_on(
                                 bind_values(sqlx_oldapi::query(&query), &values)?
                                     .fetch_all(self.get_read_pool()),
                             )
-                            .map_err(|err| SqlxError::query_with_source(&query, err))
+                        }
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
                     })?
                     .into_iter()
                     .peekable();
@@ -557,16 +608,29 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 Ok(self
                     .with_retry(|| {
-                        RUNTIME
-                            .block_on(
+                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                            );
+                            self.place_ongoing_transaction(tx);
+                            val
+                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                            );
+                            self.return_pinned_connection(conn);
+                            val
+                        } else {
+                            RUNTIME.block_on(
                                 bind_values(sqlx_oldapi::query(&query), &values)?
                                     .fetch_one(self.get_read_pool()),
                             )
-                            .map(Some)
-                            .or_else(|err: sqlx_oldapi::Error| match err {
-                                sqlx_oldapi::Error::RowNotFound => Ok(None),
-                                _ => Err(SqlxError::query_with_source(&query, err)),
-                            })
+                        }
+                        .map(Some)
+                        .or_else(|err: sqlx_oldapi::Error| match err {
+                            sqlx_oldapi::Error::RowNotFound => Ok(None),
+                            _ => Err(SqlxError::query_with_source(&query, err)),
+                        })
                     })?
                     .map(|row| {
                         let column_idx: usize = match column {
@@ -626,12 +690,25 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
 
                 let result = self.with_retry(|| {
-                    RUNTIME
-                        .block_on(
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_one(self.get_read_pool()),
                         )
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
                 .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays));
 
@@ -675,16 +752,29 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 let result = self
                     .with_retry(|| {
-                        RUNTIME
-                            .block_on(
+                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                            );
+                            self.place_ongoing_transaction(tx);
+                            val
+                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                            );
+                            self.return_pinned_connection(conn);
+                            val
+                        } else {
+                            RUNTIME.block_on(
                                 bind_values(sqlx_oldapi::query(&query), &values)?
                                     .fetch_one(self.get_read_pool()),
                             )
-                            .map(Some)
-                            .or_else(|err: sqlx_oldapi::Error| match err {
-                                sqlx_oldapi::Error::RowNotFound => Ok(None),
-                                _ => Err(SqlxError::query_with_source(&query, err)),
-                            })
+                        }
+                        .map(Some)
+                        .or_else(|err: sqlx_oldapi::Error| match err {
+                            sqlx_oldapi::Error::RowNotFound => Ok(None),
+                            _ => Err(SqlxError::query_with_source(&query, err)),
+                        })
                     })?
                     .map(|x| {
                         x.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
@@ -731,12 +821,25 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 let result = self.with_retry(|| {
-                    RUNTIME
-                        .block_on(
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_all(self.get_read_pool()),
                         )
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
                 .into_iter()
                 .map(|row| row.into_zval(assoc))
@@ -830,12 +933,25 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 self.with_retry(|| {
-                    RUNTIME
-                        .block_on(
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_all(self.get_read_pool()),
                         )
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
                 .into_iter()
                 .map(|row| {
@@ -904,6 +1020,12 @@ macro_rules! php_sqlx_impl_driver_inner {
                         );
                         self.place_ongoing_transaction(tx);
                         val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
                     } else {
                         RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
@@ -970,12 +1092,25 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 self.with_retry(|| {
-                    RUNTIME
-                        .block_on(
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_all(self.get_read_pool()),
                         )
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
                 .into_iter()
                 .map(|row| {
@@ -1027,12 +1162,25 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
                 self.with_retry(|| {
-                    RUNTIME
-                        .block_on(
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_all(self.get_read_pool()),
                         )
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
                 })?
                 .into_iter()
                 .map(|row| {
@@ -1286,6 +1434,58 @@ macro_rules! php_sqlx_impl_driver_inner {
                 } else {
                     Err(SqlxError::NoActiveTransaction)
                 }
+            }
+
+            /// Pins a connection from the pool for exclusive use.
+            ///
+            /// All subsequent queries will use this connection until `unpin_connection()` is called.
+            /// This is useful for session-scoped operations like:
+            /// - `LAST_INSERT_ID()` in MySQL
+            /// - Temporary tables
+            /// - Session variables
+            /// - Advisory locks
+            ///
+            /// Unlike transactions, pinned connections don't start a database transaction,
+            /// so each query is auto-committed.
+            ///
+            /// # Errors
+            /// Returns an error if a connection is already pinned or acquisition fails.
+            pub fn pin_connection(&self) -> $crate::error::Result<()> {
+                if self.has_pinned_connection() {
+                    return Err(SqlxError::Other("Connection already pinned".to_string()));
+                }
+                let conn = RUNTIME
+                    .block_on(self.pool.acquire())
+                    .map_err(|err| SqlxError::connection_with_source("Failed to acquire connection", err))?;
+                *self.pinned_conn.write().expect("Poisoned pinned_conn") = Some(conn);
+                Ok(())
+            }
+
+            /// Releases the pinned connection back to the pool.
+            ///
+            /// # Errors
+            /// Returns an error if no connection is pinned.
+            pub fn unpin_connection(&self) -> $crate::error::Result<()> {
+                let conn = self.pinned_conn.write().expect("Poisoned pinned_conn").take();
+                if conn.is_some() {
+                    Ok(())
+                } else {
+                    Err(SqlxError::Other("No connection pinned".to_string()))
+                }
+            }
+
+            /// Retrieves the pinned connection for use in a query.
+            ///
+            /// Returns the connection temporarily, caller must return it via `return_pinned_connection`.
+            #[inline(always)]
+            pub fn retrieve_pinned_connection(&self) -> Option<PoolConnection<$database>> {
+                self.pinned_conn.write().expect("Poisoned pinned_conn").take()
+            }
+
+            /// Returns a pinned connection after use.
+            #[inline(always)]
+            pub fn return_pinned_connection(&self, conn: PoolConnection<$database>) {
+                *self.pinned_conn.write().expect("Poisoned pinned_conn") = Some(conn);
             }
 
             /// Retrieves the ongoing transaction from the transaction stack, if any.

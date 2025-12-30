@@ -5,11 +5,14 @@
 use crate::LazyRowJson;
 use crate::conversion::{Conversion, json_into_zval};
 use crate::error::Error as SqlxError;
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use ext_php_rs::binary::Binary;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::types::{ArrayKey, Zval};
 use sqlx_oldapi::Column;
+use sqlx_oldapi::Error::ColumnDecode;
 use sqlx_oldapi::TypeInfo;
+use sqlx_oldapi::error::UnexpectedNullError;
 use sqlx_oldapi::mysql::{MySqlRow, MySqlValueRef};
 use sqlx_oldapi::{Decode, Row, Type};
 
@@ -24,10 +27,11 @@ impl Conversion for MySqlRow {
             T: Decode<'r, <MySqlRow as Row>::Database> + Type<<MySqlRow as Row>::Database>,
             T: IntoZval,
         {
-            row.try_get::<'r, T, _>(column_ordinal)
-                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?
-                .into_zval(false)
-                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })
+            match row.try_get::<'r, T, _>(column_ordinal) {
+                Ok(value) => value.into_zval(false).map_err(|err| SqlxError::Conversion { message: format!("{err:?}") }),
+                Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Ok(Zval::null()),
+                Err(err) => Err(SqlxError::Conversion { message: format!("{err:?}") }),
+            }
         }
 
         let column_ordinal = column.ordinal();
@@ -45,17 +49,48 @@ impl Conversion for MySqlRow {
             "FLOAT" => try_cast_into_zval::<f32>(self, column_ordinal)?,
             "DOUBLE" | "REAL" => try_cast_into_zval::<f64>(self, column_ordinal)?,
             "DECIMAL" | "NUMERIC" => try_cast_into_zval::<String>(self, column_ordinal)?,
-            "DATE" => try_cast_into_zval::<String>(self, column_ordinal)?,
-            "TIME" => try_cast_into_zval::<String>(self, column_ordinal)?,
-            "DATETIME" | "TIMESTAMP" => try_cast_into_zval::<String>(self, column_ordinal)?,
+            "DATE" => {
+                match self.try_get::<NaiveDate, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "TIME" => {
+                match self.try_get::<NaiveTime, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "DATETIME" => {
+                match self.try_get::<NaiveDateTime, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
+            "TIMESTAMP" => {
+                match self.try_get::<DateTime<Utc>, _>(column_ordinal) {
+                    Ok(value) => value.to_string().into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
             "YEAR" => try_cast_into_zval::<i32>(self, column_ordinal)?,
-            "BLOB" | "TINYBLOB" | "MEDIUMBLOB" | "LONGBLOB" | "BINARY" | "VARBINARY" => self
-                .try_get::<&[u8], _>(column_ordinal)?
-                .iter()
-                .copied()
-                .collect::<Binary<_>>()
-                .into_zval(false)
-                .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+            "BLOB" | "TINYBLOB" | "MEDIUMBLOB" | "LONGBLOB" | "BINARY" | "VARBINARY" => {
+                match self.try_get::<&[u8], _>(column_ordinal) {
+                    Ok(bytes) => bytes.iter().copied().collect::<Binary<_>>()
+                        .into_zval(false)
+                        .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
+                    Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
+                    Err(err) => return Err(SqlxError::Conversion { message: format!("{err:?}") }),
+                }
+            }
             "TEXT" | "TINYTEXT" | "MEDIUMTEXT" | "LONGTEXT" | "CHAR" | "VARCHAR" => {
                 try_cast_into_zval::<String>(self, column_ordinal)?
             }

@@ -1,5 +1,6 @@
 use crate::error::Error as SqlxError;
 use crate::param_value::ParameterValue;
+use chrono::NaiveDateTime;
 use sqlx_oldapi::database::HasArguments;
 use sqlx_oldapi::query::Query;
 use sqlx_oldapi::{Database, Encode, Type};
@@ -45,6 +46,8 @@ where
     String: Encode<'a, D>,
     StdOption<String>: Type<D>,
     StdOption<String>: Encode<'a, D>,
+    NaiveDateTime: Type<D>,
+    NaiveDateTime: Encode<'a, D>,
 {
     fn walker<'a, D: Database>(
         q: Query<'a, D, <D as HasArguments<'a>>::Arguments>,
@@ -61,6 +64,8 @@ where
         String: Encode<'a, D>,
         StdOption<String>: Type<D>,
         StdOption<String>: Encode<'a, D>,
+        NaiveDateTime: Type<D>,
+        NaiveDateTime: Encode<'a, D>,
     {
         Ok(match value {
             ParameterValue::Json(pv) => q.bind(pv.to_json()?),
@@ -68,6 +73,7 @@ where
             ParameterValue::Int(s) => q.bind(s),
             ParameterValue::Bool(s) => q.bind(s),
             ParameterValue::Float(s) => q.bind(s),
+            ParameterValue::DateTime(dt) => q.bind(dt),
             ParameterValue::Array(s) => s.iter().try_fold(q, walker)?,
             ParameterValue::Object(_) => q.bind(value.to_json()?),
             ParameterValue::Null => q.bind(StdOption::<String>::None),

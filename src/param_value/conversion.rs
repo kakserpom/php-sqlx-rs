@@ -69,6 +69,7 @@ impl IntoZval for ParameterValue {
                 }
                 zv.set_hashtable(ht);
             }
+            Self::DateTime(dt) => zv.set_string(&dt.format("%Y-%m-%d %H:%M:%S").to_string(), persistent)?,
             Self::Null
             | Self::ByClauseRendered(_)
             | Self::SelectClauseRendered(_)
@@ -154,7 +155,35 @@ impl FromZval<'_> for ParameterValue {
                             .try_collect()
                             .ok()?,
                     )),
-                    _ => None,
+                    // Handle DateTime and DateTimeImmutable (implements DateTimeInterface)
+                    "DateTime" | "DateTimeImmutable" => {
+                        // Call format() method to get ISO 8601 string representation
+                        // Format: Y-m-d H:i:s (e.g., "2024-06-15 14:30:45")
+                        let mut format_arg = Zval::new();
+                        format_arg.set_string("Y-m-d H:i:s", false).ok()?;
+                        let result = obj.try_call_method("format", vec![&format_arg]).ok()?;
+                        let datetime_str = result.string()?;
+                        // Parse into NaiveDateTime for proper database binding
+                        let ndt = chrono::NaiveDateTime::parse_from_str(&datetime_str, "%Y-%m-%d %H:%M:%S").ok()?;
+                        Some(Self::DateTime(ndt))
+                    }
+                    other => {
+                        // For other classes, try calling format() method if it exists
+                        // This handles custom DateTimeInterface implementations
+                        if other.contains("DateTime") || other.ends_with("Date") || other.ends_with("Time") {
+                            let mut format_arg = Zval::new();
+                            if format_arg.set_string("Y-m-d H:i:s", false).is_ok() {
+                                if let Ok(result) = obj.try_call_method("format", vec![&format_arg]) {
+                                    if let Some(datetime_str) = result.string() {
+                                        if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(&datetime_str, "%Y-%m-%d %H:%M:%S") {
+                                            return Some(Self::DateTime(ndt));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    }
                 }
             }
             DataType::Iterable
@@ -182,6 +211,7 @@ impl Serialize for ParameterValue {
             Self::Int(i) => serializer.serialize_i64(*i),
             Self::Float(f) => serializer.serialize_f64(*f),
             Self::Bool(b) => serializer.serialize_bool(*b),
+            Self::DateTime(dt) => serializer.serialize_str(&dt.format("%Y-%m-%d %H:%M:%S").to_string()),
 
             Self::Array(arr) => {
                 let mut seq = serializer.serialize_seq(Some(arr.len()))?;
