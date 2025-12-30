@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use php_sqlx::ast::{Ast, Settings};
+use php_sqlx::ast::{Ast, IdentifierQuoteStyle, Settings, UpsertStyle};
 use std::collections::HashMap;
 use std::hint::black_box;
 
@@ -16,6 +16,8 @@ const SETTINGS: Settings = Settings {
     strings_as_ntext: false,
     cast_json: None,
     escape_backslash: false,
+    upsert_style: UpsertStyle::OnConflict,
+    identifier_quote_style: IdentifierQuoteStyle::DoubleQuote,
 };
 
 const QUERY_SMALL: &str = "SELECT id, name, meta

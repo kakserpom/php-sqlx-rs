@@ -255,7 +255,12 @@ impl PlaceholderType {
             // Null is only allowed if nullable flag is set
             (_, ParameterValue::Null) => nullable,
             // Scalar types
-            (Self::Int, ParameterValue::Int(_)) | (Self::String, ParameterValue::String(_)) => true,
+            (Self::Int, ParameterValue::Int(_))
+            | (Self::String, ParameterValue::String(_))
+            | (
+                Self::Json,
+                ParameterValue::Json(_) | ParameterValue::Object(_) | ParameterValue::Array(_),
+            ) => true,
             (Self::UnsignedInt, ParameterValue::Int(n)) => *n >= 0,
             (Self::Decimal, v) => Self::is_decimal(v),
             (Self::UnsignedDecimal, v) => Self::is_unsigned_decimal(v),
@@ -275,10 +280,6 @@ impl PlaceholderType {
             (Self::StringArray, ParameterValue::Array(arr)) => arr
                 .iter()
                 .all(|v| matches!(v, ParameterValue::String(_) | ParameterValue::Null)),
-            // JSON type - accepts explicit Json wrapper, Object, or Array
-            (Self::Json, ParameterValue::Json(_))
-            | (Self::Json, ParameterValue::Object(_))
-            | (Self::Json, ParameterValue::Array(_)) => true,
             // JSON array - each element must be JSON-compatible
             (Self::JsonArray, ParameterValue::Array(arr)) => arr.iter().all(|v| {
                 matches!(
@@ -398,10 +399,10 @@ pub enum Ast {
 /// Upsert SQL style for different databases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UpsertStyle {
-    /// PostgreSQL: `INSERT ... ON CONFLICT (cols) DO UPDATE SET col = EXCLUDED.col`
+    /// `PostgreSQL`: `INSERT ... ON CONFLICT (cols) DO UPDATE SET col = EXCLUDED.col`
     #[default]
     OnConflict,
-    /// MySQL: `INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)`
+    /// `MySQL`: `INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)`
     OnDuplicateKey,
     /// Database does not support upsert (e.g., MSSQL requires MERGE)
     Unsupported,

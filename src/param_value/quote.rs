@@ -4,9 +4,9 @@ use crate::param_value::ParameterValue;
 
 /// Quotes an identifier (table name, column name) according to the database's quoting style.
 ///
-/// - PostgreSQL: `"identifier"` (escapes `"` by doubling)
-/// - MySQL: `` `identifier` `` (escapes `` ` `` by doubling)
-/// - MSSQL: `[identifier]` (escapes `]` by doubling)
+/// - `PostgreSQL`: `"identifier"` (escapes `"` by doubling)
+/// - `MySQL`: `` `identifier` `` (escapes `` ` `` by doubling)
+/// - `MSSQL`: `[identifier]` (escapes `]` by doubling)
 pub fn quote_identifier(name: &str, settings: &Settings) -> String {
     match settings.identifier_quote_style {
         IdentifierQuoteStyle::DoubleQuote => {

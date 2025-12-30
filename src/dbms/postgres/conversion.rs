@@ -191,7 +191,7 @@ impl Conversion for PgRow {
             "_NUMERIC" | "_MONEY" => try_cast_into_zval::<Vec<String>>(self, column_ordinal)?,
             "_UUID" => {
                 match self.try_get::<Vec<Uuid>, _>(column_ordinal) {
-                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                    Ok(values) => values.iter().map(ToString::to_string).collect::<Vec<_>>()
                         .into_zval(false)
                         .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
                     Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
@@ -200,7 +200,7 @@ impl Conversion for PgRow {
             }
             "_DATE" => {
                 match self.try_get::<Vec<NaiveDate>, _>(column_ordinal) {
-                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                    Ok(values) => values.iter().map(ToString::to_string).collect::<Vec<_>>()
                         .into_zval(false)
                         .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
                     Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
@@ -209,7 +209,7 @@ impl Conversion for PgRow {
             }
             "_TIME" | "_TIMETZ" => {
                 match self.try_get::<Vec<NaiveTime>, _>(column_ordinal) {
-                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                    Ok(values) => values.iter().map(ToString::to_string).collect::<Vec<_>>()
                         .into_zval(false)
                         .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
                     Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
@@ -218,7 +218,7 @@ impl Conversion for PgRow {
             }
             "_TIMESTAMP" => {
                 match self.try_get::<Vec<NaiveDateTime>, _>(column_ordinal) {
-                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                    Ok(values) => values.iter().map(ToString::to_string).collect::<Vec<_>>()
                         .into_zval(false)
                         .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
                     Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),
@@ -227,7 +227,7 @@ impl Conversion for PgRow {
             }
             "_TIMESTAMPTZ" => {
                 match self.try_get::<Vec<DateTime<Utc>>, _>(column_ordinal) {
-                    Ok(values) => values.iter().map(|v| v.to_string()).collect::<Vec<_>>()
+                    Ok(values) => values.iter().map(ToString::to_string).collect::<Vec<_>>()
                         .into_zval(false)
                         .map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?,
                     Err(ColumnDecode { source, .. }) if source.is::<UnexpectedNullError>() => Zval::null(),

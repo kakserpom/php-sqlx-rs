@@ -70,7 +70,7 @@ impl IntoZval for ParameterValue {
                 zv.set_hashtable(ht);
             }
             Self::DateTime(dt) => {
-                zv.set_string(&dt.format("%Y-%m-%d %H:%M:%S").to_string(), persistent)?
+                zv.set_string(&dt.format("%Y-%m-%d %H:%M:%S").to_string(), persistent)?;
             }
             Self::Null
             | Self::ByClauseRendered(_)
@@ -181,18 +181,15 @@ impl FromZval<'_> for ParameterValue {
                             || other.ends_with("Time")
                         {
                             let mut format_arg = Zval::new();
-                            if format_arg.set_string("Y-m-d H:i:s", false).is_ok() {
-                                if let Ok(result) = obj.try_call_method("format", vec![&format_arg])
-                                {
-                                    if let Some(datetime_str) = result.string() {
-                                        if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(
-                                            &datetime_str,
-                                            "%Y-%m-%d %H:%M:%S",
-                                        ) {
-                                            return Some(Self::DateTime(ndt));
-                                        }
-                                    }
-                                }
+                            if format_arg.set_string("Y-m-d H:i:s", false).is_ok()
+                                && let Ok(result) = obj.try_call_method("format", vec![&format_arg])
+                                && let Some(datetime_str) = result.string()
+                                && let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(
+                                    &datetime_str,
+                                    "%Y-%m-%d %H:%M:%S",
+                                )
+                            {
+                                return Some(Self::DateTime(ndt));
                             }
                         }
                         None

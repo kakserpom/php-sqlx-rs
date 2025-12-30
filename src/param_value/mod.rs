@@ -57,7 +57,7 @@ pub enum ParameterValue {
     Object(BTreeMap<String, ParameterValue>),
     /// Explicit JSON wrapper that forces JSON serialization.
     Json(Box<ParameterValue>),
-    /// DateTime value from PHP DateTimeInterface, stored as NaiveDateTime.
+    /// `DateTime` value from PHP `DateTimeInterface`, stored as `NaiveDateTime`.
     DateTime(chrono::NaiveDateTime),
     /// Pre-rendered ORDER BY clause from `ByClause`.
     ByClauseRendered(ByClauseRendered),

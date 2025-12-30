@@ -128,7 +128,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub options: DriverInnerOptions,
             /// Stack of active transactions for nested transaction support.
             pub tx_stack: RwLock<Vec<Transaction<'static, $database>>>,
-            /// Pinned connection for session-scoped operations (LAST_INSERT_ID, temp tables, etc.).
+            /// Pinned connection for session-scoped operations (`LAST_INSERT_ID`, temp tables, etc.).
             pub pinned_conn: RwLock<Option<PoolConnection<$database>>>,
             /// AST rendering settings (placeholder style, collapsible IN, etc.).
             pub settings: Settings,
@@ -232,7 +232,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// Returns true if there is a pinned connection.
             ///
             /// A pinned connection ensures all queries run on the same connection,
-            /// which is required for session-scoped operations like LAST_INSERT_ID(),
+            /// which is required for session-scoped operations like `LAST_INSERT_ID()`,
             /// temporary tables, and session variables.
             #[inline]
             pub fn has_pinned_connection(&self) -> bool {
@@ -1468,7 +1468,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             ///
             /// All subsequent queries will use this connection until `unpin_connection()` is called.
             /// This is useful for session-scoped operations like:
-            /// - `LAST_INSERT_ID()` in MySQL
+            /// - `LAST_INSERT_ID()` in `MySQL`
             /// - Temporary tables
             /// - Session variables
             /// - Advisory locks

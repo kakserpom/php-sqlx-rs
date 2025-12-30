@@ -227,9 +227,9 @@ macro_rules! php_sqlx_impl_driver {
 
             /// Quotes an identifier (table name, column name) using the appropriate quote style.
             ///
-            /// - PostgreSQL: `"identifier"` (double quotes)
-            /// - MySQL: `` `identifier` `` (backticks)
-            /// - MSSQL: `[identifier]` (brackets)
+            /// - `PostgreSQL`: `"identifier"` (double quotes)
+            /// - `MySQL`: `` `identifier` `` (backticks)
+            /// - `MSSQL`: `[identifier]` (brackets)
             ///
             /// Special characters in the identifier are properly escaped.
             ///
@@ -1109,9 +1109,9 @@ macro_rules! php_sqlx_impl_driver {
             /// Inserts a row or updates it if a conflict occurs on the specified columns.
             ///
             /// This method generates database-specific SQL for upsert operations:
-            /// - **PostgreSQL**: `INSERT ... ON CONFLICT (cols) DO UPDATE SET ...`
-            /// - **MySQL**: `INSERT ... ON DUPLICATE KEY UPDATE ...`
-            /// - **MSSQL**: Not currently supported (returns an error)
+            /// - **`PostgreSQL`**: `INSERT ... ON CONFLICT (cols) DO UPDATE SET ...`
+            /// - **`MySQL`**: `INSERT ... ON DUPLICATE KEY UPDATE ...`
+            /// - **`MSSQL`**: Not currently supported (returns an error)
             ///
             /// # Arguments
             /// - `table`: Table name to insert into
@@ -1502,7 +1502,7 @@ macro_rules! php_sqlx_impl_driver {
             ///
             /// All queries executed within the callback will use the same database connection,
             /// which is required for session-scoped operations like:
-            /// - `LAST_INSERT_ID()` in MySQL
+            /// - `LAST_INSERT_ID()` in `MySQL`
             /// - Temporary tables
             /// - Session variables
             /// - Advisory locks
