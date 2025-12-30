@@ -13,16 +13,29 @@
     <testsuites>
         <testsuite name="PostgreSQL">
             <directory>Integration/PostgreSQL</directory>
+            <directory>Integration/QueryBuilder</directory>
+            <exclude>Integration/QueryBuilder/AbstractQueryBuilderTest.php</exclude>
+            <exclude>Integration/QueryBuilder/MySQLQueryBuilderTest.php</exclude>
         </testsuite>
         <testsuite name="MySQL">
             <directory>Integration/MySQL</directory>
+            <directory>Integration/QueryBuilder</directory>
+            <exclude>Integration/QueryBuilder/AbstractQueryBuilderTest.php</exclude>
+            <exclude>Integration/QueryBuilder/PostgreSQLQueryBuilderTest.php</exclude>
         </testsuite>
         <testsuite name="MSSQL">
             <directory>Integration/MSSQL</directory>
         </testsuite>
+        <testsuite name="QueryBuilder-PostgreSQL">
+            <file>Integration/QueryBuilder/PostgreSQLQueryBuilderTest.php</file>
+        </testsuite>
+        <testsuite name="QueryBuilder-MySQL">
+            <file>Integration/QueryBuilder/MySQLQueryBuilderTest.php</file>
+        </testsuite>
         <testsuite name="All">
             <directory>Integration</directory>
             <exclude>Integration/AbstractDriverTest.php</exclude>
+            <exclude>Integration/QueryBuilder/AbstractQueryBuilderTest.php</exclude>
         </testsuite>
     </testsuites>
     <php>

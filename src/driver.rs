@@ -252,6 +252,42 @@ macro_rules! php_sqlx_impl_driver {
                 $crate::param_value::quote::quote_identifier(name, &self.driver_inner.settings)
             }
 
+            /// Closes the connection pool and releases all database connections.
+            ///
+            /// This gracefully shuts down all connections, sending termination messages
+            /// to the database server. After calling this method, the driver cannot be
+            /// used for further queries.
+            ///
+            /// Call this method when you're done using the driver to free up database
+            /// connections immediately rather than waiting for garbage collection.
+            ///
+            /// # Example
+            /// ```php
+            /// $driver = Sqlx\DriverFactory::make("postgres://...");
+            /// // ... use the driver ...
+            /// $driver->close(); // Release connections immediately
+            /// ```
+            pub fn close(&self) {
+                self.driver_inner.close();
+            }
+
+            /// Returns true if the driver has been closed.
+            ///
+            /// Once closed, the driver cannot execute any queries. Attempting to
+            /// use a closed driver will throw an exception.
+            ///
+            /// # Example
+            /// ```php
+            /// $driver = Sqlx\DriverFactory::make("postgres://...");
+            /// var_dump($driver->isClosed()); // false
+            /// $driver->close();
+            /// var_dump($driver->isClosed()); // true
+            /// ```
+            #[must_use]
+            pub fn is_closed(&self) -> bool {
+                self.driver_inner.is_closed()
+            }
+
             /// Returns whether results are returned as associative arrays.
             ///
             /// If true, result rows are returned as PHP associative arrays (key-value pairs).

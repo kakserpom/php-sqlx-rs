@@ -488,7 +488,7 @@ macro_rules! php_sqlx_impl_query_builder {
                         }
                         "IENDSWITH" => {
                             self._append(
-                                &format!("{left_operand} ILIKE ?"),
+                                &format!("{left_operand} {}ILIKE ?", if not {"NOT "} else {""}),
                                 Some([("0", ParameterValue::String(format!("%{}", value.meta_quote_like()?)))]),
                                 placeholder_prefix
                             )?;
@@ -842,8 +842,13 @@ macro_rules! php_sqlx_impl_query_builder {
                 };
 
                 if let Some(set_val) = set {
-                    write!(self_.query, "\nON CONFLICT ({target_str}) DO UPDATE")?;
-                    $struct::set(self_, set_val)?;
+                    // Check if set_val is actually null (PHP's null vs Rust's None)
+                    if set_val.is_null() {
+                        write!(self_.query, "\nON CONFLICT ({target_str}) DO NOTHING")?;
+                    } else {
+                        write!(self_.query, "\nON CONFLICT ({target_str}) DO UPDATE")?;
+                        $struct::set(self_, set_val)?;
+                    }
                 } else {
                     write!(self_.query, "\nON CONFLICT ({target_str}) DO NOTHING")?;
                 }
@@ -865,9 +870,8 @@ macro_rules! php_sqlx_impl_query_builder {
                 self_: &'a mut ZendClassObject<$struct>,
                 set: &Zval,
             ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
-                self_.query.push_str("\nON DUPLICATE KEY UPDATE");
-                $struct::set(self_, set)?;
-                Ok(self_)
+                self_.query.push_str("\nON DUPLICATE KEY UPDATE ");
+                $struct::_set_assignments(self_, set, "on_duplicate_key_update")
             }
 
             /// Appends an `INNER JOIN` clause to the query.
@@ -1280,13 +1284,12 @@ macro_rules! php_sqlx_impl_query_builder {
             /// Appends a `DELETE FROM` clause to the query.
             ///
             /// # Arguments
-            /// * `from` - A string table name or a nested builder object.
-            /// * `parameters` - Optional parameters if the `from` is a raw string.
+            /// * `from` - A string table name or a subquery builder.
+            /// * `parameters` - Optional parameters if `from` is a raw string.
             ///
             /// # Examples
             /// ```php
             /// $builder->deleteFrom("users");
-            /// $builder->deleteFrom($builder->select("id")->from("temp_users"));
             /// ```
             fn delete_from<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
@@ -1299,18 +1302,22 @@ macro_rules! php_sqlx_impl_query_builder {
                     self_.query.push('\n');
                 }
 
-                if let Some(str) = from.str() {
-                    self_._append(&format!("DELETE FROM ({})", str.indent_sql(true)), parameters, "delete")?;
-                } else if from.array().is_some() {
-                    return Err($crate::error::Error::Other("deleteFrom() does not support arrays".to_string()));
-                } else if let Some($struct { query, parameters, .. }) = from
+                if let Some(table) = from.string() {
+                    write!(self_.query, "DELETE FROM {}", table)?;
+                } else if let Some(table_str) = from.str() {
+                    write!(self_.query, "DELETE FROM {}", table_str)?;
+                } else if let Some($struct { query, parameters: sub_params, .. }) = from
                     .object()
                     .and_then(ZendClassObject::<$struct>::from_zend_obj)
                     .and_then(|x| x.obj.as_ref())
                 {
-                    self_._append(&format!("DELETE FROM ({})", query.indent_sql(true)), Some(parameters.clone()), "delete")?;
+                    self_._append(&format!("DELETE FROM ({})", query.indent_sql(true)), Some(sub_params.clone()), "delete")?;
                 } else {
-                    return Err($crate::error::Error::Other("invalid deleteFrom() argument".to_string()));
+                    return Err($crate::error::Error::Other(format!("deleteFrom() expects string or query builder, got {:?}", from.get_type())));
+                }
+                // Store any passed parameters
+                if let Some(params) = parameters {
+                    self_.parameters.extend(params);
                 }
                 Ok(self_)
             }
@@ -1454,15 +1461,16 @@ macro_rules! php_sqlx_impl_query_builder {
             ///
             /// # Exceptions
             /// - When the input array is malformed or contains invalid value types.
-            fn set<'a>(
+            /// Internal helper: appends column=value assignments without the SET keyword.
+            /// Used by both `set()` and `on_duplicate_key_update()`.
+            fn _set_assignments<'a>(
                 self_: &'a mut ZendClassObject<$struct>,
                 set: &Zval,
+                context: &str,
             ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
-                self_._write_op_guard()?;
-                self_.query.push_str("\nSET ");
                 let mut first = true;
 
-                let set_array = set.array().ok_or_else(|| $crate::error::Error::Other("Argument to set() must be an array".to_string()))?;
+                let set_array = set.array().ok_or_else(|| $crate::error::Error::Other("Argument must be an array".to_string()))?;
                 for (key, value) in set_array.iter() {
                     if !first {
                         self_.query.push_str(", ");
@@ -1487,7 +1495,7 @@ macro_rules! php_sqlx_impl_query_builder {
                                         .and_then(ParameterValue::from_zval)
                                         .ok_or_else(|| $crate::error::Error::Other("second element (value) must be a valid parameter value".to_string()))?;
 
-                                    self_._append_op(field, "=", Some(param), "set")?;
+                                    self_._append_op(field, "=", Some(param), context)?;
                                 } else {
                                     if array.len() != 1 {
                                         return Err($crate::error::Error::Other("keyed array must contain a single element".to_string()));
@@ -1498,14 +1506,14 @@ macro_rules! php_sqlx_impl_query_builder {
                                         };
                                         let parameters: HashMap<String, ParameterValue> =
                                             parameters.try_into().map_err(|err| $crate::error::Error::Other(format!("invalid parameters: {err}")))?;
-                                        self_._append(&key.to_string(), Some(parameters), "set")?;
+                                        self_._append(&key.to_string(), Some(parameters), context)?;
                                     }
                                 }
                             } else if let Some(part) = value.str() {
                                 self_._append(
                                     part,
                                     None::<[(&str, &str); 0]>,
-                                    "set",
+                                    context,
                                 )?;
                             }
                             else {
@@ -1517,12 +1525,21 @@ macro_rules! php_sqlx_impl_query_builder {
                             let param = ParameterValue::from_zval(&value)
                                 .ok_or_else(|| $crate::error::Error::Other(format!("value for key `{field}` must be a valid parameter value")))?;
 
-                            self_._append_op(field.as_str(), "=", Some(param), "set")?;
+                            self_._append_op(field.as_str(), "=", Some(param), context)?;
                         }
                     }
                 }
 
                 Ok(self_)
+            }
+
+            fn set<'a>(
+                self_: &'a mut ZendClassObject<$struct>,
+                set: &Zval,
+            ) -> crate::error::Result<&'a mut ZendClassObject<$struct>> {
+                self_._write_op_guard()?;
+                self_.query.push_str("\nSET ");
+                $struct::_set_assignments(self_, set, "set")
             }
 
             /// Renders the SQL query using named parameters and returns the fully rendered SQL with values injected inline.
@@ -1545,6 +1562,26 @@ macro_rules! php_sqlx_impl_query_builder {
             /// - If rendering or encoding of parameters fails.
             pub(crate) fn dry_inline(&self) -> crate::error::Result<String> {
                 self.driver_inner.dry_inline(&self.query, Some(self.parameters.clone().into_iter().collect()))
+            }
+
+            /// Merges additional parameters with the builder's accumulated parameters.
+            ///
+            /// Parameters passed directly to the method take precedence over builder parameters.
+            fn merge_parameters(
+                &self,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> Option<BTreeMap<String, ParameterValue>> {
+                if self.parameters.is_empty() {
+                    parameters
+                } else if let Some(mut params) = parameters {
+                    // Extend with builder params (builder params have lower priority)
+                    for (k, v) in &self.parameters {
+                        params.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
+                    Some(params)
+                } else {
+                    Some(self.parameters.clone())
+                }
             }
 
             /// Returns the fully rendered SQL query with parameters embedded as literals.
@@ -1901,7 +1938,8 @@ macro_rules! php_sqlx_impl_query_builder {
                                 let column = arr.get_index(0).and_then(Zval::str).ok_or_else(|| $crate::error::Error::Other("first element must be string".to_string()))?;
                                 let value = arr.get_index(1).and_then(ParameterValue::from_zval).ok_or_else(|| $crate::error::Error::Other("invalid value".to_string()))?;
                                 columns.push(column.to_string());
-                                placeholders.push((String::from("0"), value));
+                                placeholders.push((param_index.to_string(), value));
+                                param_index += 1;
                             }
                             _ => {
                                 // Associative array
@@ -1918,20 +1956,15 @@ macro_rules! php_sqlx_impl_query_builder {
                         return Err($crate::error::Error::Other("values() requires at least one column-value pair".to_string()));
                     }
 
-                    write!(self_.query, "\n({})\nVALUES (", columns.join(", "))?;
-                    for i in 0..placeholders.len() {
-                        if i > 0 {
-                            self_.query.push_str(", ");
-                        }
-                        self_.query.push('?');
-                    }
-                    self_.query.push(')');
-                    self_.parameters.extend(
-                        placeholders
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, (_, v))| (format!("values__{i}"), v)),
-                    );
+                    // Build the VALUES clause with positional placeholders
+                    let placeholders_str = (0..placeholders.len())
+                        .map(|_| "?")
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let sql = format!("\n({})\nVALUES ({})", columns.join(", "), placeholders_str);
+
+                    // Use _append to properly handle placeholder renaming
+                    self_._append(&sql, Some(placeholders), "values")?;
                     Ok(self_)
                 } else if let Some(str) = values.str() {
                     // Case 2: raw subquery string
@@ -2073,31 +2106,29 @@ macro_rules! php_sqlx_impl_query_builder {
                     all_placeholders.push(placeholder_row);
                 }
 
-                // Append header
-                write!(self_.query, "\n({})\nVALUES", columns.join(", "))?;
+                // Build SQL with positional placeholders
+                let mut sql = format!("\n({})\nVALUES", columns.join(", "));
+                let mut all_params: Vec<(String, ParameterValue)> = Vec::new();
+                let mut param_idx = 0;
 
-                // Append each VALUES (...)
-                for (i, row) in all_placeholders.iter().enumerate() {
-                    if i > 0 {
-                        self_.query.push(',');
-                    }
-                    self_.query.push_str("\n(");
-                    for j in 0..row.len() {
-                        if j > 0 {
-                            self_.query.push_str(", ");
-                        }
-                        self_.query.push('?');
-                    }
-                    self_.query.push(')');
-                }
-
-                // Register parameters
                 for (i, row) in all_placeholders.into_iter().enumerate() {
-                    for (j, val) in row.into_iter().enumerate() {
-                        let name = format!("values__{}_{}", i, j);
-                        self_.parameters.insert(name, val);
+                    if i > 0 {
+                        sql.push(',');
                     }
+                    sql.push_str("\n(");
+                    for (j, val) in row.into_iter().enumerate() {
+                        if j > 0 {
+                            sql.push_str(", ");
+                        }
+                        sql.push('?');
+                        all_params.push((param_idx.to_string(), val));
+                        param_idx += 1;
+                    }
+                    sql.push(')');
                 }
+
+                // Use _append to properly handle placeholder renaming
+                self_._append(&sql, Some(all_params), "values_many")?;
 
                 Ok(self_)
             }
@@ -2234,8 +2265,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_column_dictionary(&self.query, parameters, None)
+                    .query_column_dictionary(&self.query, merged_params, None)
             }
 
             /// Executes the prepared query and returns a dictionary in associative array mode.
@@ -2255,8 +2287,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_column_dictionary(&self.query, parameters, Some(true))
+                    .query_column_dictionary(&self.query, merged_params, Some(true))
             }
 
             /// Executes the prepared query and returns a dictionary in object mode.
@@ -2276,8 +2309,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_column_dictionary(&self.query, parameters, Some(false))
+                    .query_column_dictionary(&self.query, merged_params, Some(false))
             }
 
             /// Executes the prepared query and returns a dictionary (map) indexed by the first column of each row.
@@ -2303,8 +2337,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_dictionary(&self.query, parameters, None)
+                    .query_dictionary(&self.query, merged_params, None)
             }
 
             /// Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
@@ -2328,8 +2363,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_dictionary(&self.query, parameters, Some(true))
+                    .query_dictionary(&self.query, merged_params, Some(true))
             }
 
             /// Executes the prepared query and returns a dictionary (map) indexed by the first column of each row,
@@ -2353,8 +2389,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_dictionary(&self.query, parameters, Some(false))
+                    .query_dictionary(&self.query, merged_params, Some(false))
             }
 
             /// Executes a query and returns a grouped dictionary (Vec of rows per key).
@@ -2370,8 +2407,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_grouped_dictionary(&self.query, parameters, None)
+                    .query_grouped_dictionary(&self.query, merged_params, None)
             }
 
             /// Same as `query_grouped_dictionary`, but forces rows to be decoded as associative arrays.
@@ -2379,8 +2417,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_grouped_dictionary(&self.query, parameters, Some(true))
+                    .query_grouped_dictionary(&self.query, merged_params, Some(true))
             }
 
             /// Same as `query_grouped_dictionary`, but forces rows to be decoded as PHP objects.
@@ -2388,8 +2427,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_grouped_dictionary(&self.query, parameters, Some(false))
+                    .query_grouped_dictionary(&self.query, merged_params, Some(false))
             }
 
             /// Executes the prepared query and returns a grouped dictionary where:
@@ -2404,8 +2444,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_grouped_column_dictionary(&self.query, parameters, None)
+                    .query_grouped_column_dictionary(&self.query, merged_params, None)
             }
 
             /// Same as `queryGroupedColumnDictionary()`, but forces associative arrays
@@ -2417,9 +2458,10 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
-                    parameters,
+                    merged_params,
                     Some(true),
                 )
             }
@@ -2433,9 +2475,10 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner.query_grouped_column_dictionary(
                     &self.query,
-                    parameters,
+                    merged_params,
                     Some(false),
                 )
             }
@@ -2457,7 +2500,8 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<u64> {
-                self.driver_inner.execute(self.query.as_str(), parameters)
+                let merged_params = self.merge_parameters(parameters);
+                self.driver_inner.execute(self.query.as_str(), merged_params)
             }
 
             /// Executes the prepared query and returns a single result.
@@ -2478,7 +2522,8 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
-                self.driver_inner.query_row(&self.query, parameters, None)
+                let merged_params = self.merge_parameters(parameters);
+                self.driver_inner.query_row(&self.query, merged_params, None)
             }
 
             /// Executes the prepared query and returns one row as an associative array.
@@ -2489,8 +2534,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_row(&self.query, parameters, Some(true))
+                    .query_row(&self.query, merged_params, Some(true))
             }
 
             /// Executes the prepared query and returns one row as an object.
@@ -2501,8 +2547,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_row(&self.query, parameters, Some(false))
+                    .query_row(&self.query, merged_params, Some(false))
             }
 
             /// Executes an SQL query and returns a single result, or `null` if no row matched.
@@ -2520,8 +2567,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_maybe_row(&self.query, parameters, None)
+                    .query_maybe_row(&self.query, merged_params, None)
             }
 
             /// Executes the SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
@@ -2542,8 +2590,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_maybe_row(&self.query, parameters, Some(true))
+                    .query_maybe_row(&self.query, merged_params, Some(true))
             }
 
             /// Executes an SQL query and returns a single row as a PHP object, or `null` if no row matched.
@@ -2563,8 +2612,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_maybe_row(&self.query, parameters, Some(false))
+                    .query_maybe_row(&self.query, merged_params, Some(false))
             }
 
             /// Executes the SQL query and returns the specified column values from all result rows.
@@ -2587,8 +2637,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> crate::error::Result<Vec<Zval>> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_column(&self.query, parameters, column, None)
+                    .query_column(&self.query, merged_params, column, None)
             }
 
             /// Executes the SQL query and returns the specified column values from all rows in associative array mode.
@@ -2608,8 +2659,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> crate::error::Result<Vec<Zval>> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_column(&self.query, parameters, column, Some(true))
+                    .query_column(&self.query, merged_params, column, Some(true))
             }
 
             /// Executes the SQL query and returns the specified column values from all rows in object mode.
@@ -2628,8 +2680,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 column: Option<ColumnArgument>,
             ) -> crate::error::Result<Vec<Zval>> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_column(&self.query, parameters, column, Some(false))
+                    .query_column(&self.query, merged_params, column, Some(false))
             }
 
             /// Executes the prepared query and returns all rows.
@@ -2650,7 +2703,8 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Vec<Zval>> {
-                self.driver_inner.query_all(&self.query, parameters, None)
+                let merged_params = self.merge_parameters(parameters);
+                self.driver_inner.query_all(&self.query, merged_params, None)
             }
 
             /// Executes the prepared query and returns all rows as associative arrays.
@@ -2668,8 +2722,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Vec<Zval>> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_all(&self.query, parameters, Some(true))
+                    .query_all(&self.query, merged_params, Some(true))
             }
 
             /// Executes the prepared query and returns all rows as objects.
@@ -2687,8 +2742,9 @@ macro_rules! php_sqlx_impl_query_builder {
                 &self,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> crate::error::Result<Vec<Zval>> {
+                let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
-                    .query_all(&self.query, parameters, Some(false))
+                    .query_all(&self.query, merged_params, Some(false))
             }
         }
     };

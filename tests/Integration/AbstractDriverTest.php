@@ -36,6 +36,15 @@ abstract class AbstractDriverTest extends TestCase
         }
     }
 
+    protected function tearDown(): void
+    {
+        // Explicitly close the pool - Drop won't run until PHP exits
+        if (isset($this->driver)) {
+            $this->driver->close();
+        }
+        parent::tearDown();
+    }
+
     // =========================================================================
     // Connection Tests
     // =========================================================================

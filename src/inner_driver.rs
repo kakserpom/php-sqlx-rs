@@ -254,6 +254,23 @@ macro_rules! php_sqlx_impl_driver_inner {
                 !self.replica_pools.is_empty()
             }
 
+            /// Returns true if the connection pool has been closed.
+            ///
+            /// Once closed, the driver cannot execute any queries.
+            #[inline]
+            pub fn is_closed(&self) -> bool {
+                self.pool.is_closed()
+            }
+
+            /// Ensures the pool is open, returning an error if closed.
+            #[inline]
+            pub fn ensure_open(&self) -> $crate::error::Result<()> {
+                if self.pool.is_closed() {
+                    return Err(SqlxError::Other("Driver has been closed. Create a new driver instance to continue.".to_string()));
+                }
+                Ok(())
+            }
+
             /// Returns a reference to a read replica pool using weighted selection.
             ///
             /// When weights are configured, replicas receive traffic proportional to their weight.
@@ -307,6 +324,9 @@ macro_rules! php_sqlx_impl_driver_inner {
             where
                 F: Fn() -> $crate::error::Result<T>,
             {
+                // Ensure driver hasn't been closed
+                self.ensure_open()?;
+
                 // Skip retry if disabled or in transaction
                 if self.retry_policy.is_disabled() || self.has_active_transaction() {
                     return operation();
@@ -1537,6 +1557,35 @@ macro_rules! php_sqlx_impl_driver_inner {
             #[inline(always)]
             pub fn place_ongoing_transaction(&self, tx: Transaction<'static, $database>) {
                 self.tx_stack.write().expect("Poisoned tx_stack").push(tx);
+            }
+
+            /// Closes the connection pool and all replica pools.
+            ///
+            /// This gracefully shuts down all connections, sending termination messages
+            /// to the database server. After calling this method, the driver cannot be
+            /// used for further queries.
+            ///
+            /// This should be called when you're done using the driver to free up
+            /// database connections immediately rather than waiting for garbage collection.
+            pub fn close(&self) {
+                // Close the main pool
+                RUNTIME.block_on(self.pool.close());
+                // Close all replica pools
+                for pool in &self.replica_pools {
+                    RUNTIME.block_on(pool.close());
+                }
+            }
+        }
+
+        impl Drop for $struct {
+            fn drop(&mut self) {
+                // Gracefully close all connection pools when the driver is dropped.
+                // This serves as a safety net - prefer calling close() explicitly
+                // for deterministic cleanup, as PHP's GC timing is unpredictable.
+                RUNTIME.block_on(self.pool.close());
+                for pool in &self.replica_pools {
+                    RUNTIME.block_on(pool.close());
+                }
             }
         }
     };
