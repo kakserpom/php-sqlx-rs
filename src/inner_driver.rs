@@ -266,7 +266,10 @@ macro_rules! php_sqlx_impl_driver_inner {
             #[inline]
             pub fn ensure_open(&self) -> $crate::error::Result<()> {
                 if self.pool.is_closed() {
-                    return Err(SqlxError::Other("Driver has been closed. Create a new driver instance to continue.".to_string()));
+                    return Err(SqlxError::Other(
+                        "Driver has been closed. Create a new driver instance to continue."
+                            .to_string(),
+                    ));
                 }
                 Ok(())
             }

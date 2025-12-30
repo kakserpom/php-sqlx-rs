@@ -6,7 +6,7 @@ namespace PhpSqlx\Tests\Integration\QueryBuilder;
 
 use PHPUnit\Framework\TestCase;
 use Sqlx\DriverFactory;
-use Sqlx\SqlxException;
+use Sqlx\Exceptions\SqlxException;
 
 use function Sqlx\OR_;
 

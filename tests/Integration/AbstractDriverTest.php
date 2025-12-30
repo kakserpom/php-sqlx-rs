@@ -6,7 +6,7 @@ namespace PhpSqlx\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use Sqlx\DriverFactory;
-use Sqlx\SqlxException;
+use Sqlx\Exceptions\SqlxException;
 
 /**
  * Abstract base class for database driver integration tests.

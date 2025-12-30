@@ -10,13 +10,12 @@ use ext_php_rs::prelude::*;
 use ext_php_rs::zend::ce;
 use std::fmt;
 
-/// Custom exception class for php-sqlx errors.
+/// Base exception class for php-sqlx errors.
 ///
-/// This exception class extends PHP's base Exception and is used for all
-/// errors thrown by the php-sqlx extension. The error code can be used
-/// to programmatically handle specific error types.
+/// This exception class extends PHP's base Exception. Specific error types
+/// throw concrete subclasses (e.g., `ConnectionException`, `QueryException`).
 #[php_class]
-#[php(name = "Sqlx\\SqlxException")]
+#[php(name = "Sqlx\\Exceptions\\SqlxException")]
 #[php(extends(ce = ce::exception, stub = "\\Exception"))]
 #[derive(Default)]
 pub struct SqlxException;
@@ -46,6 +45,81 @@ impl SqlxException {
     /// Pool exhausted
     pub const POOL_EXHAUSTED: i32 = ErrorCode::PoolExhausted as i32;
 }
+
+/// Helper function to get `SqlxException` class entry for subclass extension.
+fn get_sqlx_exception_ce() -> &'static ext_php_rs::ffi::zend_class_entry {
+    SqlxException::get_metadata().ce()
+}
+
+/// Thrown when database connection fails.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\ConnectionException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct ConnectionException;
+
+/// Thrown when query execution fails.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\QueryException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct QueryException;
+
+/// Thrown when transaction operations fail.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\TransactionException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct TransactionException;
+
+/// Thrown when SQL parsing fails.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\ParseException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct ParseException;
+
+/// Thrown when parameter binding fails.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\ParameterException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct ParameterException;
+
+/// Thrown when configuration is invalid.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\ConfigurationException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct ConfigurationException;
+
+/// Thrown when input validation fails.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\ValidationException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct ValidationException;
+
+/// Thrown when operation is not permitted.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\NotPermittedException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct NotPermittedException;
+
+/// Thrown when operation times out.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\TimeoutException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct TimeoutException;
+
+/// Thrown when connection pool is exhausted.
+#[php_class]
+#[php(name = "Sqlx\\Exceptions\\PoolExhaustedException")]
+#[php(extends(ce = get_sqlx_exception_ce, stub = "\\Sqlx\\Exceptions\\SqlxException"))]
+#[derive(Default)]
+pub struct PoolExhaustedException;
 
 /// Error codes for categorizing errors in PHP.
 ///
@@ -389,10 +463,24 @@ impl std::error::Error for Error {
 
 impl From<Error> for PhpException {
     fn from(err: Error) -> Self {
-        let code = err.code() as i32;
+        let code = err.code();
         let message = err.to_string();
 
-        PhpException::new(message, code, SqlxException::get_metadata().ce())
+        let ce = match code {
+            ErrorCode::Connection => ConnectionException::get_metadata().ce(),
+            ErrorCode::Query => QueryException::get_metadata().ce(),
+            ErrorCode::Transaction => TransactionException::get_metadata().ce(),
+            ErrorCode::Parse => ParseException::get_metadata().ce(),
+            ErrorCode::Parameter => ParameterException::get_metadata().ce(),
+            ErrorCode::Configuration => ConfigurationException::get_metadata().ce(),
+            ErrorCode::Validation => ValidationException::get_metadata().ce(),
+            ErrorCode::NotPermitted => NotPermittedException::get_metadata().ce(),
+            ErrorCode::Timeout => TimeoutException::get_metadata().ce(),
+            ErrorCode::PoolExhausted => PoolExhaustedException::get_metadata().ce(),
+            ErrorCode::General => SqlxException::get_metadata().ce(),
+        };
+
+        PhpException::new(message, code as i32, ce)
     }
 }
 
@@ -464,7 +552,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Registers the error module classes with the PHP module.
 pub fn build(module: ModuleBuilder) -> ModuleBuilder {
-    module.class::<SqlxException>()
+    module
+        .class::<SqlxException>()
+        .class::<ConnectionException>()
+        .class::<QueryException>()
+        .class::<TransactionException>()
+        .class::<ParseException>()
+        .class::<ParameterException>()
+        .class::<ConfigurationException>()
+        .class::<ValidationException>()
+        .class::<NotPermittedException>()
+        .class::<TimeoutException>()
+        .class::<PoolExhaustedException>()
 }
 
 #[cfg(test)]
