@@ -62,12 +62,12 @@ pub mod utils;
 
 use dbms::{mssql, mysql, postgres};
 use ext_php_rs::prelude::*;
-use std::time::Duration;
+pub use inner_driver::RetryPolicy;
 #[cfg(feature = "lazy-row")]
 pub use lazy_row::{LazyRow, LazyRowJson};
-pub use inner_driver::RetryPolicy;
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
+use std::time::Duration;
 use tokio::runtime::Runtime;
 
 /// Global Tokio runtime for executing async `SQLx` queries from synchronous PHP context.

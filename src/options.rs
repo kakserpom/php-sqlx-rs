@@ -67,7 +67,10 @@ impl ReplicaConfig {
     /// Creates a new replica config with the given URL and weight.
     #[must_use]
     pub fn with_weight(url: String, weight: u32) -> Self {
-        Self { url, weight: weight.max(1) }
+        Self {
+            url,
+            weight: weight.max(1),
+        }
     }
 }
 
@@ -421,7 +424,9 @@ impl DriverOptionsArg {
                                         _ => {
                                             return Err(SqlxError::config(
                                                 "read_replicas",
-                                                format!("element at index {i}: 'weight' must be an integer"),
+                                                format!(
+                                                    "element at index {i}: 'weight' must be an integer"
+                                                ),
                                             ));
                                         }
                                     };
@@ -430,7 +435,9 @@ impl DriverOptionsArg {
                                 _ => {
                                     return Err(SqlxError::config(
                                         "read_replicas",
-                                        format!("element at index {i} must be a string or ['url' => ..., 'weight' => ...]"),
+                                        format!(
+                                            "element at index {i} must be a string or ['url' => ..., 'weight' => ...]"
+                                        ),
                                     ));
                                 }
                             }
@@ -461,9 +468,7 @@ impl DriverOptionsArg {
                     None | Some(ParameterValue::Null) => DEFAULT_RETRY_INITIAL_BACKOFF,
                     Some(ParameterValue::String(value)) => parse_duration::parse(value)
                         .map_err(|e| SqlxError::config("retry_initial_backoff", e.to_string()))?,
-                    Some(ParameterValue::Int(value)) => {
-                        Duration::from_secs(u64::try_from(*value)?)
-                    }
+                    Some(ParameterValue::Int(value)) => Duration::from_secs(u64::try_from(*value)?),
                     _ => {
                         return Err(SqlxError::config(
                             "retry_initial_backoff",
@@ -475,9 +480,7 @@ impl DriverOptionsArg {
                     None | Some(ParameterValue::Null) => DEFAULT_RETRY_MAX_BACKOFF,
                     Some(ParameterValue::String(value)) => parse_duration::parse(value)
                         .map_err(|e| SqlxError::config("retry_max_backoff", e.to_string()))?,
-                    Some(ParameterValue::Int(value)) => {
-                        Duration::from_secs(u64::try_from(*value)?)
-                    }
+                    Some(ParameterValue::Int(value)) => Duration::from_secs(u64::try_from(*value)?),
                     _ => {
                         return Err(SqlxError::config(
                             "retry_max_backoff",
@@ -491,10 +494,7 @@ impl DriverOptionsArg {
                         ParameterValue::Float(f) => Ok(*f),
                         #[allow(clippy::cast_precision_loss)]
                         ParameterValue::Int(n) => Ok(*n as f64),
-                        _ => Err(SqlxError::config(
-                            "retry_multiplier",
-                            "must be a number",
-                        )),
+                        _ => Err(SqlxError::config("retry_multiplier", "must be a number")),
                     },
                 )?,
             },
@@ -547,7 +547,10 @@ mod tests {
     #[test]
     fn test_read_replicas_simple_strings() {
         let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
-            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_URL.into(),
+                "postgres://primary/db".into(),
+            ),
             (
                 DriverOptions::OPT_READ_REPLICAS.into(),
                 ParameterValue::Array(vec![
@@ -560,16 +563,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(driver_options.read_replicas.len(), 2);
-        assert_eq!(driver_options.read_replicas[0].url, "postgres://replica1/db");
+        assert_eq!(
+            driver_options.read_replicas[0].url,
+            "postgres://replica1/db"
+        );
         assert_eq!(driver_options.read_replicas[0].weight, 1);
-        assert_eq!(driver_options.read_replicas[1].url, "postgres://replica2/db");
+        assert_eq!(
+            driver_options.read_replicas[1].url,
+            "postgres://replica2/db"
+        );
         assert_eq!(driver_options.read_replicas[1].weight, 1);
     }
 
     #[test]
     fn test_read_replicas_with_weights() {
         let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
-            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_URL.into(),
+                "postgres://primary/db".into(),
+            ),
             (
                 DriverOptions::OPT_READ_REPLICAS.into(),
                 ParameterValue::Array(vec![
@@ -588,16 +600,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(driver_options.read_replicas.len(), 2);
-        assert_eq!(driver_options.read_replicas[0].url, "postgres://replica1/db");
+        assert_eq!(
+            driver_options.read_replicas[0].url,
+            "postgres://replica1/db"
+        );
         assert_eq!(driver_options.read_replicas[0].weight, 3);
-        assert_eq!(driver_options.read_replicas[1].url, "postgres://replica2/db");
+        assert_eq!(
+            driver_options.read_replicas[1].url,
+            "postgres://replica2/db"
+        );
         assert_eq!(driver_options.read_replicas[1].weight, 1);
     }
 
     #[test]
     fn test_read_replicas_mixed_format() {
         let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
-            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_URL.into(),
+                "postgres://primary/db".into(),
+            ),
             (
                 DriverOptions::OPT_READ_REPLICAS.into(),
                 ParameterValue::Array(vec![
@@ -620,7 +641,10 @@ mod tests {
     #[test]
     fn test_read_replicas_default_weight_when_missing() {
         let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
-            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_URL.into(),
+                "postgres://primary/db".into(),
+            ),
             (
                 DriverOptions::OPT_READ_REPLICAS.into(),
                 ParameterValue::Array(vec![ParameterValue::Object(BTreeMap::from_iter([(
@@ -638,7 +662,10 @@ mod tests {
     #[test]
     fn test_read_replicas_empty_array() {
         let driver_options = DriverOptionsArg::Options(BTreeMap::from_iter([
-            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_URL.into(),
+                "postgres://primary/db".into(),
+            ),
             (
                 DriverOptions::OPT_READ_REPLICAS.into(),
                 ParameterValue::Array(vec![]),
@@ -653,7 +680,10 @@ mod tests {
     #[test]
     fn test_read_replicas_missing_url_error() {
         let result = DriverOptionsArg::Options(BTreeMap::from_iter([
-            (DriverOptions::OPT_URL.into(), "postgres://primary/db".into()),
+            (
+                DriverOptions::OPT_URL.into(),
+                "postgres://primary/db".into(),
+            ),
             (
                 DriverOptions::OPT_READ_REPLICAS.into(),
                 ParameterValue::Array(vec![ParameterValue::Object(BTreeMap::from_iter([(

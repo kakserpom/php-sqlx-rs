@@ -169,14 +169,17 @@ macro_rules! php_sqlx_impl_driver_inner {
                         .idle_timeout(options.idle_timeout)
                         .test_before_acquire(options.test_before_acquire);
                     if let Some(acquire_timeout) = options.acquire_timeout {
-                        replica_pool_options = replica_pool_options.acquire_timeout(acquire_timeout);
+                        replica_pool_options =
+                            replica_pool_options.acquire_timeout(acquire_timeout);
                     }
                     let replica_pool = RUNTIME
                         .block_on(replica_pool_options.connect(replica_config.url.as_str()))
-                        .map_err(|e| SqlxError::connection_with_source(
-                            format!("Failed to connect to replica: {}", replica_config.url),
-                            e,
-                        ))?;
+                        .map_err(|e| {
+                            SqlxError::connection_with_source(
+                                format!("Failed to connect to replica: {}", replica_config.url),
+                                e,
+                            )
+                        })?;
                     replica_pools.push(replica_pool);
                     replica_weights.push(replica_config.weight);
                 }
@@ -233,7 +236,10 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// temporary tables, and session variables.
             #[inline]
             pub fn has_pinned_connection(&self) -> bool {
-                self.pinned_conn.read().expect("Poisoned pinned_conn").is_some()
+                self.pinned_conn
+                    .read()
+                    .expect("Poisoned pinned_conn")
+                    .is_some()
             }
 
             /// Returns true if queries should use a dedicated connection (transaction or pinned).
@@ -264,12 +270,16 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 // Simple round-robin if all weights are equal (optimization)
                 if self.replica_total_weight as usize == self.replica_pools.len() {
-                    let index = self.replica_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let index = self
+                        .replica_counter
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     return &self.replica_pools[index % self.replica_pools.len()];
                 }
 
                 // Weighted selection (truncation is intentional for wrapping)
-                let counter = self.replica_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let counter = self
+                    .replica_counter
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 #[allow(clippy::cast_possible_truncation)]
                 let slot = (counter as u32) % self.replica_total_weight;
 
@@ -474,7 +484,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                         val
                     } else {
                         RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(self.get_read_pool()),
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_one(self.get_read_pool()),
                         )
                     }
                     .map_err(|err| SqlxError::query_with_source(&query, err))
@@ -528,13 +539,15 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .with_retry(|| {
                         if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                             let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_all(&mut *tx),
                             );
                             self.place_ongoing_transaction(tx);
                             val
                         } else if let Some(mut conn) = self.retrieve_pinned_connection() {
                             let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_all(&mut *conn),
                             );
                             self.return_pinned_connection(conn);
                             val
@@ -610,13 +623,15 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .with_retry(|| {
                         if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                             let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&mut *tx),
                             );
                             self.place_ongoing_transaction(tx);
                             val
                         } else if let Some(mut conn) = self.retrieve_pinned_connection() {
                             let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&mut *conn),
                             );
                             self.return_pinned_connection(conn);
                             val
@@ -689,28 +704,31 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let (query, values) = self.render_query(query, parameters)?;
                 let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
 
-                let result = self.with_retry(|| {
-                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                        let val = RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
-                        );
-                        self.place_ongoing_transaction(tx);
-                        val
-                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                        let val = RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
-                        );
-                        self.return_pinned_connection(conn);
-                        val
-                    } else {
-                        RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_one(self.get_read_pool()),
-                        )
-                    }
-                    .map_err(|err| SqlxError::query_with_source(&query, err))
-                })?
-                .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays));
+                let result = self
+                    .with_retry(|| {
+                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&mut *tx),
+                            );
+                            self.place_ongoing_transaction(tx);
+                            val
+                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&mut *conn),
+                            );
+                            self.return_pinned_connection(conn);
+                            val
+                        } else {
+                            RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(self.get_read_pool()),
+                            )
+                        }
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    })?
+                    .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays));
 
                 if let Some(t) = timer {
                     t.finish();
@@ -754,13 +772,15 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .with_retry(|| {
                         if let Some(mut tx) = self.retrieve_ongoing_transaction() {
                             let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&mut *tx),
                             );
                             self.place_ongoing_transaction(tx);
                             val
                         } else if let Some(mut conn) = self.retrieve_pinned_connection() {
                             let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_one(&mut *conn),
                             );
                             self.return_pinned_connection(conn);
                             val
@@ -820,30 +840,33 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
 
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-                let result = self.with_retry(|| {
-                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                        let val = RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
-                        );
-                        self.place_ongoing_transaction(tx);
-                        val
-                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                        let val = RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
-                        );
-                        self.return_pinned_connection(conn);
-                        val
-                    } else {
-                        RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&query), &values)?
-                                .fetch_all(self.get_read_pool()),
-                        )
-                    }
-                    .map_err(|err| SqlxError::query_with_source(&query, err))
-                })?
-                .into_iter()
-                .map(|row| row.into_zval(assoc))
-                .try_collect();
+                let result = self
+                    .with_retry(|| {
+                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_all(&mut *tx),
+                            );
+                            self.place_ongoing_transaction(tx);
+                            val
+                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                            let val = RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_all(&mut *conn),
+                            );
+                            self.return_pinned_connection(conn);
+                            val
+                        } else {
+                            RUNTIME.block_on(
+                                bind_values(sqlx_oldapi::query(&query), &values)?
+                                    .fetch_all(self.get_read_pool()),
+                            )
+                        }
+                        .map_err(|err| SqlxError::query_with_source(&query, err))
+                    })?
+                    .into_iter()
+                    .map(|row| row.into_zval(assoc))
+                    .try_collect();
 
                 if let Some(t) = timer {
                     t.finish();
@@ -1192,8 +1215,8 @@ macro_rules! php_sqlx_impl_driver_inner {
                 .try_fold(zend_array::new(), fold_into_zend_hashmap)?
                 .into_zval(false)
                 .map_err(|err| SqlxError::Conversion {
-                        message: format!("{err:?}"),
-                    })
+                    message: format!("{err:?}"),
+                })
             }
 
             /// Describes table columns with their types and metadata.
@@ -1238,10 +1261,15 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
 
                 let mut params = BTreeMap::new();
-                params.insert("table".to_string(), ParameterValue::String(table_name.to_string()));
+                params.insert(
+                    "table".to_string(),
+                    ParameterValue::String(table_name.to_string()),
+                );
                 params.insert(
                     "schema".to_string(),
-                    schema.map_or(ParameterValue::Null, |s| ParameterValue::String(s.to_string())),
+                    schema.map_or(ParameterValue::Null, |s| {
+                        ParameterValue::String(s.to_string())
+                    }),
                 );
 
                 self.query_all(DESCRIBE_TABLE_QUERY, Some(params), Some(true))
@@ -1454,9 +1482,9 @@ macro_rules! php_sqlx_impl_driver_inner {
                 if self.has_pinned_connection() {
                     return Err(SqlxError::Other("Connection already pinned".to_string()));
                 }
-                let conn = RUNTIME
-                    .block_on(self.pool.acquire())
-                    .map_err(|err| SqlxError::connection_with_source("Failed to acquire connection", err))?;
+                let conn = RUNTIME.block_on(self.pool.acquire()).map_err(|err| {
+                    SqlxError::connection_with_source("Failed to acquire connection", err)
+                })?;
                 *self.pinned_conn.write().expect("Poisoned pinned_conn") = Some(conn);
                 Ok(())
             }
@@ -1466,7 +1494,11 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// # Errors
             /// Returns an error if no connection is pinned.
             pub fn unpin_connection(&self) -> $crate::error::Result<()> {
-                let conn = self.pinned_conn.write().expect("Poisoned pinned_conn").take();
+                let conn = self
+                    .pinned_conn
+                    .write()
+                    .expect("Poisoned pinned_conn")
+                    .take();
                 if conn.is_some() {
                     Ok(())
                 } else {
@@ -1479,7 +1511,10 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// Returns the connection temporarily, caller must return it via `return_pinned_connection`.
             #[inline(always)]
             pub fn retrieve_pinned_connection(&self) -> Option<PoolConnection<$database>> {
-                self.pinned_conn.write().expect("Poisoned pinned_conn").take()
+                self.pinned_conn
+                    .write()
+                    .expect("Poisoned pinned_conn")
+                    .take()
             }
 
             /// Returns a pinned connection after use.
@@ -1587,22 +1622,13 @@ mod tests {
         let error = Error::connection("connection reset");
 
         // Attempt 0: 1s
-        assert_eq!(
-            policy.should_retry(0, &error),
-            Some(Duration::from_secs(1))
-        );
+        assert_eq!(policy.should_retry(0, &error), Some(Duration::from_secs(1)));
 
         // Attempt 1: 10s -> capped to 5s
-        assert_eq!(
-            policy.should_retry(1, &error),
-            Some(Duration::from_secs(5))
-        );
+        assert_eq!(policy.should_retry(1, &error), Some(Duration::from_secs(5)));
 
         // Attempt 2: 100s -> capped to 5s
-        assert_eq!(
-            policy.should_retry(2, &error),
-            Some(Duration::from_secs(5))
-        );
+        assert_eq!(policy.should_retry(2, &error), Some(Duration::from_secs(5)));
     }
 
     #[test]
@@ -1624,24 +1650,30 @@ mod tests {
         let policy = test_policy();
 
         // PoolExhausted
-        assert!(policy
-            .should_retry(0, &Error::PoolExhausted { timeout_ms: 1000 })
-            .is_some());
+        assert!(
+            policy
+                .should_retry(0, &Error::PoolExhausted { timeout_ms: 1000 })
+                .is_some()
+        );
 
         // Timeout
-        assert!(policy
-            .should_retry(
-                0,
-                &Error::Timeout {
-                    operation: "acquire".to_string(),
-                    timeout_ms: 5000
-                }
-            )
-            .is_some());
+        assert!(
+            policy
+                .should_retry(
+                    0,
+                    &Error::Timeout {
+                        operation: "acquire".to_string(),
+                        timeout_ms: 5000
+                    }
+                )
+                .is_some()
+        );
 
         // Connection
-        assert!(policy
-            .should_retry(0, &Error::connection("connection reset"))
-            .is_some());
+        assert!(
+            policy
+                .should_retry(0, &Error::connection("connection reset"))
+                .is_some()
+        );
     }
 }

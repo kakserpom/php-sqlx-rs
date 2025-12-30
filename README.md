@@ -1,5 +1,10 @@
 # SQLx PHP Extension
 
+[![CI](https://github.com/kakserpom/php-sqlx-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/kakserpom/php-sqlx-rs/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PHP 8.2+](https://img.shields.io/badge/PHP-8.2%2B-8892BF.svg)](https://php.net)
+[![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://rust-lang.org)
+
 The extension is powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), built
 using [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It enables safe, fast, and expressive
 database access with additional SQL syntax. It comes with a powerful [query builder](QUERY-BUILDER.md).

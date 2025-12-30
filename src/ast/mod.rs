@@ -1103,10 +1103,7 @@ impl Ast {
                         }
                         // Wrap Array/Object in Json when ?j placeholder is used
                         if *expected_type == Some(PlaceholderType::Json)
-                            && matches!(
-                                val,
-                                ParameterValue::Array(_) | ParameterValue::Object(_)
-                            )
+                            && matches!(val, ParameterValue::Array(_) | ParameterValue::Object(_))
                         {
                             ParameterValue::Json(Box::new(val.clone()))
                                 .write_sql_to(sql, out_vals, settings)?;
