@@ -264,9 +264,8 @@ jobs:
             try {
               \$driver->describeTable('users; DROP TABLE users;--');
               echo 'FAILED: Should have thrown exception for invalid table name';
-              exit(1);
-            } catch (Sqlx\SqlxException \$e) {
-              if (\$e->getCode() !== Sqlx\SqlxException::VALIDATION) {
+              exit(1);            } catch (Sqlx\Exceptions\SqlxException \$e) {
+              if (\$e->getCode() !== Sqlx\Exceptions\SqlxException::VALIDATION) {
                 echo 'FAILED: Expected VALIDATION error code';
                 exit(1);
               }
