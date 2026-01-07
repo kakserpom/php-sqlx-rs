@@ -9,9 +9,9 @@ The extension is powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/
 using [ext-php-rs](https://github.com/extphprs/ext-php-rs). It enables safe, fast, and expressive
 database access with additional SQL syntax. It comes with a powerful [query builder](QUERY-BUILDER.md).
 
-**Postgres**, **MySQL** and **Mssql** protocols are natively supported. Other protocols may require a custom wrapper.
+**Postgres**, **MySQL** and **Mssql** protocols are natively suppkorted. Other protocols may require a custom wrapper.
 
-The project's goals are centered o----n providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
+The project's goals are centered around providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
 without any compromise on performance.
 
 ## Architecture
