@@ -476,7 +476,7 @@ jobs:
       - name: Run basic integration test
         run: |
           php -r "
-            \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true');
+            \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?trust_server_certificate=true');
             \$result = \$driver->queryRow('SELECT 1 as test');
             if (\$result->test != 1) {
               echo 'FAILED: Unexpected result';
@@ -492,13 +492,13 @@ jobs:
       - name: Run PHPUnit tests (MSSQL)
         working-directory: tests
         env:
-          MSSQL_URL: mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true
+          MSSQL_URL: mssql://sa:TestPassword123!@localhost:1433/test_db?trust_server_certificate=true
         run: vendor/bin/phpunit --testsuite MSSQL --colors=always
 
       - name: Test describeTable (MSSQL)
         run: |
           php -r "
-            \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?TrustServerCertificate=true');
+            \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?trust_server_certificate=true');
 
             // Create a test table
             \$driver->execute('IF OBJECT_ID(N\"test_describe_table\", N\"U\") IS NOT NULL DROP TABLE test_describe_table');

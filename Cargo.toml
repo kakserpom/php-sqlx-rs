@@ -14,8 +14,7 @@ mimalloc = { version = "0.1", optional = true }
 parse_duration = "2.1.1"
 serde_json = "1.0"
 simd-json = { optional = true, version = "0.17.0" }
-#sqlx-oldapi = { path = "sqlx-oldapi", features = ["json", "runtime-tokio-rustls"] }`
-sqlx-oldapi = { git = "https://github.com/sqlpage/sqlx-oldapi", branch = "main", features = ["json", "runtime-tokio-rustls", "chrono", "uuid"] }
+sqlx-oldapi = { version = "0.6.51", features = ["json", "runtime-tokio-rustls", "chrono", "uuid"] }
 chrono = "0.4"
 uuid = "1"
 threadsafe-lru = "0.1"
