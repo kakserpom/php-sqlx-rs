@@ -501,7 +501,7 @@ jobs:
             \$driver = Sqlx\DriverFactory::make('mssql://sa:TestPassword123!@localhost:1433/test_db?trust_server_certificate=true');
 
             // Create a test table
-            \$driver->execute('IF OBJECT_ID(''test_describe_table'', ''U'') IS NOT NULL DROP TABLE test_describe_table');
+            \$driver->execute('IF OBJECT_ID(\\'test_describe_table\\', \\'U\\') IS NOT NULL DROP TABLE test_describe_table');
             \$driver->execute('CREATE TABLE test_describe_table (
               id INT IDENTITY(1,1) PRIMARY KEY,
               name VARCHAR(100) NOT NULL,
