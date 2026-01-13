@@ -307,17 +307,31 @@ fn test_pagination() {
     );
 }
 
-/// Test that null values are allowed for required placeholders (not treated as missing)
+/// Test that null values are rejected for non-nullable placeholders
 #[test]
-fn test_null_placeholder_is_valid() {
+fn test_null_placeholder_rejected_for_non_nullable() {
     let sql = "SELECT * FROM users WHERE name = :name";
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("name".into(), ParameterValue::Null);
     let result = ast.render(vals, &SETTINGS);
     assert!(
+        result.is_err(),
+        "Null value should be rejected for non-nullable placeholder"
+    );
+}
+
+/// Test that null values are allowed for explicitly nullable placeholders
+#[test]
+fn test_null_placeholder_accepted_for_nullable() {
+    let sql = "SELECT * FROM users WHERE name = :name!n";
+    let ast = into_ast(sql);
+    let mut vals = ParamsMap::default();
+    vals.insert("name".into(), ParameterValue::Null);
+    let result = ast.render(vals, &SETTINGS);
+    assert!(
         result.is_ok(),
-        "Null value should be valid for required placeholder"
+        "Null value should be valid for nullable placeholder"
     );
     let (query, params) = result.unwrap();
     collapsed_eq!(&query, "SELECT * FROM users WHERE name = $1");
@@ -1414,17 +1428,17 @@ fn test_nullable_mixed_accepts_any() {
     );
 }
 
-/// Test non-nullable (default) still allows untyped placeholders to accept null
+/// Test that untyped placeholders reject null (non-nullable by default)
 #[test]
-fn test_untyped_placeholder_still_accepts_null() {
+fn test_untyped_placeholder_rejects_null() {
     let sql = "SELECT * FROM users WHERE data = :data";
     let ast = into_ast(sql);
     let mut vals = ParamsMap::default();
     vals.insert("data".into(), ParameterValue::Null);
     let result = ast.render(vals, &SETTINGS);
     assert!(
-        result.is_ok(),
-        "Untyped placeholder should still accept null for backwards compatibility"
+        result.is_err(),
+        "Untyped placeholder should reject null (non-nullable by default)"
     );
 }
 

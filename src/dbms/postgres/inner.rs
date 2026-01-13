@@ -17,7 +17,7 @@ SELECT
     ordinal_position AS ordinal
 FROM information_schema.columns
 WHERE table_name = $table
-  AND table_schema = COALESCE($schema, current_schema())
+  AND table_schema = COALESCE($schema!n, current_schema())
 ORDER BY ordinal_position
 ";
 

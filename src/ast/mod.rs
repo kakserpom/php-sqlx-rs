@@ -1092,6 +1092,16 @@ impl Ast {
                         println!("{name:?} ==> {:?}", values.get(name));
                     }
                     if let Some(val) = values.get(name) {
+                        // Reject null for non-nullable placeholders (regardless of type constraint)
+                        if !*nullable && matches!(val, ParameterValue::Null) {
+                            return Err(SqlxError::TypeMismatch {
+                                placeholder: name.clone(),
+                                expected: expected_type
+                                    .map(|t| t.description().to_string())
+                                    .unwrap_or_else(|| "non-null value".to_string()),
+                                actual: "null".to_string(),
+                            });
+                        }
                         // Validate type if constraint is specified
                         if let Some(expected) =
                             expected_type.filter(|expected| !expected.matches(val, *nullable))
