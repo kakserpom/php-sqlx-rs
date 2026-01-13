@@ -6,9 +6,7 @@ description = "A modern feature-rich SQL driver for PHP."
 
 [dependencies]
 dashmap = "6.1.0"
-#ext-php-rs = "0.15"
-ext-php-rs = { git = "https://github.com/extphprs/ext-php-rs", branch = "master" }
-#ext-php-rs = { path = "ext-php-rs" }
+ext-php-rs = "0.15.3"
 itertools = "0.14"
 mimalloc = { version = "0.1", optional = true }
 parse_duration = "2.1.1"

@@ -5,11 +5,13 @@
 [![PHP 8.1+](https://img.shields.io/badge/PHP-8.1%2B-8892BF.svg)](https://php.net)
 [![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://rust-lang.org)
 
+**[Documentation](https://kakserpom.github.io/php-sqlx-rs/)**
+
 The extension is powered by Rust 🦀 and [SQLx](https://github.com/launchbadge/sqlx), built
 using [ext-php-rs](https://github.com/extphprs/ext-php-rs). It enables safe, fast, and expressive
 database access with additional SQL syntax. It comes with a powerful [query builder](QUERY-BUILDER.md).
 
-**Postgres**, **MySQL** and **Mssql** protocols are natively suppkorted. Other protocols may require a custom wrapper.
+**Postgres**, **MySQL** and **Mssql** protocols are natively supported. Other protocols may require a custom wrapper.
 
 The project's goals are centered around providing a **secure** and **ergonomic** way to interact with SQL-based DBMS
 without any compromise on performance.
