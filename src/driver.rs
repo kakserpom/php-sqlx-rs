@@ -658,7 +658,7 @@ macro_rules! php_sqlx_impl_driver {
                 self.driver_inner.query_all(query, parameters, None)
             }
 
-            /// Executes an SQL query and returns a lazy QueryResult iterator.
+            /// Executes an SQL query and returns a lazy `QueryResult` iterator.
             ///
             /// This method returns a `QueryResult` object that implements PHP's `Iterator`
             /// interface, streaming rows from the database as you iterate.
@@ -702,7 +702,7 @@ macro_rules! php_sqlx_impl_driver {
                 Ok($query_result::new(receiver, assoc, batch_size))
             }
 
-            /// Executes an SQL query and returns a lazy QueryResult iterator with rows as associative arrays.
+            /// Executes an SQL query and returns a lazy `QueryResult` iterator with rows as associative arrays.
             ///
             /// Same as `query()`, but forces rows to be returned as associative arrays
             /// regardless of the driver's default configuration.
@@ -725,7 +725,7 @@ macro_rules! php_sqlx_impl_driver {
                 Ok($query_result::new(receiver, true, batch_size))
             }
 
-            /// Executes an SQL query and returns a lazy QueryResult iterator with rows as objects.
+            /// Executes an SQL query and returns a lazy `QueryResult` iterator with rows as objects.
             ///
             /// Same as `query()`, but forces rows to be returned as PHP objects
             /// regardless of the driver's default configuration.

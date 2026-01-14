@@ -2747,7 +2747,7 @@ macro_rules! php_sqlx_impl_query_builder {
                     .query_all(&self.query, merged_params, Some(false))
             }
 
-            /// Executes the query and returns a lazy QueryResult iterator.
+            /// Executes the query and returns a lazy `QueryResult` iterator.
             ///
             /// This method returns a `QueryResult` object that implements PHP's `Iterator`
             /// interface, streaming rows from the database as you iterate.
@@ -2770,7 +2770,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(super::query_result::$query_result::new(receiver, assoc, batch_size))
             }
 
-            /// Executes the query and returns a lazy QueryResult iterator with rows as associative arrays.
+            /// Executes the query and returns a lazy `QueryResult` iterator with rows as associative arrays.
             ///
             /// # Arguments
             /// - `parameters`: Optional array of indexed/named parameters to bind.
@@ -2789,7 +2789,7 @@ macro_rules! php_sqlx_impl_query_builder {
                 Ok(super::query_result::$query_result::new(receiver, true, batch_size))
             }
 
-            /// Executes the query and returns a lazy QueryResult iterator with rows as objects.
+            /// Executes the query and returns a lazy `QueryResult` iterator with rows as objects.
             ///
             /// # Arguments
             /// - `parameters`: Optional array of indexed/named parameters to bind.

@@ -53,12 +53,12 @@ fn bench_ast(c: &mut Criterion) {
     c.bench_function("Ast::parse_small", |b| {
         b.iter(|| {
             let _res = black_box(Ast::parse(QUERY_SMALL, &SETTINGS));
-        })
+        });
     });
     c.bench_function("Ast::parse_big", |b| {
         b.iter(|| {
             let _res = black_box(Ast::parse(QUERY_BIG, &SETTINGS));
-        })
+        });
     });
 
     c.bench_function("Ast::render_big", |b| {
@@ -72,7 +72,7 @@ fn bench_ast(c: &mut Criterion) {
                 ]),
                 &SETTINGS,
             ));
-        })
+        });
     });
 }
 

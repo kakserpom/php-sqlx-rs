@@ -10,16 +10,16 @@
 /// Default batch size for lazy row fetching (channel buffer size).
 pub const DEFAULT_BATCH_SIZE: usize = 100;
 
-/// Generates a database-specific QueryResult implementation with lazy streaming.
+/// Generates a database-specific `QueryResult` implementation with lazy streaming.
 ///
-/// The generated QueryResult implements PHP's `Iterator` interface,
+/// The generated `QueryResult` implements PHP's `Iterator` interface,
 /// receiving rows from a background streaming task as iteration progresses.
 ///
 /// # Arguments
 ///
 /// - `$struct` - The Rust struct name for the query result (e.g., `PgQueryResult`)
 /// - `$class` - The PHP class name as a string literal (e.g., `"Sqlx\\PgQueryResult"`)
-/// - `$database` - The SQLx database type (e.g., `Postgres`)
+/// - `$database` - The `SQLx` database type (e.g., `Postgres`)
 /// - `$inner` - The inner driver type
 #[macro_export]
 macro_rules! php_sqlx_impl_query_result {
@@ -27,6 +27,7 @@ macro_rules! php_sqlx_impl_query_result {
         use ext_php_rs::prelude::*;
         use ext_php_rs::types::Zval;
         use ext_php_rs::zend::ce;
+        use saturating_cast::SaturatingCast;
 
         /// A lazy query result iterator that streams rows on demand.
         ///
@@ -48,7 +49,10 @@ macro_rules! php_sqlx_impl_query_result {
         pub struct $struct {
             /// Channel receiver for streaming rows from background task
             receiver: tokio::sync::mpsc::Receiver<
-                Result<<sqlx_oldapi::$database as sqlx_oldapi::Database>::Row, $crate::error::Error>
+                Result<
+                    <sqlx_oldapi::$database as sqlx_oldapi::Database>::Row,
+                    $crate::error::Error,
+                >,
             >,
             /// Current row (converted to Zval)
             current: Option<Zval>,
@@ -69,11 +73,14 @@ macro_rules! php_sqlx_impl_query_result {
         }
 
         impl $struct {
-            /// Creates a new streaming QueryResult.
+            /// Creates a new streaming `QueryResult`.
             #[allow(dead_code)]
             pub fn new(
                 receiver: tokio::sync::mpsc::Receiver<
-                    Result<<sqlx_oldapi::$database as sqlx_oldapi::Database>::Row, $crate::error::Error>
+                    Result<
+                        <sqlx_oldapi::$database as sqlx_oldapi::Database>::Row,
+                        $crate::error::Error,
+                    >,
                 >,
                 associative_arrays: bool,
                 buffer_size: usize,
@@ -178,7 +185,7 @@ macro_rules! php_sqlx_impl_query_result {
             /// Note: This returns the count of rows fetched, not the total
             /// result set size (which may not be known until iteration completes).
             pub fn count(&self) -> i64 {
-                self.total_fetched as i64
+                self.total_fetched.saturating_cast::<i64>()
             }
 
             /// Returns true if the result set has been fully consumed.
@@ -188,13 +195,14 @@ macro_rules! php_sqlx_impl_query_result {
 
             /// Returns the configured buffer size for streaming.
             pub fn get_batch_size(&self) -> i64 {
-                self.buffer_size as i64
+                self.buffer_size.saturating_cast::<i64>()
             }
 
             /// Consumes all remaining rows and returns them as an array.
             ///
             /// This will fetch all remaining rows from the stream.
             /// Use with caution on large result sets.
+            #[allow(clippy::wrong_self_convention)]
             pub fn to_array(&mut self) -> $crate::error::Result<Vec<Zval>> {
                 let mut all_rows = Vec::new();
 

@@ -141,7 +141,7 @@ macro_rules! php_sqlx_impl_driver_inner {
         /// Type alias for the row stream used in lazy iteration.
         /// Rows are streamed through this channel from a background task.
         pub type RowReceiver = tokio::sync::mpsc::Receiver<
-            Result<<$database as sqlx_oldapi::Database>::Row, $crate::error::Error>
+            Result<<$database as sqlx_oldapi::Database>::Row, $crate::error::Error>,
         >;
 
         impl $struct {
@@ -873,15 +873,18 @@ macro_rules! php_sqlx_impl_driver_inner {
                 // the connection to stay in the current context
                 if self.has_active_transaction() || self.has_pinned_connection() {
                     // Fall back to fetching all rows in the current context
-                    let rows_result = if let Some(mut conn_tx) = self.retrieve_ongoing_transaction() {
+                    let rows_result = if let Some(mut conn_tx) = self.retrieve_ongoing_transaction()
+                    {
                         let val = RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&rendered_query), &values)?.fetch_all(&mut *conn_tx),
+                            bind_values(sqlx_oldapi::query(&rendered_query), &values)?
+                                .fetch_all(&mut *conn_tx),
                         );
                         self.place_ongoing_transaction(conn_tx);
                         val
                     } else if let Some(mut conn) = self.retrieve_pinned_connection() {
                         let val = RUNTIME.block_on(
-                            bind_values(sqlx_oldapi::query(&rendered_query), &values)?.fetch_all(&mut *conn),
+                            bind_values(sqlx_oldapi::query(&rendered_query), &values)?
+                                .fetch_all(&mut *conn),
                         );
                         self.return_pinned_connection(conn);
                         val
@@ -899,7 +902,10 @@ macro_rules! php_sqlx_impl_driver_inner {
                             }
                         }
                         Err(err) => {
-                            let _ = tx.blocking_send(Err(SqlxError::query_with_source(&rendered_query, err)));
+                            let _ = tx.blocking_send(Err(SqlxError::query_with_source(
+                                &rendered_query,
+                                err,
+                            )));
                         }
                     }
 
@@ -913,13 +919,14 @@ macro_rules! php_sqlx_impl_driver_inner {
                 // Spawn a background task that streams rows and sends through channel
                 RUNTIME.spawn(async move {
                     // Bind the query with values
-                    let bound_query = match bind_values(sqlx_oldapi::query(&rendered_query), &values) {
-                        Ok(q) => q,
-                        Err(e) => {
-                            let _ = tx.send(Err(e)).await;
-                            return;
-                        }
-                    };
+                    let bound_query =
+                        match bind_values(sqlx_oldapi::query(&rendered_query), &values) {
+                            Ok(q) => q,
+                            Err(e) => {
+                                let _ = tx.send(Err(e)).await;
+                                return;
+                            }
+                        };
 
                     // Create the stream from the pool
                     let mut stream = bound_query.fetch(&pool);

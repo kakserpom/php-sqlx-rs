@@ -1,4 +1,4 @@
-//! PostgreSQL query result iterator.
+//! `PostgreSQL` query result iterator.
 
 crate::php_sqlx_impl_query_result!(
     PgQueryResult,
