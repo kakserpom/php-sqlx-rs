@@ -2766,8 +2766,8 @@ macro_rules! php_sqlx_impl_query_builder {
                 let merged_params = self.merge_parameters(parameters);
                 let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
                 let assoc = self.driver_inner.options.associative_arrays;
-                let receiver = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
-                Ok(super::query_result::$query_result::new(receiver, assoc, batch_size))
+                let (receiver, cancel_token) = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
+                Ok(super::query_result::$query_result::new(receiver, cancel_token, assoc, batch_size))
             }
 
             /// Executes the query and returns a lazy `QueryResult` iterator with rows as associative arrays.
@@ -2785,8 +2785,8 @@ macro_rules! php_sqlx_impl_query_builder {
             ) -> crate::error::Result<super::query_result::$query_result> {
                 let merged_params = self.merge_parameters(parameters);
                 let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
-                let receiver = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
-                Ok(super::query_result::$query_result::new(receiver, true, batch_size))
+                let (receiver, cancel_token) = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
+                Ok(super::query_result::$query_result::new(receiver, cancel_token, true, batch_size))
             }
 
             /// Executes the query and returns a lazy `QueryResult` iterator with rows as objects.
@@ -2804,8 +2804,8 @@ macro_rules! php_sqlx_impl_query_builder {
             ) -> crate::error::Result<super::query_result::$query_result> {
                 let merged_params = self.merge_parameters(parameters);
                 let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
-                let receiver = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
-                Ok(super::query_result::$query_result::new(receiver, false, batch_size))
+                let (receiver, cancel_token) = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
+                Ok(super::query_result::$query_result::new(receiver, cancel_token, false, batch_size))
             }
         }
     };

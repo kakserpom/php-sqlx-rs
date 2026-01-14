@@ -17,7 +17,8 @@ sqlx-oldapi = { version = "0.6.51", features = ["json", "runtime-tokio-rustls", 
 chrono = "0.4"
 uuid = "1"
 threadsafe-lru = "0.1"
-tokio = { version = "1.48", features = ["rt-multi-thread"] }
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros"] }
+tokio-util = "0.7"
 futures-util = "0.3"
 ouroboros = "0.18"
 trim-in-place = "0.1.7"

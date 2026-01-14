@@ -715,8 +715,13 @@ abstract class AbstractDriverTest extends TestCase
             $this->assertEquals(200, $value);
 
             // Also verify we can start new streaming queries
-            $result2 = $this->driver->query('SELECT * FROM test_users LIMIT 5');
-            $rows = iterator_to_array($result2);
+            // Use iteration with break instead of LIMIT for cross-database compatibility
+            $result2 = $this->driver->query('SELECT * FROM test_users ORDER BY id');
+            $rows = [];
+            foreach ($result2 as $row) {
+                $rows[] = $row;
+                if (count($rows) >= 5) break;
+            }
             $this->assertCount(5, $rows);
 
         } finally {

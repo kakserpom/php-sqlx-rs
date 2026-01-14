@@ -144,6 +144,9 @@ macro_rules! php_sqlx_impl_driver_inner {
             Result<<$database as sqlx_oldapi::Database>::Row, $crate::error::Error>,
         >;
 
+        /// Result type for `query_stream` containing the receiver and cancellation token.
+        pub type StreamResult = (RowReceiver, tokio_util::sync::CancellationToken);
+
         impl $struct {
             /// Creates a new inner driver with the given configuration.
             ///
@@ -850,7 +853,7 @@ macro_rules! php_sqlx_impl_driver_inner {
             /// - `batch_size`: Buffer size for the channel (controls prefetch amount)
             ///
             /// # Returns
-            /// A channel receiver that yields database rows
+            /// A tuple of (channel receiver, cancellation token) for the streaming query
             ///
             /// # Exceptions
             /// Throws an exception if query rendering fails.
@@ -859,14 +862,18 @@ macro_rules! php_sqlx_impl_driver_inner {
                 query: &str,
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 batch_size: usize,
-            ) -> $crate::error::Result<RowReceiver> {
+            ) -> $crate::error::Result<StreamResult> {
                 use futures_util::StreamExt;
+                use tokio_util::sync::CancellationToken;
 
                 self.ensure_open()?;
                 let (rendered_query, values) = self.render_query(query, parameters)?;
 
                 // Create a bounded channel - the buffer provides backpressure
                 let (tx, rx) = tokio::sync::mpsc::channel(batch_size);
+
+                // Create cancellation token for graceful shutdown
+                let cancel_token = CancellationToken::new();
 
                 // Check if we're in a transaction or have a pinned connection
                 // In these cases, we can't use background streaming as we need
@@ -909,12 +916,13 @@ macro_rules! php_sqlx_impl_driver_inner {
                         }
                     }
 
-                    return Ok(rx);
+                    return Ok((rx, cancel_token));
                 }
 
                 // For normal queries (no transaction/pinned connection), use true streaming
                 let pool = self.pool.clone();
                 let query_for_error = rendered_query.clone();
+                let task_cancel_token = cancel_token.clone();
 
                 // Spawn a background task that streams rows and sends through channel
                 RUNTIME.spawn(async move {
@@ -931,22 +939,40 @@ macro_rules! php_sqlx_impl_driver_inner {
                     // Create the stream from the pool
                     let mut stream = bound_query.fetch(&pool);
 
-                    // Stream rows and send through channel
-                    while let Some(row_result) = stream.next().await {
-                        let result = match row_result {
-                            Ok(row) => Ok(row),
-                            Err(err) => Err(SqlxError::query_with_source(&query_for_error, err)),
-                        };
+                    // Stream rows and send through channel, checking for cancellation
+                    loop {
+                        tokio::select! {
+                            // Check for cancellation
+                            _ = task_cancel_token.cancelled() => {
+                                // Task cancelled - stop streaming and release connection
+                                break;
+                            }
+                            // Try to get the next row
+                            row_opt = stream.next() => {
+                                match row_opt {
+                                    Some(row_result) => {
+                                        let result = match row_result {
+                                            Ok(row) => Ok(row),
+                                            Err(err) => Err(SqlxError::query_with_source(&query_for_error, err)),
+                                        };
 
-                        // Send the result; if receiver is dropped, stop streaming
-                        if tx.send(result).await.is_err() {
-                            break;
+                                        // Send the result; if receiver is dropped, stop streaming
+                                        if tx.send(result).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    None => {
+                                        // Stream exhausted
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                     // Channel is automatically closed when tx is dropped
                 });
 
-                Ok(rx)
+                Ok((rx, cancel_token))
             }
 
             /// Executes an SQL query and returns all results.

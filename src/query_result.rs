@@ -54,6 +54,8 @@ macro_rules! php_sqlx_impl_query_result {
                     $crate::error::Error,
                 >,
             >,
+            /// Cancellation token to stop the background streaming task
+            cancel_token: tokio_util::sync::CancellationToken,
             /// Current row (converted to Zval)
             current: Option<Zval>,
             /// Current index (0-based)
@@ -82,11 +84,13 @@ macro_rules! php_sqlx_impl_query_result {
                         $crate::error::Error,
                     >,
                 >,
+                cancel_token: tokio_util::sync::CancellationToken,
                 associative_arrays: bool,
                 buffer_size: usize,
             ) -> Self {
                 Self {
                     receiver,
+                    cancel_token,
                     current: None,
                     index: -1,
                     exhausted: false,
@@ -131,10 +135,25 @@ macro_rules! php_sqlx_impl_query_result {
                     }
                     None => {
                         // Channel closed - stream exhausted
+                        // If no data was ever received, this might indicate an error
+                        if self.total_fetched == 0 && !self.initialized {
+                            self.last_error = Some($crate::error::Error::Other(
+                                "Stream closed before any data was received. This may indicate \
+                                 a connection pool timeout or query execution failure."
+                                    .to_string(),
+                            ));
+                        }
                         self.current = None;
                         self.exhausted = true;
                     }
                 }
+            }
+        }
+
+        impl Drop for $struct {
+            fn drop(&mut self) {
+                // Cancel the background streaming task to release the database connection
+                self.cancel_token.cancel();
             }
         }
 

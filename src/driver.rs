@@ -698,8 +698,8 @@ macro_rules! php_sqlx_impl_driver {
             ) -> $crate::error::Result<$query_result> {
                 let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
                 let assoc = self.driver_inner.options.associative_arrays;
-                let receiver = self.driver_inner.query_stream(query, parameters, batch_size)?;
-                Ok($query_result::new(receiver, assoc, batch_size))
+                let (receiver, cancel_token) = self.driver_inner.query_stream(query, parameters, batch_size)?;
+                Ok($query_result::new(receiver, cancel_token, assoc, batch_size))
             }
 
             /// Executes an SQL query and returns a lazy `QueryResult` iterator with rows as associative arrays.
@@ -721,8 +721,8 @@ macro_rules! php_sqlx_impl_driver {
                 batch_size: Option<usize>,
             ) -> $crate::error::Result<$query_result> {
                 let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
-                let receiver = self.driver_inner.query_stream(query, parameters, batch_size)?;
-                Ok($query_result::new(receiver, true, batch_size))
+                let (receiver, cancel_token) = self.driver_inner.query_stream(query, parameters, batch_size)?;
+                Ok($query_result::new(receiver, cancel_token, true, batch_size))
             }
 
             /// Executes an SQL query and returns a lazy `QueryResult` iterator with rows as objects.
@@ -744,8 +744,8 @@ macro_rules! php_sqlx_impl_driver {
                 batch_size: Option<usize>,
             ) -> $crate::error::Result<$query_result> {
                 let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
-                let receiver = self.driver_inner.query_stream(query, parameters, batch_size)?;
-                Ok($query_result::new(receiver, false, batch_size))
+                let (receiver, cancel_token) = self.driver_inner.query_stream(query, parameters, batch_size)?;
+                Ok($query_result::new(receiver, cancel_token, false, batch_size))
             }
 
             /// Executes an SQL query and returns all rows as associative arrays.

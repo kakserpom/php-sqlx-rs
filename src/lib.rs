@@ -85,7 +85,7 @@ const DEFAULT_AST_CACHE_SHARD_COUNT: usize = 8;
 const DEFAULT_AST_CACHE_SHARD_SIZE: usize = 256;
 
 /// Default maximum number of connections in the connection pool.
-const DEFAULT_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(2).unwrap();
+const DEFAULT_MAX_CONNECTIONS: NonZeroU32 = NonZeroU32::new(10).unwrap();
 
 /// Default minimum number of idle connections to maintain in the pool.
 const DEFAULT_MIN_CONNECTIONS: u32 = 0;
