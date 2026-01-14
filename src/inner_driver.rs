@@ -138,6 +138,12 @@ macro_rules! php_sqlx_impl_driver_inner {
             pub query_hook: QueryHook,
         }
 
+        /// Type alias for the row stream used in lazy iteration.
+        /// Rows are streamed through this channel from a background task.
+        pub type RowReceiver = tokio::sync::mpsc::Receiver<
+            Result<<$database as sqlx_oldapi::Database>::Row, $crate::error::Error>
+        >;
+
         impl $struct {
             /// Creates a new inner driver with the given configuration.
             ///
@@ -830,6 +836,110 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
 
                 Ok(result)
+            }
+
+            /// Executes an SQL query and returns a channel receiver for lazy iteration.
+            ///
+            /// This method spawns a background task that streams rows from the database
+            /// and sends them through a channel. Rows are fetched on demand as the
+            /// consumer reads from the channel, providing true lazy loading.
+            ///
+            /// # Arguments
+            /// - `query`: SQL query string
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            /// - `batch_size`: Buffer size for the channel (controls prefetch amount)
+            ///
+            /// # Returns
+            /// A channel receiver that yields database rows
+            ///
+            /// # Exceptions
+            /// Throws an exception if query rendering fails.
+            pub fn query_stream(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                batch_size: usize,
+            ) -> $crate::error::Result<RowReceiver> {
+                use futures_util::StreamExt;
+
+                self.ensure_open()?;
+                let (rendered_query, values) = self.render_query(query, parameters)?;
+
+                // Create a bounded channel - the buffer provides backpressure
+                let (tx, rx) = tokio::sync::mpsc::channel(batch_size);
+
+                // Check if we're in a transaction or have a pinned connection
+                // In these cases, we can't use background streaming as we need
+                // the connection to stay in the current context
+                if self.has_active_transaction() || self.has_pinned_connection() {
+                    // Fall back to fetching all rows in the current context
+                    let rows_result = if let Some(mut conn_tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&rendered_query), &values)?.fetch_all(&mut *conn_tx),
+                        );
+                        self.place_ongoing_transaction(conn_tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&rendered_query), &values)?.fetch_all(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        unreachable!()
+                    };
+
+                    // Send all rows through the channel
+                    match rows_result {
+                        Ok(rows) => {
+                            for row in rows {
+                                if tx.blocking_send(Ok(row)).is_err() {
+                                    break; // Receiver dropped
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            let _ = tx.blocking_send(Err(SqlxError::query_with_source(&rendered_query, err)));
+                        }
+                    }
+
+                    return Ok(rx);
+                }
+
+                // For normal queries (no transaction/pinned connection), use true streaming
+                let pool = self.pool.clone();
+                let query_for_error = rendered_query.clone();
+
+                // Spawn a background task that streams rows and sends through channel
+                RUNTIME.spawn(async move {
+                    // Bind the query with values
+                    let bound_query = match bind_values(sqlx_oldapi::query(&rendered_query), &values) {
+                        Ok(q) => q,
+                        Err(e) => {
+                            let _ = tx.send(Err(e)).await;
+                            return;
+                        }
+                    };
+
+                    // Create the stream from the pool
+                    let mut stream = bound_query.fetch(&pool);
+
+                    // Stream rows and send through channel
+                    while let Some(row_result) = stream.next().await {
+                        let result = match row_result {
+                            Ok(row) => Ok(row),
+                            Err(err) => Err(SqlxError::query_with_source(&query_for_error, err)),
+                        };
+
+                        // Send the result; if receiver is dropped, stop streaming
+                        if tx.send(result).await.is_err() {
+                            break;
+                        }
+                    }
+                    // Channel is automatically closed when tx is dropped
+                });
+
+                Ok(rx)
             }
 
             /// Executes an SQL query and returns all results.

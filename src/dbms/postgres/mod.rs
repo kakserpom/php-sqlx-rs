@@ -9,4 +9,7 @@ php_sqlx_impl_driver!(
     PgPreparedQuery,
     PgReadQueryBuilder,
     PgWriteQueryBuilder,
+    PgQueryResult,
+    "Sqlx\\PgQueryResult",
+    Postgres,
 );

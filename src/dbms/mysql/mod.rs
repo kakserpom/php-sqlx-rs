@@ -10,4 +10,7 @@ php_sqlx_impl_driver!(
     MySqlPreparedQuery,
     MySqlReadQueryBuilder,
     MySqlWriteQueryBuilder,
+    MySqlQueryResult,
+    "Sqlx\\MySqlQueryResult",
+    MySql,
 );

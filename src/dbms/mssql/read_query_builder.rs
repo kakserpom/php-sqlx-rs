@@ -7,5 +7,6 @@ php_sqlx_impl_query_builder!(
     "Sqlx\\MssqlReadQueryBuilder",
     "Sqlx\\ReadQueryBuilderInterface",
     MssqlDriver,
-    MssqlDriverInner
+    MssqlDriverInner,
+    MssqlQueryResult
 );

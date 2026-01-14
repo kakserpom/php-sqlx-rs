@@ -82,6 +82,7 @@ $posts = $driver->queryAll('SELECT * FROM posts WHERE author_id = ?', [12345]);
 - **Type-safe placeholders** with type suffixes (`?i`, `?s`, `?d`, `?u`, `?ud`)
 - **Nullable type support** with `n` prefix (`?ni`, `?ns`, `?nud`)
 - Automatic result conversion to PHP arrays or objects
+- **True streaming** via `query()` returning `QueryResult` iterator for memory-efficient processing
 - Painless `IN (?)` / `NOT IN (?)` clauses expansion and collapse
 - Safe and robust `ORDER BY` / `GROUP BY` clauses
 - Pagination with `PAGINATE`
@@ -753,6 +754,10 @@ $query->execute();
 $row = $query->queryRow();
 // OR
 $rows = $query->queryAll();
+// OR iterate lazily
+foreach ($query->query() as $row) {
+    echo $row->name . "\n";
+}
 ```
 
 You can also preview the rendered SQL and parameters without executing:
@@ -862,6 +867,55 @@ $driver = Sqlx\DriverFactory::make([
 | `queryAll()`      | array of rows         |
 | `queryAllAssoc()` | array of assoc arrays |
 | `queryAllObj()`   | array of objects      |
+
+#### Iterator helpers (lazy streaming)
+
+| Method         | Returns                       | Notes                          |
+|----------------|-------------------------------|--------------------------------|
+| `query()`      | `QueryResult` iterator        | Uses driver's default row mode |
+| `queryAssoc()` | `QueryResult` iterator        | Forces associative arrays      |
+| `queryObj()`   | `QueryResult` iterator        | Forces objects                 |
+
+The `query()` method returns a `QueryResult` object that implements PHP's `Iterator` interface.
+Rows are streamed from the database on demand, providing true lazy loading that's memory-efficient
+for large result sets:
+
+```php
+// Iterate over results - rows are streamed as you iterate
+$result = $driver->query('SELECT * FROM large_table');
+foreach ($result as $index => $row) {
+    echo $row->name . "\n";
+}
+
+// With parameters and custom buffer size
+$result = $driver->query(
+    'SELECT * FROM users WHERE status = ?s',
+    ['active'],
+    50  // buffer size (default: 100)
+);
+
+// Force associative arrays
+$result = $driver->queryAssoc('SELECT * FROM users');
+foreach ($result as $row) {
+    echo $row['name'] . "\n";  // $row is an array
+}
+
+// Convert to array (fetches all remaining rows)
+$rows = $result->toArray();
+
+// Check iteration state
+echo $result->count();        // rows fetched so far
+echo $result->getBatchSize(); // configured buffer size
+$result->isExhausted();       // true when all rows consumed
+```
+
+The `QueryResult` class provides:
+- `current()` / `key()` / `next()` / `rewind()` / `valid()` – Iterator interface
+- `count()` – number of rows fetched so far
+- `toArray()` – convert remaining rows to array
+- `getBatchSize()` – get configured buffer size
+- `isExhausted()` – check if all rows have been consumed
+- `getLastError()` – get last error message if iteration stopped due to error
 
 #### Mutation helpers
 
@@ -1026,6 +1080,11 @@ Prepared queries expose exactly the same surface as the driver, but without the 
 ```php
 $query = $driver->prepare('SELECT * FROM logs WHERE level = $level');
 $rows  = $query->queryAll(['level' => 'warn']);
+
+// Or iterate lazily
+foreach ($query->query(['level' => 'warn']) as $row) {
+    echo $row->message . "\n";
+}
 ```
 
 All helpers listed above have their prepared-query counterparts:
@@ -1033,6 +1092,7 @@ All helpers listed above have their prepared-query counterparts:
 - `execute()`
 - `queryRow()` / `queryRowAssoc()` / `queryRowObj()`
 - `queryAll()` / `queryAllAssoc()` / `queryAllObj()`
+- `query()` / `queryAssoc()` / `queryObj()` – returns `QueryResult` iterator
 - `queryDictionary()` / `queryDictionaryAssoc()` / `queryDictionaryObj()`
 - `queryGroupedDictionary()` / `queryGroupedDictionaryAssoc()` / `queryGroupedDictionaryObj()`
 - `queryColumnDictionary()` / `queryColumnDictionaryAssoc()` / `queryColumnDictionaryObj()`

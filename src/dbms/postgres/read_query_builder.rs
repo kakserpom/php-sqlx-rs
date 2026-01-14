@@ -7,5 +7,6 @@ php_sqlx_impl_query_builder!(
     "Sqlx\\PgReadQueryBuilder",
     "Sqlx\\ReadQueryBuilderInterface",
     PgDriver,
-    PgDriverInner
+    PgDriverInner,
+    PgQueryResult
 );

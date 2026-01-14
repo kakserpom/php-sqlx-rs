@@ -50,6 +50,7 @@ pub mod paginate_clause;
 pub mod param_value;
 mod prepared_query;
 pub mod query_builder;
+pub mod query_result;
 pub mod select_clause;
 
 mod dbms;

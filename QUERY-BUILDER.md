@@ -336,6 +336,73 @@ $builder->insertInto("users")->set([
 
 ---
 
+---
+
+## Executing Queries
+
+After building your query, you can execute it using various methods:
+
+### Fetch Methods
+
+```php
+// Get all rows
+$rows = $builder->queryAll();
+$rows = $builder->queryAllAssoc();  // force associative arrays
+$rows = $builder->queryAllObj();    // force objects
+
+// Get single row
+$row = $builder->queryRow();
+$row = $builder->queryMaybeRow();  // returns null if no rows
+
+// Get single value
+$value = $builder->queryValue();
+$value = $builder->queryMaybeValue();
+
+// Get column values
+$ids = $builder->queryColumn();
+```
+
+### Lazy Iteration with query()
+
+For large result sets, use `query()` to get a lazy iterator that streams rows on demand:
+
+```php
+// Iterate lazily over results - rows are streamed as you iterate
+$result = $builder->query();
+foreach ($result as $row) {
+    echo $row->name . "\n";
+}
+
+// With custom buffer size
+$result = $builder->query(null, 50);  // buffer size for streaming
+
+// Force row format
+$result = $builder->queryAssoc();  // rows as arrays
+$result = $builder->queryObj();    // rows as objects
+
+// QueryResult methods
+$rows = $result->toArray();        // consume all remaining rows
+$count = $result->count();         // rows fetched so far
+$result->isExhausted();            // true when all rows consumed
+$result->getBatchSize();           // configured buffer size
+$result->getLastError();           // last error if iteration stopped
+```
+
+The `QueryResult` object implements PHP's `Iterator` interface, so it works with:
+- `foreach` loops
+- `iterator_to_array()`
+- Any function expecting an `Iterable`
+
+### Execute (INSERT/UPDATE/DELETE)
+
+```php
+$affectedRows = $builder->execute();
+```
+
+Returns the number of affected rows.
+
+---
+
 Let me know if you want to also document:
 
 * `values()` for insert

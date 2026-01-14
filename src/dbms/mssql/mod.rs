@@ -9,5 +9,8 @@ php_sqlx_impl_driver!(
     MssqlDriverInner,
     MssqlPreparedQuery,
     MssqlReadQueryBuilder,
-    MssqlWriteQueryBuilder
+    MssqlWriteQueryBuilder,
+    MssqlQueryResult,
+    "Sqlx\\MssqlQueryResult",
+    Mssql,
 );

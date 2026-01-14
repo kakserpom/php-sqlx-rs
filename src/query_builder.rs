@@ -212,7 +212,7 @@ pub fn or_(or: &ZendHashTable) -> crate::error::Result<OrClause> {
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! php_sqlx_impl_query_builder {
-    ( $struct:ident, $class:literal, $interface:literal, $driver: ident, $driver_inner: ident ) => {
+    ( $struct:ident, $class:literal, $interface:literal, $driver: ident, $driver_inner: ident, $query_result: ident ) => {
 
       use $crate::{
             ast::Ast,
@@ -2745,6 +2745,67 @@ macro_rules! php_sqlx_impl_query_builder {
                 let merged_params = self.merge_parameters(parameters);
                 self.driver_inner
                     .query_all(&self.query, merged_params, Some(false))
+            }
+
+            /// Executes the query and returns a lazy QueryResult iterator.
+            ///
+            /// This method returns a `QueryResult` object that implements PHP's `Iterator`
+            /// interface, streaming rows from the database as you iterate.
+            ///
+            /// # Arguments
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            /// - `batch_size`: Optional buffer size for streaming (default: 100)
+            ///
+            /// # Returns
+            /// A `QueryResult` object implementing `Iterator`
+            pub fn query(
+                &self,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                batch_size: Option<usize>,
+            ) -> crate::error::Result<super::query_result::$query_result> {
+                let merged_params = self.merge_parameters(parameters);
+                let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
+                let assoc = self.driver_inner.options.associative_arrays;
+                let receiver = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
+                Ok(super::query_result::$query_result::new(receiver, assoc, batch_size))
+            }
+
+            /// Executes the query and returns a lazy QueryResult iterator with rows as associative arrays.
+            ///
+            /// # Arguments
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            /// - `batch_size`: Optional buffer size for streaming (default: 100)
+            ///
+            /// # Returns
+            /// A `QueryResult` object with rows as associative arrays
+            pub fn query_assoc(
+                &self,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                batch_size: Option<usize>,
+            ) -> crate::error::Result<super::query_result::$query_result> {
+                let merged_params = self.merge_parameters(parameters);
+                let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
+                let receiver = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
+                Ok(super::query_result::$query_result::new(receiver, true, batch_size))
+            }
+
+            /// Executes the query and returns a lazy QueryResult iterator with rows as objects.
+            ///
+            /// # Arguments
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            /// - `batch_size`: Optional buffer size for streaming (default: 100)
+            ///
+            /// # Returns
+            /// A `QueryResult` object with rows as PHP objects
+            pub fn query_obj(
+                &self,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                batch_size: Option<usize>,
+            ) -> crate::error::Result<super::query_result::$query_result> {
+                let merged_params = self.merge_parameters(parameters);
+                let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
+                let receiver = self.driver_inner.query_stream(&self.query, merged_params, batch_size)?;
+                Ok(super::query_result::$query_result::new(receiver, false, batch_size))
             }
         }
     };

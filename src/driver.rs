@@ -43,11 +43,12 @@
 /// - `$write_query_builder` - The write query builder type
 #[macro_export]
 macro_rules! php_sqlx_impl_driver {
-    ( $struct:ident, $class:literal, $inner:ident, $prepared_query:ident, $read_query_builder:ident, $write_query_builder:ident $(,)? ) => {
+    ( $struct:ident, $class:literal, $inner:ident, $prepared_query:ident, $read_query_builder:ident, $write_query_builder:ident, $query_result:ident, $query_result_class:literal, $database:ident $(,)? ) => {
         mod conversion;
         pub mod prepared_query;
         pub mod read_query_builder;
         pub mod write_query_builder;
+        pub mod query_result;
         use $crate::error::Error as SqlxError;
         use dashmap::DashMap;
         use ext_php_rs::builders::ModuleBuilder;
@@ -57,6 +58,7 @@ macro_rules! php_sqlx_impl_driver {
         use inner::$inner;
         use itertools::Itertools;
         pub use prepared_query::$prepared_query;
+        pub use query_result::$query_result;
         use read_query_builder::$read_query_builder;
         use std::collections::BTreeMap;
         use std::sync::{Arc, LazyLock, Once};
@@ -99,6 +101,7 @@ macro_rules! php_sqlx_impl_driver {
                 .class::<$prepared_query>()
                 .class::<$read_query_builder>()
                 .class::<$write_query_builder>()
+                .class::<$query_result>()
         }
 
         impl $struct {
@@ -653,6 +656,96 @@ macro_rules! php_sqlx_impl_driver {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
             ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner.query_all(query, parameters, None)
+            }
+
+            /// Executes an SQL query and returns a lazy QueryResult iterator.
+            ///
+            /// This method returns a `QueryResult` object that implements PHP's `Iterator`
+            /// interface, streaming rows from the database as you iterate.
+            /// This is memory-efficient for large result sets.
+            ///
+            /// # Arguments
+            /// - `query`: SQL query string
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            /// - `batch_size`: Optional buffer size for streaming (default: 100)
+            ///
+            /// # Returns
+            /// A `QueryResult` object implementing `Iterator`
+            ///
+            /// # Example
+            /// ```php
+            /// $result = $driver->query('SELECT * FROM large_table');
+            /// foreach ($result as $row) {
+            ///     // Rows are streamed from the database as you iterate
+            ///     echo $row->name . "\n";
+            /// }
+            ///
+            /// // Convert to array (fetches all remaining rows)
+            /// $rows = $result->toArray();
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws an exception if:
+            /// - SQL query is invalid or fails to execute;
+            /// - parameter binding fails;
+            /// - row decoding fails due to an unsupported or mismatched database type;
+            /// - conversion to PHP values fails.
+            pub fn query(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                batch_size: Option<usize>,
+            ) -> $crate::error::Result<$query_result> {
+                let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
+                let assoc = self.driver_inner.options.associative_arrays;
+                let receiver = self.driver_inner.query_stream(query, parameters, batch_size)?;
+                Ok($query_result::new(receiver, assoc, batch_size))
+            }
+
+            /// Executes an SQL query and returns a lazy QueryResult iterator with rows as associative arrays.
+            ///
+            /// Same as `query()`, but forces rows to be returned as associative arrays
+            /// regardless of the driver's default configuration.
+            ///
+            /// # Arguments
+            /// - `query`: SQL query string
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            /// - `batch_size`: Optional buffer size for streaming (default: 100)
+            ///
+            /// # Returns
+            /// A `QueryResult` object with rows as associative arrays
+            pub fn query_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                batch_size: Option<usize>,
+            ) -> $crate::error::Result<$query_result> {
+                let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
+                let receiver = self.driver_inner.query_stream(query, parameters, batch_size)?;
+                Ok($query_result::new(receiver, true, batch_size))
+            }
+
+            /// Executes an SQL query and returns a lazy QueryResult iterator with rows as objects.
+            ///
+            /// Same as `query()`, but forces rows to be returned as PHP objects
+            /// regardless of the driver's default configuration.
+            ///
+            /// # Arguments
+            /// - `query`: SQL query string
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            /// - `batch_size`: Optional buffer size for streaming (default: 100)
+            ///
+            /// # Returns
+            /// A `QueryResult` object with rows as PHP objects
+            pub fn query_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                batch_size: Option<usize>,
+            ) -> $crate::error::Result<$query_result> {
+                let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
+                let receiver = self.driver_inner.query_stream(query, parameters, batch_size)?;
+                Ok($query_result::new(receiver, false, batch_size))
             }
 
             /// Executes an SQL query and returns all rows as associative arrays.
@@ -1591,8 +1684,8 @@ macro_rules! php_sqlx_impl_driver {
 
     ( $( $t:tt )* ) => {
         compile_error!(
-            "php_sqlx_impl_driver! accepts 6 arguments: \
-             (DriverType, $className, InnerDriverType, PreparedQueryType, ReadQueryBuilder, WriteQueryBuilder)"
+            "php_sqlx_impl_driver! accepts 9 arguments: \
+             (DriverType, $className, InnerDriverType, PreparedQueryType, ReadQueryBuilder, WriteQueryBuilder, QueryResultType, $queryResultClass, $database)"
         );
     };
 }
