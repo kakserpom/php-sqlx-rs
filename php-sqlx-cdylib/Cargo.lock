@@ -595,7 +595,7 @@ dependencies = [
 [[package]]
 name = "ext-php-rs"
 version = "0.15.3"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=590_interfaces#ce32533d6e833aaf9cb3152f0a1e43308cb2143e"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=cutting-edge#74778bce1467668c4d2ca68f29bbbc2370a61fe4"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -615,7 +615,7 @@ dependencies = [
 [[package]]
 name = "ext-php-rs-derive"
 version = "0.11.6"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=590_interfaces#ce32533d6e833aaf9cb3152f0a1e43308cb2143e"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=cutting-edge#74778bce1467668c4d2ca68f29bbbc2370a61fe4"
 dependencies = [
  "convert_case",
  "darling",
