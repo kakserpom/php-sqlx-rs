@@ -6,6 +6,8 @@ namespace PhpSqlx\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use Sqlx\DriverFactory;
+use Sqlx\DriverInterface;
+use Sqlx\PreparedQueryInterface;
 use Sqlx\Exceptions\SqlxException;
 
 /**
@@ -43,6 +45,38 @@ abstract class AbstractDriverTest extends TestCase
             $this->driver->close();
         }
         parent::tearDown();
+    }
+
+    // =========================================================================
+    // Interface Tests
+    // =========================================================================
+
+    public function testDriverImplementsInterface(): void
+    {
+        $this->assertInstanceOf(DriverInterface::class, $this->driver);
+    }
+
+    public function testPreparedQueryImplementsInterface(): void
+    {
+        $prepared = $this->driver->prepare('SELECT 1');
+        $this->assertInstanceOf(PreparedQueryInterface::class, $prepared);
+    }
+
+    public function testDriverInterfaceTypeHint(): void
+    {
+        // Test that type hints work with the interface
+        $this->assertSame(
+            1,
+            $this->executeWithDriver($this->driver)
+        );
+    }
+
+    /**
+     * Helper to verify type hints work with DriverInterface.
+     */
+    private function executeWithDriver(DriverInterface $driver): int
+    {
+        return $driver->queryValue('SELECT 1');
     }
 
     // =========================================================================

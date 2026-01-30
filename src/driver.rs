@@ -61,13 +61,14 @@ macro_rules! php_sqlx_impl_driver {
         pub use query_result::$query_result;
         use read_query_builder::$read_query_builder;
         use std::collections::BTreeMap;
-        use std::sync::{Arc, LazyLock, Once};
+        use std::sync::{Arc, LazyLock};
         use write_query_builder::$write_query_builder;
         use $crate::ast::UpsertStyle;
         use $crate::options::DriverInnerOptions;
         use $crate::options::DriverOptionsArg;
         use $crate::param_value::ParameterValue;
         use $crate::utils::types::ColumnArgument;
+        use $crate::interfaces::DriverInterface;
         pub mod inner;
 
         /// Global registry for persistent driver connections.
@@ -94,6 +95,246 @@ macro_rules! php_sqlx_impl_driver {
             pub driver_inner: Arc<$inner>,
         }
 
+        #[php_impl_interface]
+        impl $crate::interfaces::DriverInterface for $struct {
+            /// Closes the connection pool and releases all database connections.
+            fn close(&self) {
+                self.driver_inner.close();
+            }
+
+            /// Returns true if the driver has been closed.
+            fn is_closed(&self) -> bool {
+                self.driver_inner.is_closed()
+            }
+
+            /// Returns whether results are returned as associative arrays.
+            fn assoc_arrays(&self) -> bool {
+                self.driver_inner.options.associative_arrays
+            }
+
+            /// Quotes a single scalar value for safe embedding into SQL.
+            fn quote(&self, param: ParameterValue) -> $crate::error::Result<String> {
+                param.quote(&self.driver_inner.settings)
+            }
+
+            /// Quotes a string for use in a LIKE/ILIKE pattern.
+            fn quote_like(&self, param: ParameterValue) -> $crate::error::Result<String> {
+                param.quote_like(&self.driver_inner.settings)
+            }
+
+            /// Quotes an identifier (table name, column name).
+            fn quote_identifier(&self, name: &str) -> String {
+                $crate::param_value::quote::quote_identifier(name, &self.driver_inner.settings)
+            }
+
+            /// Executes an SQL query and returns a single row.
+            fn query_row(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_row(query, parameters, None)
+            }
+
+            /// Executes an SQL query and returns a single row as associative array.
+            fn query_row_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_row(query, parameters, Some(true))
+            }
+
+            /// Executes an SQL query and returns a single row as object.
+            fn query_row_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_row(query, parameters, Some(false))
+            }
+
+            /// Executes an SQL query and returns a single row or null.
+            fn query_maybe_row(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_maybe_row(query, parameters, None)
+            }
+
+            /// Executes an SQL query and returns a single row as associative array or null.
+            fn query_maybe_row_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_maybe_row(query, parameters, Some(true))
+            }
+
+            /// Executes an SQL query and returns a single row as object or null.
+            fn query_maybe_row_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_maybe_row(query, parameters, Some(false))
+            }
+
+            /// Executes an SQL query and returns a single column value.
+            fn query_value(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_value(query, parameters, column, None)
+            }
+
+            /// Executes an SQL query and returns a single column value as associative array.
+            fn query_value_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_value(query, parameters, column, Some(true))
+            }
+
+            /// Executes an SQL query and returns a single column value as object.
+            fn query_value_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_value(query, parameters, column, Some(false))
+            }
+
+            /// Executes an SQL query and returns a single column value or null.
+            fn query_maybe_value(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_maybe_value(query, parameters, column, None)
+            }
+
+            /// Executes an SQL query and returns a single column value as associative array or null.
+            fn query_maybe_value_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_maybe_value(query, parameters, column, Some(true))
+            }
+
+            /// Executes an SQL query and returns a single column value as object or null.
+            fn query_maybe_value_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_maybe_value(query, parameters, column, Some(false))
+            }
+
+            /// Executes an SQL query and returns all rows.
+            fn query_all(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.query_all(query, parameters, None)
+            }
+
+            /// Executes an SQL query and returns all rows as associative arrays.
+            fn query_all_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.query_all(query, parameters, Some(true))
+            }
+
+            /// Executes an SQL query and returns all rows as objects.
+            fn query_all_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.query_all(query, parameters, Some(false))
+            }
+
+            /// Executes an SQL query and returns a column from all rows.
+            fn query_column(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.query_column(query, parameters, column, None)
+            }
+
+            /// Executes an SQL query and returns a column from all rows as associative arrays.
+            fn query_column_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.query_column(query, parameters, column, Some(true))
+            }
+
+            /// Executes an SQL query and returns a column from all rows as objects.
+            fn query_column_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                column: Option<ColumnArgument>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.query_column(query, parameters, column, Some(false))
+            }
+
+            /// Executes an SQL query and returns a dictionary indexed by the first column.
+            fn query_dictionary(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_dictionary(query, parameters, None)
+            }
+
+            /// Executes an SQL query and returns a dictionary with rows as associative arrays.
+            fn query_dictionary_assoc(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_dictionary(query, parameters, Some(true))
+            }
+
+            /// Executes an SQL query and returns a dictionary with rows as objects.
+            fn query_dictionary_obj(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_dictionary(query, parameters, Some(false))
+            }
+
+            /// Executes an INSERT/UPDATE/DELETE statement and returns affected rows.
+            fn execute(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<u64> {
+                self.driver_inner.execute(query, parameters)
+            }
+        }
+
         /// Registers driver classes with the PHP module builder.
         pub fn build(module: ModuleBuilder) -> ModuleBuilder {
             module
@@ -111,11 +352,6 @@ macro_rules! php_sqlx_impl_driver {
             /// for an existing connection and reuses it. Otherwise, creates a new
             /// connection pool and optionally registers it for persistence.
             pub fn new(options: DriverInnerOptions) -> $crate::error::Result<Self> {
-                static INIT: Once = Once::new();
-                INIT.call_once(|| {
-                    $crate::utils::adhoc_php_class_implements($class, "Sqlx\\DriverInterface");
-                });
-
                 if let Some(name) = options.persistent_name.as_ref() {
                     if let Some(driver_inner) = PERSISTENT_DRIVER_REGISTRY.get(name) {
                         return Ok(Self {
@@ -179,484 +415,6 @@ macro_rules! php_sqlx_impl_driver {
                 $read_query_builder::new(self.driver_inner.clone())
             }
 
-            /// Quotes a single scalar value for safe embedding into SQL.
-            ///
-            /// This method renders the given `ParameterValue` into a properly escaped SQL literal,
-            /// using the driver's configuration (e.g., quoting style, encoding).
-            ///
-            /// ⚠️ **Warning:** Prefer using placeholders and parameter binding wherever possible.
-            /// This method should only be used for debugging or generating static fragments,
-            /// not for constructing dynamic SQL with user input.
-            ///
-            /// # Arguments
-            /// * `param` – The parameter to quote (must be a scalar: string, number, or boolean).
-            ///
-            /// # Returns
-            /// Quoted SQL string (e.g., `'abc'`, `123`, `TRUE`)
-            ///
-            /// # Errors
-            /// Returns an error if the parameter is not a scalar or if rendering fails.
-            ///
-            /// # Example
-            /// ```php
-            /// $driver->builder()->quote("O'Reilly"); // "'O''Reilly'"
-            /// ```
-            pub fn quote(&self, param: ParameterValue) -> $crate::error::Result<String> {
-                param.quote(&self.driver_inner.settings)
-            }
-
-            /// Quotes a string for use in a LIKE/ILIKE pattern, escaping both SQL special
-            /// characters (like single quotes) and LIKE metacharacters (`%` and `_`).
-            ///
-            /// This is like `quote()` but additionally escapes `%` and `_` so they match literally.
-            ///
-            /// # Arguments
-            /// * `param` – The parameter to quote (must be a string).
-            ///
-            /// # Returns
-            /// A fully quoted SQL string with LIKE metacharacters escaped.
-            ///
-            /// # Errors
-            /// Returns an error if the input is not a string.
-            ///
-            /// # Example
-            /// ```php
-            /// $quoted = $driver->quoteLike("O'Reilly%");
-            /// // Returns: 'O''Reilly\%'
-            /// ```
-            pub fn quote_like(&self, param: ParameterValue) -> $crate::error::Result<String> {
-                param.quote_like(&self.driver_inner.settings)
-            }
-
-            /// Quotes an identifier (table name, column name) using the appropriate quote style.
-            ///
-            /// - `PostgreSQL`: `"identifier"` (double quotes)
-            /// - `MySQL`: `` `identifier` `` (backticks)
-            /// - `MSSQL`: `[identifier]` (brackets)
-            ///
-            /// Special characters in the identifier are properly escaped.
-            ///
-            /// # Arguments
-            /// * `name` – The identifier to quote.
-            ///
-            /// # Returns
-            /// The quoted identifier string.
-            ///
-            /// # Example
-            /// ```php
-            /// // PostgreSQL
-            /// $driver->quoteIdentifier("user"); // Returns: "user"
-            /// $driver->quoteIdentifier('my"column'); // Returns: "my""column"
-            ///
-            /// // MySQL
-            /// $driver->quoteIdentifier("user"); // Returns: `user`
-            /// ```
-            pub fn quote_identifier(&self, name: &str) -> String {
-                $crate::param_value::quote::quote_identifier(name, &self.driver_inner.settings)
-            }
-
-            /// Closes the connection pool and releases all database connections.
-            ///
-            /// This gracefully shuts down all connections, sending termination messages
-            /// to the database server. After calling this method, the driver cannot be
-            /// used for further queries.
-            ///
-            /// Call this method when you're done using the driver to free up database
-            /// connections immediately rather than waiting for garbage collection.
-            ///
-            /// # Example
-            /// ```php
-            /// $driver = Sqlx\DriverFactory::make("postgres://...");
-            /// // ... use the driver ...
-            /// $driver->close(); // Release connections immediately
-            /// ```
-            pub fn close(&self) {
-                self.driver_inner.close();
-            }
-
-            /// Returns true if the driver has been closed.
-            ///
-            /// Once closed, the driver cannot execute any queries. Attempting to
-            /// use a closed driver will throw an exception.
-            ///
-            /// # Example
-            /// ```php
-            /// $driver = Sqlx\DriverFactory::make("postgres://...");
-            /// var_dump($driver->isClosed()); // false
-            /// $driver->close();
-            /// var_dump($driver->isClosed()); // true
-            /// ```
-            #[must_use]
-            pub fn is_closed(&self) -> bool {
-                self.driver_inner.is_closed()
-            }
-
-            /// Returns whether results are returned as associative arrays.
-            ///
-            /// If true, result rows are returned as PHP associative arrays (key-value pairs).
-            /// If false, result rows are returned as PHP `stdClass` objects.
-            #[must_use]
-            pub fn assoc_arrays(&self) -> bool {
-                self.driver_inner.options.associative_arrays
-            }
-
-            /// Executes an SQL query and returns a single result.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Returns
-            /// Single row as array or object depending on config
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - SQL query is invalid or execution fails;
-            /// - a parameter cannot be bound or has incorrect type;
-            /// - the row contains unsupported database types;
-            /// - conversion to PHP object fails.
-            pub fn query_row(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner.query_row(query, parameters, None)
-            }
-
-            /// Executes an SQL query and returns a single column value from the first row.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            /// - `column`: Optional column name or index to extract from the result row. Defaults to the first column.
-            ///
-            /// # Returns
-            /// The value from the specified column of the first row.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - the query is invalid or fails to execute;
-            /// - the specified column does not exist;
-            /// - the value cannot be converted to a PHP-compatible type.
-            pub fn query_value(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_value(query, parameters, column, None)
-            }
-
-            pub fn query_value_assoc(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_value(query, parameters, column, Some(true))
-            }
-
-            /**
-             * Executes an SQL query and returns a single column value as a PHP object from the first row.
-             *
-             * Same as `queryValue`, but forces object mode for decoding structured types (e.g., JSON, composite).
-             *
-             * # Parameters
-             * - `query`: SQL query string to execute.
-             * - `parameters`: Optional array of indexed or named parameters to bind.
-             * - `column`: Optional column name or zero-based index to extract. Defaults to the first column.
-             *
-             * # Returns
-             * The value from the specified column of the first row, decoded as a PHP object.
-             *
-             * # Exceptions
-             * Throws an exception if:
-             * - the query is invalid or fails to execute;
-             * - the column does not exist;
-             * - the value cannot be converted to a PHP object (e.g., due to encoding or type mismatch).
-             */
-            pub fn query_value_obj(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_value(query, parameters, column, Some(false))
-            }
-
-            /// Executes an SQL query and returns a single column value from the first row, or null if no rows matched.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            /// - `column`: Optional column name or index to extract from the result row.
-            ///
-            /// # Returns
-            /// The value from the specified column of the first row as a PHP value, or `null` if no row was found.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - the query is invalid or fails to execute;
-            /// - the specified column does not exist;
-            /// - the value cannot be converted to a PHP-compatible type.
-            pub fn query_maybe_value(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_maybe_value(query, parameters, column, None)
-            }
-
-            /// Executes an SQL query and returns a single column value as a PHP value (array mode), or null if no row matched.
-            ///
-            /// Same as `query_maybe_value`, but forces associative array mode for complex values.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            /// - `column`: Optional column name or index to extract.
-            ///
-            /// # Returns
-            /// The column value from the first row, or `null` if no row found.
-            ///
-            /// # Exceptions
-            /// Same as `query_maybe_value`.
-            pub fn query_maybe_value_assoc(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_maybe_value(query, parameters, column, Some(true))
-            }
-
-            /// Executes an SQL query and returns a single column value as a PHP object, or null if no row matched.
-            ///
-            /// Same as `query_maybe_value`, but forces object mode for complex values.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            /// - `column`: Optional column name or index to extract.
-            ///
-            /// # Returns
-            /// The column value from the first row, or `null` if no row found.
-            ///
-            /// # Exceptions
-            /// Same as `query_maybe_value`.
-            pub fn query_maybe_value_obj(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_maybe_value(query, parameters, column, Some(false))
-            }
-
-            /// Executes an SQL query and returns one row as an associative array.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - SQL query is invalid or execution fails;
-            /// - a parameter cannot be bound or has incorrect type;
-            /// - the row contains unsupported database types;
-            /// - conversion to PHP object fails.
-            pub fn query_row_assoc(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner.query_row(query, parameters, Some(true))
-            }
-
-            /// Executes an SQL query and returns one row as an object.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - SQL query is invalid or execution fails;
-            /// - a parameter cannot be bound or has incorrect type;
-            /// - the row contains unsupported database types;
-            /// - conversion to PHP object fails.
-            pub fn query_row_obj(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner.query_row(query, parameters, Some(false))
-            }
-
-            /// Executes an SQL query and returns a single result, or `null` if no row matched.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Returns
-            /// Single row as array or object depending on config
-            ///
-            /// # Exceptions
-            /// Throws an exception if the query fails for reasons other than no matching rows.
-            /// For example, syntax errors, type mismatches, or database connection issues.
-            pub fn query_maybe_row(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner.query_maybe_row(query, parameters, None)
-            }
-
-            /// Executes an SQL query and returns a single row as a PHP associative array, or `null` if no row matched.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Returns
-            /// The result row as an associative array (`array<string, mixed>` in PHP), or `null` if no matching row is found.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - the query is invalid or fails to execute;
-            /// - parameters are invalid or cannot be bound;
-            /// - the row contains unsupported or unconvertible data types.
-            pub fn query_maybe_row_assoc(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_maybe_row(query, parameters, Some(true))
-            }
-
-            /// Executes an SQL query and returns a single row as a PHP object, or `null` if no row matched.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Returns
-            /// The result row as a `stdClass` PHP object, or `null` if no matching row is found.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - the query is invalid or fails to execute;
-            /// - parameters are invalid or cannot be bound;
-            /// - the row contains unsupported or unconvertible data types.
-            pub fn query_maybe_row_obj(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_maybe_row(query, parameters, Some(false))
-            }
-
-            /// Executes an SQL query and returns the specified column values from all result rows.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            /// - `column`: Optional column name or index to extract.
-            ///
-            /// # Returns
-            /// An array of column values, one for each row.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - the query fails to execute;
-            /// - the specified column is not found;
-            /// - a column value cannot be converted to PHP.
-            pub fn query_column(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Vec<Zval>> {
-                self.driver_inner
-                    .query_column(query, parameters, column, None)
-            }
-
-            /// Executes an SQL query and returns the specified column values from all rows in associative array mode.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string.
-            /// - `parameters`: Optional named parameters.
-            /// - `column`: Column index or name to extract.
-            ///
-            /// # Returns
-            /// An array of column values (associative arrays for structured data).
-            ///
-            /// # Exceptions
-            /// Same as `query_column`.
-            pub fn query_column_assoc(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Vec<Zval>> {
-                self.driver_inner
-                    .query_column(query, parameters, column, Some(true))
-            }
-
-            /// Executes an SQL query and returns the specified column values from all rows in object mode.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string.
-            /// - `parameters`: Optional named parameters.
-            /// - `column`: Column index or name to extract.
-            ///
-            /// # Returns
-            /// An array of column values (objects for structured data).
-            ///
-            /// # Exceptions
-            /// Same as `query_column`.
-            pub fn query_column_obj(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-                column: Option<ColumnArgument>,
-            ) -> $crate::error::Result<Vec<Zval>> {
-                self.driver_inner
-                    .query_column(query, parameters, column, Some(false))
-            }
-
-            /// Executes an SQL query and returns all results.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Returns
-            /// Array of rows as array or object depending on config
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - SQL query is invalid or fails to execute;
-            /// - parameter binding fails;
-            /// - row decoding fails due to an unsupported or mismatched database type;
-            /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
-            pub fn query_all(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Vec<Zval>> {
-                self.driver_inner.query_all(query, parameters, None)
-            }
 
             /// Executes an SQL query and returns a lazy `QueryResult` iterator.
             ///
@@ -746,128 +504,6 @@ macro_rules! php_sqlx_impl_driver {
                 let batch_size = batch_size.unwrap_or($crate::query_result::DEFAULT_BATCH_SIZE);
                 let (receiver, cancel_token) = self.driver_inner.query_stream(query, parameters, batch_size)?;
                 Ok($query_result::new(receiver, cancel_token, false, batch_size))
-            }
-
-            /// Executes an SQL query and returns all rows as associative arrays.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - SQL query is invalid or fails to execute;
-            /// - parameter binding fails;
-            /// - row decoding fails due to an unsupported or mismatched database type;
-            /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
-            pub fn query_all_assoc(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Vec<Zval>> {
-                self.driver_inner.query_all(query, parameters, Some(true))
-            }
-
-            /// Executes an SQL query and returns all rows as objects.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - SQL query is invalid or fails to execute;
-            /// - parameter binding fails;
-            /// - row decoding fails due to an unsupported or mismatched database type;
-            /// - conversion to PHP values fails (e.g., due to memory or encoding issues).
-            pub fn query_all_obj(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Vec<Zval>> {
-                self.driver_inner.query_all(query, parameters, Some(false))
-            }
-
-            /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row.
-            ///
-            /// # Description
-            /// The result is a `HashMap` where each key is the string value of the first column in a row,
-            /// and the corresponding value is the row itself (as an array or object depending on config).
-            ///
-            /// This variant respects the global `assoc_arrays` setting to determine the row format.
-            ///
-            /// # Parameters
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional map of named parameters to bind.
-            ///
-            /// # Returns
-            /// A map from the first column (as string) to the full row.
-            ///
-            /// # Errors
-            /// - If the query fails to execute.
-            /// - If the first column cannot be converted to a string.
-            /// - If row decoding or PHP conversion fails.
-            ///
-            /// # Notes
-            /// - The iteration order of the returned map is **not** guaranteed.
-            pub fn query_dictionary(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner.query_dictionary(query, parameters, None)
-            }
-
-            /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row,
-            /// returning each row as an associative array.
-            ///
-            /// # Parameters
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional map of named parameters to bind.
-            ///
-            /// # Returns
-            /// A map from the first column (as string) to the full row (as an associative array).
-            ///
-            /// # Errors
-            /// - If the query fails to execute.
-            /// - If the first column cannot be converted to a string.
-            /// - If row decoding or PHP conversion fails.
-            ///
-            /// # Notes
-            /// - The iteration order of the returned map is **not** guaranteed.
-            pub fn query_dictionary_assoc(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_dictionary(query, parameters, Some(true))
-            }
-
-            /// Executes an SQL query and returns a dictionary (map) indexed by the first column of each row,
-            /// returning each row as a PHP object.
-            ///
-            /// # Parameters
-            /// - `query`: SQL query string to execute.
-            /// - `parameters`: Optional map of named parameters to bind.
-            ///
-            /// # Returns
-            /// A map from the first column (as string) to the full row (as an object).
-            ///
-            /// # Errors
-            /// - If the query fails to execute.
-            /// - If the first column cannot be converted to a string.
-            /// - If row decoding or PHP conversion fails.
-            ///
-            /// # Notes
-            /// - The iteration order of the returned map is **not** guaranteed.
-            pub fn query_dictionary_obj(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<Zval> {
-                self.driver_inner
-                    .query_dictionary(query, parameters, Some(false))
             }
 
             /// Executes an SQL query and returns a dictionary grouping rows by the first column.
@@ -1113,28 +749,6 @@ macro_rules! php_sqlx_impl_driver {
                 schema: Option<&str>,
             ) -> $crate::error::Result<Vec<Zval>> {
                 self.driver_inner.describe_table(table, schema)
-            }
-
-            /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
-            ///
-            /// # Arguments
-            /// - `query`: SQL query string
-            /// - `parameters`: Optional array of indexed/named parameters to bind.
-            ///
-            /// # Returns
-            /// Number of affected rows
-            ///
-            /// # Exceptions
-            /// Throws an exception if:
-            /// - the SQL query is invalid or fails to execute (e.g., due to syntax error, constraint violation, or connection issue);
-            /// - parameters contain unsupported types or fail to bind correctly;
-            /// - the runtime fails to execute the query (e.g., task panic or timeout).
-            pub fn execute(
-                &self,
-                query: &str,
-                parameters: Option<BTreeMap<String, ParameterValue>>,
-            ) -> $crate::error::Result<u64> {
-                self.driver_inner.execute(query, parameters)
             }
 
             /// Inserts a row into the given table using a map of columns.

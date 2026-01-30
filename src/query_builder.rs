@@ -212,7 +212,7 @@ pub fn or_(or: &ZendHashTable) -> crate::error::Result<OrClause> {
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! php_sqlx_impl_query_builder {
-    ( $struct:ident, $class:literal, $interface:literal, $driver: ident, $driver_inner: ident, $query_result: ident ) => {
+    ( $struct:ident, $class:literal, $interface:path, $driver: ident, $driver_inner: ident, $query_result: ident ) => {
 
       use $crate::{
             ast::Ast,
@@ -234,7 +234,7 @@ macro_rules! php_sqlx_impl_query_builder {
       };
         use std::collections::{BTreeSet, BTreeMap, HashMap};
         use std::fmt::Write;
-        use std::sync::{Once, Arc};
+        use std::sync::Arc;
         use trim_in_place::TrimInPlace;
 
         /// A prepared SQL query builder.
@@ -250,6 +250,9 @@ macro_rules! php_sqlx_impl_query_builder {
             pub(crate) placeholders: BTreeSet<String>,
             pub(crate) parameters: BTreeMap<String, ParameterValue>,
         }
+
+        #[php_impl_interface]
+        impl $interface for $struct {}
 
         struct ParameterValueWrapper(ParameterValue);
         impl FromZval<'_> for ParameterValueWrapper {
@@ -287,10 +290,6 @@ macro_rules! php_sqlx_impl_query_builder {
             /// # Returns
             /// A new instance of the prepared query builder.
             pub(crate) fn new(driver_inner: Arc<$driver_inner>) -> Self {
-                static INIT: Once = Once::new();
-                INIT.call_once(|| {
-                    $crate::utils::adhoc_php_class_implements($class, $interface);
-                });
                 Self {
                     readonly: driver_inner.is_readonly(),
                     driver_inner,

@@ -5,7 +5,7 @@ use crate::php_sqlx_impl_query_builder;
 php_sqlx_impl_query_builder!(
     PgWriteQueryBuilder,
     "Sqlx\\PgWriteQueryBuilder",
-    "Sqlx\\WriteQueryBuilderInterface",
+    crate::interfaces::WriteQueryBuilderInterface,
     PgDriver,
     PgDriverInner,
     PgQueryResult

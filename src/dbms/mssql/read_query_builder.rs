@@ -5,7 +5,7 @@ use crate::php_sqlx_impl_query_builder;
 php_sqlx_impl_query_builder!(
     MssqlReadQueryBuilder,
     "Sqlx\\MssqlReadQueryBuilder",
-    "Sqlx\\ReadQueryBuilderInterface",
+    crate::interfaces::ReadQueryBuilderInterface,
     MssqlDriver,
     MssqlDriverInner,
     MssqlQueryResult

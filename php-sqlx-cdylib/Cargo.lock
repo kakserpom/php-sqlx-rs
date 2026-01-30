@@ -127,25 +127,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e050f626429857a27ddccb31e0aca21356bfa709c04041aefddac081a8f068a"
 
 [[package]]
-name = "bindgen"
-version = "0.72.1"
-source = "git+https://github.com/extphprs/rust-bindgen.git?branch=preserve-none-support#d21d811c8dedb55905be2fdde76d4893352393fb"
-dependencies = [
- "bitflags",
- "cexpr",
- "clang-sys",
- "itertools 0.13.0",
- "log",
- "prettyplease",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash",
- "shlex",
- "syn",
-]
-
-[[package]]
 name = "bitflags"
 version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -275,16 +256,6 @@ checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common",
  "inout",
-]
-
-[[package]]
-name = "clang-sys"
-version = "1.9.0"
-source = "git+https://github.com/extphprs/clang-sys.git?branch=preserve-none-support#ed5be28c016d8b83e1ce9a4b4b3696ba76e0a316"
-dependencies = [
- "glob",
- "libc",
- "libloading",
 ]
 
 [[package]]
@@ -594,14 +565,15 @@ dependencies = [
 
 [[package]]
 name = "ext-php-rs"
-version = "0.15.3"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=cutting-edge#74778bce1467668c4d2ca68f29bbbc2370a61fe4"
+version = "0.15.5"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=fix_stub_gen#78e09a7a3c76f793c70dee10413529fce780e41f"
 dependencies = [
  "anyhow",
- "bindgen",
  "bitflags",
  "cc",
  "cfg-if",
+ "ext-php-rs-bindgen",
+ "ext-php-rs-build",
  "ext-php-rs-derive",
  "inventory",
  "native-tls",
@@ -613,9 +585,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "ext-php-rs-bindgen"
+version = "0.72.1-extphprs.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4795dd0976bd7d7d321c49e88e836f8e5b5b2b481e089067e303f2945617458a"
+dependencies = [
+ "bitflags",
+ "cexpr",
+ "ext-php-rs-clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash",
+ "shlex",
+ "syn",
+]
+
+[[package]]
+name = "ext-php-rs-build"
+version = "0.1.1"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=fix_stub_gen#78e09a7a3c76f793c70dee10413529fce780e41f"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
+name = "ext-php-rs-clang-sys"
+version = "1.8.1-extphprs.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa1ad6e482017d457d57d73691f8bed148a8a6198babe90830310c3308480a61"
+dependencies = [
+ "glob",
+ "libc",
+ "libloading",
+]
+
+[[package]]
 name = "ext-php-rs-derive"
-version = "0.11.6"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=cutting-edge#74778bce1467668c4d2ca68f29bbbc2370a61fe4"
+version = "0.11.7"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=fix_stub_gen#78e09a7a3c76f793c70dee10413529fce780e41f"
 dependencies = [
  "convert_case",
  "darling",
@@ -3179,3 +3190,13 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "bindgen"
+version = "0.72.1"
+source = "git+https://github.com/extphprs/rust-bindgen.git?branch=preserve-none-support#d21d811c8dedb55905be2fdde76d4893352393fb"
+
+[[patch.unused]]
+name = "clang-sys"
+version = "1.9.0"
+source = "git+https://github.com/extphprs/clang-sys.git?branch=preserve-none-support#ed5be28c016d8b83e1ce9a4b4b3696ba76e0a316"

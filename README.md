@@ -1188,96 +1188,57 @@ array(1) {
 
 ## Interfaces
 
-> ⚠️ **Note:** Due to current limitations in [ext-php-rs](https://github.com/davidcole1340/ext-php-rs),
-> it is not yet possible to declare PHP interfaces directly from within a Rust extension.
-> This feature is [actively being developed](https://github.com/davidcole1340/ext-php-rs/issues/527).
-
-Until this is resolved, you can still benefit from type hints, auto-completion, and `instanceof` checks
-by including the `interfaces.php` stub early in your PHP application:
-
-```php
-require_once '/path/to/sqlx/interfaces.php';
-````
-
-This stub defines the expected interfaces and registers them before any classes from the extension are loaded.
-The extension will **automatically associate** its internal classes with these interfaces at runtime when
-they get instantiated for the first time.
-
----
+The extension provides native PHP interfaces defined in Rust using the `#[php_interface]` macro from ext-php-rs.
+These interfaces work seamlessly with PHP's `instanceof` checks, type hints, and IDE auto-completion.
 
 ### Available Interfaces
 
+| Interface | Implementing Classes | Description |
+|-----------|---------------------|-------------|
+| `Sqlx\DriverInterface` | `PgDriver`, `MySqlDriver`, `MssqlDriver` | Database driver contract |
+| `Sqlx\PreparedQueryInterface` | `PgPreparedQuery`, `MySqlPreparedQuery`, `MssqlPreparedQuery` | Prepared statement contract |
+
 ```php
-namespace Sqlx;
+use Sqlx\DriverInterface;
+use Sqlx\PreparedQueryInterface;
 
-/**
- * Represents a database driver (e.g. PostgreSQL, MySQL, SQL Server).
- *
- * Drivers expose methods to create builders and manage connections.
- */
-interface DriverInterface {}
+// Type hints work as expected
+function runQuery(DriverInterface $driver): void {
+    $rows = $driver->queryAll('SELECT * FROM users');
+    // ...
+}
 
-/**
- * Represents a prepared SQL query that can be executed or fetched.
- *
- * Allows safe parameter binding and controlled query execution.
- */
-interface PreparedQueryInterface {}
+// instanceof checks work
+$driver = Sqlx\DriverFactory::make('postgres://...');
+assert($driver instanceof DriverInterface);
 
-/**
- * Factory for creating query builders and managing connections.
- *
- * Handles master/slave configuration and provides both read and write builders.
- */
-interface FactoryInterface {}
-
-/**
- * Base interface for fluent SQL query builders.
- *
- * Includes methods like `from()`, `where()`, `groupBy()`, `orderBy()`, etc.
- * Suitable for generic query construction.
- */
-interface QueryBuilderInterface {}
-
-/**
- * Interface for read-only query builders.
- *
- * Adds `select()`, `limit()`, `offset()`, `forUpdate()`, and other non-mutating clauses.
- */
-interface ReadQueryBuilderInterface extends QueryBuilderInterface {}
-
-/**
- * Interface for builders that support INSERT/UPDATE/DELETE queries.
- *
- * Extends the read builder with methods like `insertInto()`, `update()`, `deleteFrom()`, and `set()`.
- */
-interface WriteQueryBuilderInterface extends ReadQueryBuilderInterface {}
+$prepared = $driver->prepare('SELECT * FROM users WHERE id = ?');
+assert($prepared instanceof PreparedQueryInterface);
 ```
-
----
 
 ### Design Philosophy
 
-These interfaces follow the [SOLID principles](https://en.wikipedia.org/wiki/SOLID), particularly:
-
-* **Interface Segregation Principle** – Read and write operations are clearly separated.
-* **Liskov Substitution Principle** – Code working with `ReadQueryBuilderInterface` doesn’t require awareness of
-  mutation.
-* **Dependency Inversion Principle** – You can depend on high-level interfaces (e.g. for mocking or type-constrained
-  injection).
-
-This structure makes it easier to write generic code that works across multiple database types and capabilities.
-For example:
+These interfaces follow the [Dependency Inversion Principle](https://en.wikipedia.org/wiki/Dependency_inversion_principle),
+allowing you to depend on abstractions rather than concrete implementations:
 
 ```php
-function exportAsCsv(Sqlx\ReadQueryBuilderInterface $builder): void {
-    $builder->select("*")->from("users");
-    $rows = $builder->fetchAll();
-    // ...
+// Your code depends on the interface, not the concrete driver
+function fetchUsers(Sqlx\DriverInterface $driver): array {
+    return $driver->queryAll('SELECT * FROM users');
 }
+
+// Works with any driver implementation
+$pgDriver = Sqlx\DriverFactory::make('postgres://...');
+$mysqlDriver = Sqlx\DriverFactory::make('mysql://...');
+
+fetchUsers($pgDriver);   // Works
+fetchUsers($mysqlDriver); // Also works
 ```
 
-You can later swap in a full `WriteQueryBuilderInterface` without changing the contract.
+This makes it easier to:
+- Write database-agnostic code
+- Mock drivers in unit tests
+- Switch between database backends
 
 ---
 

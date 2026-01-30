@@ -7,7 +7,9 @@ description = "A modern feature-rich SQL driver for PHP."
 [dependencies]
 dashmap = "6.1.0"
 #ext-php-rs = "0.15.3"
-ext-php-rs = {git = "https://github.com/kakserpom/ext-php-rs", branch = "cutting-edge"}
+#ext-php-rs = {git = "https://github.com/extphprs/ext-php-rs", branch = "master"}
+ext-php-rs = {git = "https://github.com/kakserpom/ext-php-rs", branch = "fix_stub_gen"}
+#ext-php-rs = {path = "./ext-php-rs"}
 itertools = "0.14"
 mimalloc = { version = "0.1", optional = true }
 parse_duration = "2.1.1"
@@ -52,11 +54,3 @@ criterion = "0.8.1"
 [[bench]]
 name = "benchmark"
 harness = false
-
-# Patch clang-sys and bindgen for preserve_none calling convention support (libclang 19/20)
-# Required for PHP 8.5+ on macOS ARM64 which uses TAILCALL VM mode
-# - clang-sys: Adds libclang 19/20 bindings (https://github.com/KyleMayes/clang-sys/pull/195)
-# - bindgen: Maps CXCallingConv_PreserveNone to C ABI
-[patch.crates-io]
-clang-sys = { git = "https://github.com/extphprs/clang-sys.git", branch = "preserve-none-support" }
-bindgen = { git = "https://github.com/extphprs/rust-bindgen.git", branch = "preserve-none-support" }

@@ -43,6 +43,7 @@ pub mod conversion;
 mod driver;
 pub mod error;
 pub mod inner_driver;
+pub mod interfaces;
 #[cfg(feature = "lazy-row")]
 mod lazy_row;
 pub mod options;
@@ -125,6 +126,14 @@ pub use dbms::mysql::{MySqlDriver, MySqlPreparedQuery};
 #[php_module]
 pub fn module(mut module: ModuleBuilder) -> ModuleBuilder {
     module = module.name("sqlx").version(env!("CARGO_PKG_VERSION"));
+
+    // Register interfaces
+    module = module
+        .interface::<interfaces::PhpInterfaceDriverInterface>()
+        .interface::<interfaces::PhpInterfacePreparedQueryInterface>()
+        .interface::<interfaces::PhpInterfaceReadQueryBuilderInterface>()
+        .interface::<interfaces::PhpInterfaceWriteQueryBuilderInterface>();
+
     module = error::build(module);
     module = select_clause::build(module);
     module = by_clause::build(module);

@@ -5,7 +5,7 @@ use crate::php_sqlx_impl_query_builder;
 php_sqlx_impl_query_builder!(
     MssqlWriteQueryBuilder,
     "Sqlx\\MssqlWriteQueryBuilder",
-    "Sqlx\\WriteQueryBuilderInterface",
+    crate::interfaces::WriteQueryBuilderInterface,
     MssqlDriver,
     MssqlDriverInner,
     MssqlQueryResult
