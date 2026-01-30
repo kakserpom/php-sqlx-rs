@@ -1193,14 +1193,18 @@ These interfaces work seamlessly with PHP's `instanceof` checks, type hints, and
 
 ### Available Interfaces
 
-| Interface | Implementing Classes | Description |
-|-----------|---------------------|-------------|
-| `Sqlx\DriverInterface` | `PgDriver`, `MySqlDriver`, `MssqlDriver` | Database driver contract |
-| `Sqlx\PreparedQueryInterface` | `PgPreparedQuery`, `MySqlPreparedQuery`, `MssqlPreparedQuery` | Prepared statement contract |
+| Interface                         | Implementing Classes                                                      | Description                  |
+|-----------------------------------|---------------------------------------------------------------------------|------------------------------|
+| `Sqlx\DriverInterface`            | `PgDriver`, `MySqlDriver`, `MssqlDriver`                                  | Database driver contract     |
+| `Sqlx\PreparedQueryInterface`     | `PgPreparedQuery`, `MySqlPreparedQuery`, `MssqlPreparedQuery`             | Prepared statement contract  |
+| `Sqlx\ReadQueryBuilderInterface`  | `PgReadQueryBuilder`, `MySqlReadQueryBuilder`, `MssqlReadQueryBuilder`    | Read query builder contract  |
+| `Sqlx\WriteQueryBuilderInterface` | `PgWriteQueryBuilder`, `MySqlWriteQueryBuilder`, `MssqlWriteQueryBuilder` | Write query builder contract |
 
 ```php
 use Sqlx\DriverInterface;
 use Sqlx\PreparedQueryInterface;
+use Sqlx\WriteQueryBuilderInterface;
+use Sqlx\ReadQueryBuilderInterface;
 
 // Type hints work as expected
 function runQuery(DriverInterface $driver): void {
@@ -1214,6 +1218,12 @@ assert($driver instanceof DriverInterface);
 
 $prepared = $driver->prepare('SELECT * FROM users WHERE id = ?');
 assert($prepared instanceof PreparedQueryInterface);
+
+$builder = $driver->builder();
+assert($builder instanceof WriteQueryBuilderInterface);
+
+$readBuilder = $driver->readBuilder();
+assert($readBuilder instanceof ReadQueryBuilderInterface);
 ```
 
 ### Design Philosophy
