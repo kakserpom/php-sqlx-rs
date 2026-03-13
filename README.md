@@ -49,7 +49,7 @@ without any compromise on performance.
 
 ### Installation
 
-Install with [`cargo-php`](https://github.com/davidcole1340/ext-php-rs):
+Install with [`cargo-php`](https://github.com/extphprs/ext-php-rs):
 
 ```bash
 cargo install cargo-php --locked

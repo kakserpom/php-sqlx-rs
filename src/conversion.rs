@@ -1,8 +1,6 @@
 #[cfg(feature = "lazy-row")]
-use crate::LazyRow;
+use crate::lazy_row::{LazyRow, LazyRowJson};
 use crate::error::Error as SqlxError;
-#[cfg(feature = "lazy-row")]
-use crate::lazy_row::LazyRowJson;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_array;
@@ -16,83 +14,112 @@ use std::collections::HashMap;
 
 /// Trait to convert a row into a PHP value.
 pub trait Conversion: Row {
-    /// Convert the row into a PHP associative array.
+    /// Convert the row into a PHP value.
+    ///
+    /// When `lazy-row` feature is enabled, returns a `LazyRow` object that:
+    /// - Extends `stdClass` (passes `instanceof stdClass`)
+    /// - Implements `ArrayAccess` for `$row['column']` access
+    /// - Implements `Iterator` for `foreach` loops
+    /// - Implements `JsonSerializable` for `json_encode()`
+    /// - Lazily decodes large JSON values via `__get`
+    ///
+    /// The `associative_arrays` parameter controls how nested JSON objects are decoded.
     fn into_zval(self, associative_arrays: bool) -> crate::error::Result<Zval>
     where
         Self: Sized,
     {
         let columns = self.columns();
-        if associative_arrays {
-            #[cfg(feature = "lazy-row")]
-            let mut lazy = false;
-            let array = columns.iter().try_fold(
-                zend_array::with_capacity(u32::try_from(columns.len())?),
-                |mut array, column| -> crate::error::Result<ZBox<zend_array>> {
-                    let column_name = column.name();
-                    let value = self.column_value_into_zval(column, associative_arrays)?;
-                    // Check if the value contains a LazyRowJson (deferred JSON parsing)
-                    #[cfg(feature = "lazy-row")]
-                    if !lazy
-                        && let Some(obj) = value.object()
-                        && ZendClassObject::<LazyRowJson>::from_zend_obj(obj).is_some()
-                    {
-                        lazy = true;
-                    }
-                    if !column_name.is_empty() && column_name != "?column?" {
-                        array.insert(column.name(), value).map_err(|err| {
-                            SqlxError::Conversion {
-                                message: format!("{err:?}"),
-                            }
+
+        // Build the array with all column values
+        #[cfg(feature = "lazy-row")]
+        let mut has_lazy_json = false;
+
+        let array = columns.iter().try_fold(
+            zend_array::with_capacity(u32::try_from(columns.len())?),
+            |mut array, column| -> crate::error::Result<ZBox<zend_array>> {
+                let column_name = column.name();
+                let value = self.column_value_into_zval(column, associative_arrays)?;
+
+                // Check if the value contains a LazyRowJson (deferred JSON parsing)
+                #[cfg(feature = "lazy-row")]
+                if !has_lazy_json
+                    && let Some(obj) = value.object()
+                    && ZendClassObject::<LazyRowJson>::from_zend_obj(obj).is_some()
+                {
+                    has_lazy_json = true;
+                }
+
+                if !column_name.is_empty() && column_name != "?column?" {
+                    array.insert(column.name(), value).map_err(|err| {
+                        SqlxError::Conversion {
+                            message: format!("{err:?}"),
+                        }
+                    })?;
+                } else {
+                    array
+                        .insert(i64::try_from(column.ordinal())?, value)
+                        .map_err(|err| SqlxError::Conversion {
+                            message: format!("{err:?}"),
                         })?;
-                    } else {
-                        array
-                            .insert(i64::try_from(column.ordinal())?, value)
-                            .map_err(|err| SqlxError::Conversion {
-                                message: format!("{err:?}"),
-                            })?;
-                    }
-                    Ok(array)
-                },
-            )?;
-            #[cfg(feature = "lazy-row")]
-            if lazy {
+                }
+                Ok(array)
+            },
+        )?;
+
+        // With lazy-row feature: always return LazyRow if there's lazy JSON,
+        // otherwise return plain array (for assoc mode) or LazyRow (for object mode)
+        #[cfg(feature = "lazy-row")]
+        {
+            // Return LazyRow if there's lazy JSON OR if we're in object mode
+            // (LazyRow extends stdClass, so it works as an object)
+            if has_lazy_json || !associative_arrays {
                 return LazyRow::new(array)
                     .into_zval(false)
                     .map_err(|err| SqlxError::Conversion {
                         message: format!("{err:?}"),
                     });
             }
-            Ok(array
+            // No lazy JSON and array mode requested - return plain array
+            return array
                 .into_zval(false)
                 .map_err(|err| SqlxError::Conversion {
                     message: format!("{err:?}"),
-                })?)
-        } else {
-            Ok(columns
-                .iter()
-                .try_fold(zend_object::new_stdclass(), |mut object, column| {
-                    let column_name = column.name();
-                    let value = self.column_value_into_zval(column, associative_arrays)?;
-                    if !column_name.is_empty() && column_name != "?column?" {
+                });
+        }
+
+        // Without lazy-row feature: return array or stdClass based on mode
+        #[cfg(not(feature = "lazy-row"))]
+        {
+            if associative_arrays {
+                array
+                    .into_zval(false)
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })
+            } else {
+                // Convert array to stdClass
+                let object = array.iter().try_fold(
+                    zend_object::new_stdclass(),
+                    |mut object: ZBox<zend_object>, (key, value)| {
+                        let prop_name = match key {
+                            ArrayKey::Long(n) => format!("_{n}"),
+                            ArrayKey::String(s) => s,
+                            ArrayKey::Str(s) => s.to_string(),
+                        };
                         object
-                            .set_property(column.name(), value)
+                            .set_property(&prop_name, value.shallow_clone())
                             .map(|()| object)
                             .map_err(|err| SqlxError::Conversion {
                                 message: format!("{err:?}"),
                             })
-                    } else {
-                        object
-                            .set_property(format!("_{}", column.ordinal()).as_str(), value)
-                            .map(|()| object)
-                            .map_err(|err| SqlxError::Conversion {
-                                message: format!("{err:?}"),
-                            })
-                    }
-                })?
-                .into_zval(false)
-                .map_err(|err| SqlxError::Conversion {
-                    message: format!("{err:?}"),
-                })?)
+                    },
+                )?;
+                object
+                    .into_zval(false)
+                    .map_err(|err| SqlxError::Conversion {
+                        message: format!("{err:?}"),
+                    })
+            }
         }
     }
 
@@ -139,12 +166,16 @@ pub(crate) fn json_into_zval(
             })
         }
         serde_json::Value::Number(number) => {
-            number
-                .to_string()
-                .into_zval(false)
-                .map_err(|err| SqlxError::Conversion {
-                    message: format!("Number conversion: {err:?}"),
-                })
+            if let Some(i) = number.as_i64() {
+                i.into_zval(false)
+            } else if let Some(f) = number.as_f64() {
+                f.into_zval(false)
+            } else {
+                number.to_string().into_zval(false)
+            }
+            .map_err(|err| SqlxError::Conversion {
+                message: format!("Number conversion: {err:?}"),
+            })
         }
         serde_json::Value::Bool(bool) => {
             bool.into_zval(false).map_err(|err| SqlxError::Conversion {

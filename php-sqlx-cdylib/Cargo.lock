@@ -290,9 +290,9 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "convert_case"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
+checksum = "affbf0190ed2caf063e3def54ff444b449371d55c58e513a95ab98eca50adb49"
 dependencies = [
  "unicode-segmentation",
 ]
@@ -565,8 +565,8 @@ dependencies = [
 
 [[package]]
 name = "ext-php-rs"
-version = "0.15.5"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=fix_stub_gen#78e09a7a3c76f793c70dee10413529fce780e41f"
+version = "0.15.6"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=json_serializable#dcb1e8a289c36ec0d631a538e89c8976bdc4bac4"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -593,7 +593,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "ext-php-rs-clang-sys",
- "itertools 0.13.0",
+ "itertools",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -607,7 +607,7 @@ dependencies = [
 [[package]]
 name = "ext-php-rs-build"
 version = "0.1.1"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=fix_stub_gen#78e09a7a3c76f793c70dee10413529fce780e41f"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=json_serializable#dcb1e8a289c36ec0d631a538e89c8976bdc4bac4"
 dependencies = [
  "anyhow",
 ]
@@ -625,12 +625,12 @@ dependencies = [
 
 [[package]]
 name = "ext-php-rs-derive"
-version = "0.11.7"
-source = "git+https://github.com/kakserpom/ext-php-rs?branch=fix_stub_gen#78e09a7a3c76f793c70dee10413529fce780e41f"
+version = "0.11.8"
+source = "git+https://github.com/kakserpom/ext-php-rs?branch=json_serializable#dcb1e8a289c36ec0d631a538e89c8976bdc4bac4"
 dependencies = [
  "convert_case",
  "darling",
- "itertools 0.14.0",
+ "itertools",
  "proc-macro2",
  "quote",
  "syn",
@@ -1085,15 +1085,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc61209c082fbeb19919bee74b176221b27223e27b65d781eb91af24eb1fb46e"
 dependencies = [
  "rustversion",
-]
-
-[[package]]
-name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
-dependencies = [
- "either",
 ]
 
 [[package]]
@@ -1582,7 +1573,7 @@ dependencies = [
  "dashmap",
  "ext-php-rs",
  "futures-util",
- "itertools 0.14.0",
+ "itertools",
  "mimalloc",
  "ouroboros",
  "parse_duration",

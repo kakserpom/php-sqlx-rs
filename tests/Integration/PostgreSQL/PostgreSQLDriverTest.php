@@ -74,6 +74,205 @@ class PostgreSQLDriverTest extends AbstractDriverTest
         }
     }
 
+    /**
+     * Test that LazyRow works correctly with json_encode.
+     *
+     * LazyRow is used when JSON data exceeds 4096 bytes (LAZY_ROW_JSON_SIZE_THRESHOLD).
+     * This test verifies that json_encode works properly on LazyRow objects.
+     */
+    public function testLazyRowJsonEncode(): void
+    {
+        $this->driver->execute('DROP TABLE IF EXISTS test_lazy_json');
+        $this->driver->execute('
+            CREATE TABLE test_lazy_json (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255),
+                large_data JSONB
+            )
+        ');
+
+        try {
+            // Create JSON data larger than 4096 bytes to trigger LazyRow
+            $largeArray = [];
+            for ($i = 0; $i < 200; $i++) {
+                $largeArray[] = [
+                    'index' => $i,
+                    'name' => "Item number {$i} with some extra text to increase size",
+                    'description' => str_repeat("Description text for item {$i}. ", 5),
+                    'tags' => ['tag1', 'tag2', 'tag3'],
+                ];
+            }
+            $largeJson = json_encode($largeArray);
+
+            // Verify our test data is actually large enough
+            $this->assertGreaterThan(4096, strlen($largeJson), 'Test JSON should exceed lazy threshold');
+
+            $this->driver->execute(
+                "INSERT INTO test_lazy_json (name, large_data) VALUES (:name, :data::jsonb)",
+                ['name' => 'Test Row', 'data' => $largeJson]
+            );
+
+            // Query the row - this should return a LazyRow if the JSON is large enough
+            $row = $this->driver->queryRow('SELECT id, name, large_data FROM test_lazy_json WHERE id = 1');
+            $this->assertNotNull($row);
+
+            // Debug: check the row type and content
+            $rowClass = get_class($row);
+
+            // Check if row is a LazyRow
+            $isLazyRow = $row instanceof \Sqlx\LazyRow;
+
+            // Access large_data directly
+            $largeDataDirect = $row->large_data;
+            $largeDataType = gettype($largeDataDirect);
+            $largeDataClass = is_object($largeDataDirect) ? get_class($largeDataDirect) : 'N/A';
+            $isLazyRowJson = $largeDataDirect instanceof \Sqlx\LazyRowJson;
+
+            // Test json_encode on the row - this should trigger JsonSerializable on LazyRowJson
+            $encodedRow = json_encode($row);
+            $this->assertNotFalse($encodedRow, "json_encode should not fail on row with large JSON (row class: {$rowClass}, isLazyRow: " . ($isLazyRow ? 'yes' : 'no') . ", largeDataType: {$largeDataType}, largeDataClass: {$largeDataClass}, isLazyRowJson: " . ($isLazyRowJson ? 'yes' : 'no') . ")");
+
+            $decodedRow = json_decode($encodedRow, true);
+            $this->assertIsArray($decodedRow, "Decoded row should be array, got: " . var_export($decodedRow, true));
+            $this->assertEquals('Test Row', $decodedRow['name']);
+            $this->assertArrayHasKey('large_data', $decodedRow, "Row should have large_data key. Keys: " . implode(', ', array_keys($decodedRow)) . ". Row class: {$rowClass}. Encoded: " . substr($encodedRow, 0, 500));
+            $this->assertIsArray($decodedRow['large_data'], "large_data should be array after json_encode/decode, got: " . gettype($decodedRow['large_data']) . " = " . var_export($decodedRow['large_data'], true));
+            $this->assertCount(200, $decodedRow['large_data'], "large_data should have 200 items after json_encode/decode, got: " . count($decodedRow['large_data']) . ". Type: " . gettype($decodedRow['large_data']));
+            $this->assertEquals(0, $decodedRow['large_data'][0]['index']);
+
+            // Also test json_encode directly on the LazyRowJson object
+            $largeData = $row->large_data;
+            $encodedData = json_encode($largeData);
+            $this->assertNotFalse($encodedData, 'json_encode should work on LazyRowJson via JsonSerializable');
+
+            $decodedData = json_decode($encodedData, true);
+            $this->assertCount(200, $decodedData, 'Decoded LazyRowJson should have 200 items');
+        } finally {
+            $this->driver->execute('DROP TABLE IF EXISTS test_lazy_json');
+        }
+    }
+
+    /**
+     * Test that queryAll with large JSON returns properly json_encode-able results.
+     */
+    public function testLazyRowQueryAllJsonEncode(): void
+    {
+        $this->driver->execute('DROP TABLE IF EXISTS test_lazy_json_all');
+        $this->driver->execute('
+            CREATE TABLE test_lazy_json_all (
+                id SERIAL PRIMARY KEY,
+                data JSONB
+            )
+        ');
+
+        try {
+            // Create large JSON data
+            $largeData = ['items' => array_fill(0, 100, ['key' => str_repeat('value', 100)])];
+            $largeJson = json_encode($largeData);
+            $this->assertGreaterThan(4096, strlen($largeJson));
+
+            $this->driver->execute(
+                "INSERT INTO test_lazy_json_all (data) VALUES (:data::jsonb)",
+                ['data' => $largeJson]
+            );
+            $this->driver->execute(
+                "INSERT INTO test_lazy_json_all (data) VALUES (:data::jsonb)",
+                ['data' => $largeJson]
+            );
+
+            $rows = $this->driver->queryAll('SELECT * FROM test_lazy_json_all ORDER BY id');
+            $this->assertCount(2, $rows);
+
+            // Test json_encode on the entire result set
+            $encoded = json_encode($rows);
+            $this->assertNotFalse($encoded, 'json_encode should work on queryAll result with large JSON');
+
+            $decoded = json_decode($encoded, true);
+            $this->assertIsArray($decoded);
+            $this->assertCount(2, $decoded);
+            $this->assertArrayHasKey('data', $decoded[0]);
+            $this->assertArrayHasKey('items', $decoded[0]['data']);
+        } finally {
+            $this->driver->execute('DROP TABLE IF EXISTS test_lazy_json_all');
+        }
+    }
+
+    /**
+     * Test that JSON numbers are converted to proper PHP types (int/float) not strings.
+     */
+    public function testJsonNumberTypes(): void
+    {
+        $row = $this->driver->queryRow("SELECT '{\"int\": 42, \"float\": 3.14, \"str\": \"hello\", \"bool\": true, \"null\": null}'::jsonb as data");
+        $this->assertNotNull($row);
+
+        $data = $row->data;
+        $this->assertIsObject($data, 'JSON object should decode to PHP object');
+
+        // Verify integer type - should be int, not string
+        $this->assertIsInt($data->int, 'JSON integer should be PHP int, got: ' . gettype($data->int));
+        $this->assertEquals(42, $data->int);
+
+        // Verify float type - should be float, not string
+        $this->assertIsFloat($data->float, 'JSON float should be PHP float, got: ' . gettype($data->float));
+        $this->assertEquals(3.14, $data->float);
+
+        // Verify string type
+        $this->assertIsString($data->str);
+        $this->assertEquals('hello', $data->str);
+
+        // Verify boolean type
+        $this->assertIsBool($data->bool);
+        $this->assertTrue($data->bool);
+
+        // Verify null
+        $this->assertNull($data->null);
+
+        // Also test via json_encode/decode round-trip
+        $encoded = json_encode($row);
+        $decoded = json_decode($encoded);
+        $this->assertIsInt($decoded->data->int, 'After json_encode/decode: integer should remain int');
+        $this->assertIsFloat($decoded->data->float, 'After json_encode/decode: float should remain float');
+    }
+
+    /**
+     * Test JSON number types with large JSON (LazyRow path).
+     */
+    public function testLazyRowJsonNumberTypes(): void
+    {
+        // Create JSON larger than 4096 bytes to trigger LazyRow
+        $padding = str_repeat('x', 4100);
+        $json = json_encode([
+            'int' => 12345,
+            'float' => 123.456,
+            'negative_int' => -999,
+            'negative_float' => -1.5,
+            'zero' => 0,
+            'padding' => $padding,
+        ]);
+
+        // Use a parameter to pass the JSON - avoids dollar-quoting issues
+        $row = $this->driver->queryRow("SELECT :json::jsonb as data", ['json' => $json]);
+        $this->assertNotNull($row);
+
+        $data = $row->data;
+        $this->assertIsObject($data, 'JSON object should decode to PHP object');
+
+        $this->assertIsInt($data->int, 'Large JSON: integer should be PHP int');
+        $this->assertEquals(12345, $data->int);
+
+        $this->assertIsFloat($data->float, 'Large JSON: float should be PHP float');
+        $this->assertEquals(123.456, $data->float);
+
+        $this->assertIsInt($data->negative_int, 'Large JSON: negative integer should be PHP int');
+        $this->assertEquals(-999, $data->negative_int);
+
+        $this->assertIsFloat($data->negative_float, 'Large JSON: negative float should be PHP float');
+        $this->assertEquals(-1.5, $data->negative_float);
+
+        $this->assertIsInt($data->zero, 'Large JSON: zero should be PHP int');
+        $this->assertEquals(0, $data->zero);
+    }
+
     public function testJsonArrayPlaceholder(): void
     {
         $this->driver->execute('DROP TABLE IF EXISTS test_json_array');

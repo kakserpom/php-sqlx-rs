@@ -7,19 +7,27 @@ use ext_php_rs::prelude::*;
 use ext_php_rs::types::{ArrayKey, ZendClassObject, Zval};
 use ext_php_rs::zend::ce;
 use ext_php_rs::{php_class, php_impl};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 /// Threshold above which JSON is parsed lazily (in bytes).
 pub const LAZY_ROW_JSON_SIZE_THRESHOLD: usize = 4096;
 
 #[php_class]
 #[php(name = "Sqlx\\LazyRow")]
+#[php(extends(ce = ce::stdclass, stub = "\\stdClass"))]
 #[php(implements(ce = ce::arrayaccess, stub = "\\ArrayAccess"))]
+#[php(implements(ce = ce::iterator, stub = "\\Iterator"))]
+#[php(implements("\\JsonSerializable"))]
 /// A PHP-accessible wrapper around a `zend_array` that lazily decodes JSON values.
 ///
+/// Extends `stdClass` for compatibility with code expecting objects.
 /// Implements `ArrayAccess` so that columns can be accessed as array entries.
+/// Implements `Iterator` so that columns can be iterated with `foreach`.
+/// Implements `JsonSerializable` so that `json_encode()` works correctly.
 pub struct LazyRow {
     pub(crate) array: RefCell<ZBox<zend_array>>,
+    /// Current iterator position (index into the array keys)
+    iter_pos: Cell<usize>,
 }
 
 impl LazyRow {
@@ -31,6 +39,7 @@ impl LazyRow {
     pub fn new(row: ZBox<zend_array>) -> Self {
         Self {
             array: RefCell::new(row),
+            iter_pos: Cell::new(0),
         }
     }
 }
@@ -54,6 +63,19 @@ impl LazyRow {
             .is_some())
     }
 
+    /// Magic isset for checking if a property exists (`isset($row->column)`).
+    ///
+    /// # Arguments
+    ///
+    /// * `name` – The column name.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the column exists, `false` otherwise.
+    pub fn __isset(&self, name: &str) -> bool {
+        self.array.borrow().get(name).is_some()
+    }
+
     /// Magic getter for property access in PHP (`$row->column`).
     ///
     /// Lazily decodes JSON-wrapped values if needed and replaces the placeholder object
@@ -75,8 +97,8 @@ impl LazyRow {
         if let Some(obj) = value.object() {
             if let Some(lazy_row_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
                 // Take the raw JSON, decode it, and replace the stored placeholder
-                let zval = LazyRowJson::take_zval(lazy_row_json)?;
-                let clone = value.shallow_clone();
+                let zval = LazyRowJson::decode_json(lazy_row_json)?;
+                let clone = zval.shallow_clone();
                 ht.insert(name, zval)?;
                 Ok(clone)
             } else {
@@ -99,8 +121,8 @@ impl LazyRow {
 
         if let Some(obj) = value.object() {
             if let Some(lazy_row_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
-                let zval = LazyRowJson::take_zval(lazy_row_json)?;
-                let clone = value.shallow_clone();
+                let zval = LazyRowJson::decode_json(lazy_row_json)?;
+                let clone = zval.shallow_clone();
                 ht.insert(key, zval)?;
                 Ok(clone)
             } else {
@@ -134,13 +156,136 @@ impl LazyRow {
         let _ = self.array.borrow_mut().remove(key);
         Ok(())
     }
+
+    /// Implementation of `JsonSerializable::jsonSerialize()`.
+    ///
+    /// Returns the underlying array with all `LazyRowJson` values decoded for `json_encode()`.
+    #[php(name = "jsonSerialize")]
+    pub fn json_serialize(&self) -> PhpResult<Zval> {
+        use ext_php_rs::convert::IntoZval;
+        use ext_php_rs::ffi::zend_array;
+
+        let ht = self.array.borrow();
+        let mut result = zend_array::with_capacity(ht.len() as u32);
+
+        for (key, value) in ht.iter() {
+            let decoded_value = if let Some(obj) = value.object() {
+                if let Some(lazy_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
+                    LazyRowJson::decode_json(lazy_json)
+                        .map_err(|e| PhpException::from(format!("JSON decode error: {e}")))?
+                } else {
+                    value.shallow_clone()
+                }
+            } else {
+                value.shallow_clone()
+            };
+            result
+                .insert(key, decoded_value)
+                .map_err(|_| PhpException::from("unable to insert into array"))?;
+        }
+
+        result
+            .into_zval(false)
+            .map_err(|e| PhpException::from(format!("conversion error: {e:?}")))
+    }
+
+    // =========================================================================
+    // Iterator interface implementation
+    // =========================================================================
+
+    /// Rewinds the iterator to the first element.
+    pub fn rewind(&self) {
+        self.iter_pos.set(0);
+    }
+
+    /// Returns the current element value (with lazy JSON decoding).
+    pub fn current(&self) -> PhpResult<Zval> {
+        let pos = self.iter_pos.get();
+
+        // First pass: check if we need to decode and get the key as owned String
+        let decode_info: Option<(String, Zval)> = {
+            let ht = self.array.borrow();
+            if let Some((key, value)) = ht.iter().nth(pos) {
+                if let Some(obj) = value.object() {
+                    if let Some(lazy_json) = ZendClassObject::<LazyRowJson>::from_zend_obj(obj) {
+                        let decoded = LazyRowJson::decode_json(lazy_json)
+                            .map_err(|e| PhpException::from(format!("JSON decode error: {e}")))?;
+                        // Convert key to owned String
+                        let key_string = match key {
+                            ArrayKey::Long(n) => n.to_string(),
+                            ArrayKey::String(s) => s,
+                            ArrayKey::Str(s) => s.to_string(),
+                        };
+                        Some((key_string, decoded))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                return Ok(Zval::new());
+            }
+        };
+
+        // Second pass: update the array if needed, or just return the value
+        let mut ht = self.array.borrow_mut();
+        if let Some((key, decoded)) = decode_info {
+            ht.insert(&key as &str, decoded.shallow_clone())
+                .map_err(|_| PhpException::from("unable to update array"))?;
+            Ok(decoded)
+        } else if let Some((_, value)) = ht.iter().nth(pos) {
+            Ok(value.shallow_clone())
+        } else {
+            Ok(Zval::new())
+        }
+    }
+
+    /// Returns the key of the current element.
+    pub fn key(&self) -> PhpResult<Zval> {
+        use ext_php_rs::convert::IntoZval;
+
+        let pos = self.iter_pos.get();
+        let ht = self.array.borrow();
+
+        if let Some((key, _)) = ht.iter().nth(pos) {
+            match key {
+                ArrayKey::Long(n) => n
+                    .into_zval(false)
+                    .map_err(|e| PhpException::from(format!("key conversion error: {e:?}"))),
+                ArrayKey::String(s) => s
+                    .into_zval(false)
+                    .map_err(|e| PhpException::from(format!("key conversion error: {e:?}"))),
+                ArrayKey::Str(s) => s
+                    .to_string()
+                    .into_zval(false)
+                    .map_err(|e| PhpException::from(format!("key conversion error: {e:?}"))),
+            }
+        } else {
+            Ok(Zval::new())
+        }
+    }
+
+    /// Moves the iterator to the next element.
+    pub fn next(&self) {
+        self.iter_pos.set(self.iter_pos.get() + 1);
+    }
+
+    /// Checks if the current position is valid.
+    pub fn valid(&self) -> bool {
+        let pos = self.iter_pos.get();
+        let ht = self.array.borrow();
+        pos < ht.len()
+    }
 }
 
 #[php_class]
 #[php(name = "Sqlx\\LazyRowJson")]
+#[php(implements("\\JsonSerializable"))]
 /// A helper PHP class that holds raw JSON bytes for lazy decoding.
 ///
 /// When accessed, it will be parsed into a PHP value on demand.
+/// Implements `JsonSerializable` so that `json_encode()` works correctly.
 pub struct LazyRowJson {
     pub(crate) raw: RefCell<Vec<u8>>,
     pub(crate) assoc: bool,
@@ -159,10 +304,7 @@ impl LazyRowJson {
             assoc,
         }
     }
-}
 
-#[php_impl]
-impl LazyRowJson {
     /// Decode the stored JSON into a PHP `Zval`.
     ///
     /// Uses either `simd-json` or `serde_json` depending on build features.
@@ -170,7 +312,9 @@ impl LazyRowJson {
     /// # Errors
     ///
     /// Propagates JSON parsing exceptions.
-    pub fn take_zval(self_: &ZendClassObject<LazyRowJson>) -> crate::error::Result<Zval> {
+    pub(crate) fn decode_json(
+        self_: &ZendClassObject<LazyRowJson>,
+    ) -> crate::error::Result<Zval> {
         #[cfg(feature = "simd-json")]
         return json_into_zval(
             simd_json::from_slice::<serde_json::Value>(self_.raw.borrow_mut().as_mut_slice())?,
@@ -178,6 +322,17 @@ impl LazyRowJson {
         );
         #[cfg(not(feature = "simd-json"))]
         json_into_zval(serde_json::from_slice(&self_.raw.borrow())?, self_.assoc)
+    }
+}
+
+#[php_impl]
+impl LazyRowJson {
+    /// Implementation of `JsonSerializable::jsonSerialize()`.
+    ///
+    /// Decodes and returns the stored JSON data for use with `json_encode()`.
+    #[php(name = "jsonSerialize")]
+    pub fn json_serialize(self_: &ZendClassObject<LazyRowJson>) -> PhpResult<Zval> {
+        Self::decode_json(self_).map_err(|e| PhpException::from(format!("JSON decode error: {e}")))
     }
 }
 

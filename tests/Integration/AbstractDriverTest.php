@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace PhpSqlx\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 use Sqlx\DriverFactory;
 use Sqlx\DriverInterface;
 use Sqlx\PreparedQueryInterface;
+use Sqlx\ReadQueryBuilderInterface;
+use Sqlx\WriteQueryBuilderInterface;
 use Sqlx\Exceptions\SqlxException;
 
 /**
@@ -62,21 +65,134 @@ abstract class AbstractDriverTest extends TestCase
         $this->assertInstanceOf(PreparedQueryInterface::class, $prepared);
     }
 
+    public function testWriteQueryBuilderImplementsInterface(): void
+    {
+        $builder = $this->driver->builder();
+        $this->assertInstanceOf(WriteQueryBuilderInterface::class, $builder);
+    }
+
+    public function testReadQueryBuilderImplementsInterface(): void
+    {
+        $builder = $this->driver->readBuilder();
+        $this->assertInstanceOf(ReadQueryBuilderInterface::class, $builder);
+    }
+
     public function testDriverInterfaceTypeHint(): void
     {
         // Test that type hints work with the interface
         $this->assertSame(
             1,
-            $this->executeWithDriver($this->driver)
+            $this->executeWithDriverInterface($this->driver)
+        );
+    }
+
+    public function testPreparedQueryInterfaceTypeHint(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+
+            $prepared = $this->driver->prepare('SELECT name FROM test_users WHERE name = :name');
+            $result = $this->executeWithPreparedQueryInterface($prepared, ['name' => 'Alice']);
+            $this->assertEquals('Alice', $result->name);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testDriverReflectionShowsInterface(): void
+    {
+        $reflection = new ReflectionClass($this->driver);
+        $interfaces = $reflection->getInterfaceNames();
+
+        $this->assertContains(
+            DriverInterface::class,
+            $interfaces,
+            'Driver class should implement DriverInterface'
+        );
+    }
+
+    public function testPreparedQueryReflectionShowsInterface(): void
+    {
+        $prepared = $this->driver->prepare('SELECT 1');
+        $reflection = new ReflectionClass($prepared);
+        $interfaces = $reflection->getInterfaceNames();
+
+        $this->assertContains(
+            PreparedQueryInterface::class,
+            $interfaces,
+            'PreparedQuery class should implement PreparedQueryInterface'
+        );
+    }
+
+    public function testWriteQueryBuilderReflectionShowsInterface(): void
+    {
+        $builder = $this->driver->builder();
+        $reflection = new ReflectionClass($builder);
+        $interfaces = $reflection->getInterfaceNames();
+
+        $this->assertContains(
+            WriteQueryBuilderInterface::class,
+            $interfaces,
+            'WriteQueryBuilder class should implement WriteQueryBuilderInterface'
+        );
+    }
+
+    public function testReadQueryBuilderReflectionShowsInterface(): void
+    {
+        $builder = $this->driver->readBuilder();
+        $reflection = new ReflectionClass($builder);
+        $interfaces = $reflection->getInterfaceNames();
+
+        $this->assertContains(
+            ReadQueryBuilderInterface::class,
+            $interfaces,
+            'ReadQueryBuilder class should implement ReadQueryBuilderInterface'
+        );
+    }
+
+    public function testInterfacesExistAsPhpInterfaces(): void
+    {
+        // Verify the interfaces are actual PHP interfaces (not classes)
+        $this->assertTrue(interface_exists(DriverInterface::class), 'DriverInterface should exist');
+        $this->assertTrue(interface_exists(PreparedQueryInterface::class), 'PreparedQueryInterface should exist');
+        $this->assertTrue(interface_exists(ReadQueryBuilderInterface::class), 'ReadQueryBuilderInterface should exist');
+        $this->assertTrue(interface_exists(WriteQueryBuilderInterface::class), 'WriteQueryBuilderInterface should exist');
+
+        // Verify they are interfaces, not classes
+        $this->assertTrue(
+            (new ReflectionClass(DriverInterface::class))->isInterface(),
+            'DriverInterface should be an interface'
+        );
+        $this->assertTrue(
+            (new ReflectionClass(PreparedQueryInterface::class))->isInterface(),
+            'PreparedQueryInterface should be an interface'
+        );
+        $this->assertTrue(
+            (new ReflectionClass(ReadQueryBuilderInterface::class))->isInterface(),
+            'ReadQueryBuilderInterface should be an interface'
+        );
+        $this->assertTrue(
+            (new ReflectionClass(WriteQueryBuilderInterface::class))->isInterface(),
+            'WriteQueryBuilderInterface should be an interface'
         );
     }
 
     /**
      * Helper to verify type hints work with DriverInterface.
      */
-    private function executeWithDriver(DriverInterface $driver): int
+    private function executeWithDriverInterface(DriverInterface $driver): int
     {
         return $driver->queryValue('SELECT 1');
+    }
+
+    /**
+     * Helper to verify type hints work with PreparedQueryInterface.
+     */
+    private function executeWithPreparedQueryInterface(PreparedQueryInterface $prepared, array $params): object
+    {
+        return $prepared->queryRow($params);
     }
 
     // =========================================================================
@@ -533,10 +649,57 @@ abstract class AbstractDriverTest extends TestCase
 
             foreach ($result as $row) {
                 $this->assertIsObject($row);
-                $this->assertObjectHasProperty('name', $row);
-                $this->assertObjectHasProperty('email', $row);
+                // Use isset() instead of assertObjectHasProperty since LazyRow uses __get/__isset
+                $this->assertTrue(isset($row->name), 'Row should have name property');
+                $this->assertTrue(isset($row->email), 'Row should have email property');
                 $this->assertEquals('Alice', $row->name);
             }
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testRowJsonEncode(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email, age) VALUES ('Alice', 'alice@example.com', 30)");
+
+            // Test with queryRow (returns stdClass-like object)
+            $row = $this->driver->queryRow('SELECT name, email, age FROM test_users WHERE name = ?s', ['Alice']);
+
+            $json = json_encode($row);
+            $this->assertNotFalse($json, 'json_encode should not fail');
+
+            $decoded = json_decode($json, true);
+            $this->assertIsArray($decoded);
+            $this->assertEquals('Alice', $decoded['name']);
+            $this->assertEquals('alice@example.com', $decoded['email']);
+            $this->assertEquals(30, $decoded['age']);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testQueryAllJsonEncode(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Bob', 'bob@example.com')");
+
+            $rows = $this->driver->queryAll('SELECT name, email FROM test_users ORDER BY name');
+
+            $json = json_encode($rows);
+            $this->assertNotFalse($json, 'json_encode should not fail for queryAll result');
+
+            $decoded = json_decode($json, true);
+            $this->assertIsArray($decoded);
+            $this->assertCount(2, $decoded);
+            $this->assertEquals('Alice', $decoded[0]['name']);
+            $this->assertEquals('Bob', $decoded[1]['name']);
         } finally {
             $this->dropTestTable();
         }
