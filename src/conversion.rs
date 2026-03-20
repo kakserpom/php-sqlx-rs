@@ -80,9 +80,9 @@ pub trait Conversion: Row {
                     });
             }
             // No lazy JSON and array mode requested - return plain array
-            return array.into_zval(false).map_err(|err| SqlxError::Conversion {
+            array.into_zval(false).map_err(|err| SqlxError::Conversion {
                 message: format!("{err:?}"),
-            });
+            })
         }
 
         // Without lazy-row feature: return array or stdClass based on mode

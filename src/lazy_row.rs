@@ -166,7 +166,10 @@ impl LazyRow {
         use ext_php_rs::ffi::zend_array;
 
         let ht = self.array.borrow();
-        let mut result = zend_array::with_capacity(ht.len() as u32);
+        let mut result = zend_array::with_capacity(
+            u32::try_from(ht.len())
+                .map_err(|e| PhpException::from(format!("u32 conversion error: {e}")))?,
+        );
 
         for (key, value) in ht.iter() {
             let decoded_value = if let Some(obj) = value.object() {
