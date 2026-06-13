@@ -256,3 +256,56 @@ $page = $driver->queryAll(
        $order = $orders[$id] ?? null;
    }
    ```
+
+## Hydrating Rows into Classes
+
+The `*Into` methods map result rows onto instances of your own classes instead of `stdClass`. Columns are assigned to **public properties of the same name**; the class constructor is **not** invoked (the same model PDO's `FETCH_CLASS` uses), so plain DTOs just work.
+
+```php
+class User {
+    public int $id;
+    public string $email;
+}
+
+/** @var User[] $users */
+$users = $driver->queryAllInto(User::class, 'SELECT id, email FROM users');
+
+$user  = $driver->queryRowInto(User::class, 'SELECT id, email FROM users WHERE id = $id', ['id' => 1]);
+$maybe = $driver->queryMaybeRowInto(User::class, 'SELECT id, email FROM users WHERE id = $id', ['id' => 999]); // ?User
+```
+
+### Deriving the column list with `:select`
+
+Write the `:select` placeholder and the column list is filled in from the target class's declared properties, so you don't enumerate columns by hand:
+
+```php
+$users = $driver->queryAllInto(User::class, 'SELECT :select FROM users');
+// runs: SELECT "id", "email" FROM users
+```
+
+`:select` is only expanded when present, and only when you don't bind `select` yourself — so explicit column lists keep working, and you can override `select` with your own [`SelectClause`](../query-builder/clause-helpers.md) when you need expressions.
+
+### Joins: hydrating multiple classes per row
+
+Pass an `alias => class` map. Each row becomes a `stdClass` with one property per alias, each holding an instance hydrated from that alias's columns:
+
+```php
+class Order { public int $id; public float $total; }
+
+$rows = $driver->queryAllInto(
+    ['o' => Order::class, 'u' => User::class],
+    'SELECT :select FROM orders o JOIN users u ON u.id = o.user_id'
+);
+
+foreach ($rows as $row) {
+    echo $row->o->total;   // Order
+    echo $row->u->email;   // User
+}
+```
+
+For the map form, `:select` qualifies and output-aliases every column (`o."id" AS "o.id"`, `u."email" AS "u.email"`, …), so same-named columns from joined tables (e.g. both `o.id` and `u.id`) never collide. Columns the query selects that don't match any alias prefix (hand-written extras) are ignored during hydration.
+
+> Notes:
+> - Property name = column name. Columns are matched by name; a column with no matching property is ignored.
+> - Static properties are not treated as columns.
+> - This is deliberately *not* an ORM: one row maps to one (or, for the map form, a fixed set of) objects. There is no relation/`array` grouping.

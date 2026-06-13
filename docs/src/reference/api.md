@@ -64,6 +64,18 @@ public function queryAllAssoc(string $query, ?array $params = null): array;
 public function queryAllObj(string $query, ?array $params = null): array;
 ```
 
+### Query Methods - Hydration into Classes
+
+`$target` is either a class name (rows hydrate into that class) or an `alias => class`
+map (each row becomes a `stdClass` with one property per alias). See
+[Result Handling](../core/results.md#hydrating-rows-into-classes).
+
+```php
+public function queryAllInto(string|array $target, string $query, ?array $params = null): array;
+public function queryRowInto(string|array $target, string $query, ?array $params = null): object;
+public function queryMaybeRowInto(string|array $target, string $query, ?array $params = null): ?object;
+```
+
 ### Query Methods - Single Value
 
 ```php

@@ -506,6 +506,86 @@ macro_rules! php_sqlx_impl_driver {
                 Ok($query_result::new(receiver, cancel_token, false, batch_size))
             }
 
+            /// Executes an SQL query and hydrates every result row into an instance of `class`.
+            ///
+            /// Each column is assigned to a public property of the same name on a fresh
+            /// instance of `class`. The class constructor is **not** invoked (matching
+            /// PDO's `FETCH_CLASS` behavior), so this works with plain DTOs whose
+            /// properties mirror the selected columns.
+            ///
+            /// # Arguments
+            /// - `target`: Either a class name, or an `alias => class` map for joins:
+            ///   - `User::class` — each row hydrates directly into a `User`.
+            ///   - `['u' => User::class, 'o' => Order::class]` — each row is a `stdClass`
+            ///     with one property per alias (`$row->u`, `$row->o`), each holding an
+            ///     instance hydrated from that alias's columns.
+            /// - `query`: SQL query string.
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            ///
+            /// # Deriving the column list
+            /// Write `:select` and the column list is filled in from the target (unless
+            /// you bind `select` yourself), so you don't enumerate columns by hand. For
+            /// an alias map, columns are qualified and output-aliased (`o."id" AS "o.id"`)
+            /// so same-named columns from joined tables never collide.
+            ///
+            /// # Example
+            /// ```php
+            /// class User { public int $id; public string $email; }
+            /// class Order { public int $id; public float $total; }
+            ///
+            /// // Single class:
+            /// $users = $driver->queryAllInto(User::class, 'SELECT :select FROM users');
+            ///
+            /// // Joined classes — one $row per DB row, keyed by alias:
+            /// $rows = $driver->queryAllInto(
+            ///     ['o' => Order::class, 'u' => User::class],
+            ///     'SELECT :select FROM orders o JOIN users u ON u.id = o.user_id'
+            /// );
+            /// foreach ($rows as $row) { echo $row->o->total, $row->u->email; }
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws if a class is not defined, the query fails, or a row cannot be converted.
+            pub fn query_all_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner.query_all_into(&target, query, parameters, None)
+            }
+
+            /// Executes an SQL query and hydrates the single result row.
+            ///
+            /// See [`Self::query_all_into`] for the `target` forms and mapping rules.
+            ///
+            /// # Exceptions
+            /// Throws if a class is not defined, the query fails, or no row is returned.
+            pub fn query_row_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_row_into(&target, query, parameters, None)
+            }
+
+            /// Executes an SQL query and hydrates the single result row, or returns `null`
+            /// if no row matched.
+            ///
+            /// See [`Self::query_all_into`] for the `target` forms and mapping rules.
+            ///
+            /// # Exceptions
+            /// Throws if a class is not defined or the query fails.
+            pub fn query_maybe_row_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner.query_maybe_row_into(&target, query, parameters, None)
+            }
+
             /// Executes an SQL query and returns a dictionary grouping rows by the first column.
             ///
             /// Each row in the result must contain at least one column. The **first column** is used as the **key**, and the

@@ -710,6 +710,165 @@ macro_rules! php_sqlx_impl_driver_inner {
                     .unwrap_or_else(Zval::null))
             }
 
+            /// Fetches all matching rows, applying retry, connection routing, and the query hook.
+            ///
+            /// Shared by `query_all` and `query_all_into`; the only thing that differs
+            /// between those is how the resulting rows are converted to PHP values.
+            fn fetch_all_rows(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<
+                Vec<<sqlx_oldapi::$database as sqlx_oldapi::Database>::Row>,
+            > {
+                let sql_inline = if self.query_hook.is_set() {
+                    self.render_query_inline(query, parameters.clone()).ok()
+                } else {
+                    None
+                };
+
+                let (query, values) = self.render_query(query, parameters)?;
+                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
+
+                let result = self.with_retry(|| {
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_all(self.get_read_pool()),
+                        )
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
+                });
+
+                if let Some(t) = timer {
+                    match &result {
+                        Ok(rows) => t.finish(u64::try_from(rows.len()).ok(), None),
+                        Err(err) => t.finish(None, Some(&err.to_string())),
+                    }
+                }
+
+                result
+            }
+
+            /// Fetches exactly one row, applying retry, connection routing, and the query hook.
+            ///
+            /// Shared by `query_row` and `query_row_into`.
+            fn fetch_one_row(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<<sqlx_oldapi::$database as sqlx_oldapi::Database>::Row>
+            {
+                let sql_inline = if self.query_hook.is_set() {
+                    self.render_query_inline(query, parameters.clone()).ok()
+                } else {
+                    None
+                };
+
+                let (query, values) = self.render_query(query, parameters)?;
+                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
+
+                let result = self.with_retry(|| {
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_one(self.get_read_pool()),
+                        )
+                    }
+                    .map_err(|err| SqlxError::query_with_source(&query, err))
+                });
+
+                if let Some(t) = timer {
+                    match &result {
+                        Ok(_) => t.finish(Some(1), None),
+                        Err(err) => t.finish(None, Some(&err.to_string())),
+                    }
+                }
+
+                result
+            }
+
+            /// Fetches at most one row (returning `None` when no row matched), applying
+            /// retry, connection routing, and the query hook.
+            ///
+            /// Shared by `query_maybe_row` and `query_maybe_row_into`.
+            fn fetch_maybe_row(
+                &self,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<
+                Option<<sqlx_oldapi::$database as sqlx_oldapi::Database>::Row>,
+            > {
+                let sql_inline = if self.query_hook.is_set() {
+                    self.render_query_inline(query, parameters.clone()).ok()
+                } else {
+                    None
+                };
+
+                let (query, values) = self.render_query(query, parameters)?;
+                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
+
+                let result = self.with_retry(|| {
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
+                        );
+                        self.place_ongoing_transaction(tx);
+                        val
+                    } else if let Some(mut conn) = self.retrieve_pinned_connection() {
+                        let val = RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
+                        );
+                        self.return_pinned_connection(conn);
+                        val
+                    } else {
+                        RUNTIME.block_on(
+                            bind_values(sqlx_oldapi::query(&query), &values)?
+                                .fetch_one(self.get_read_pool()),
+                        )
+                    }
+                    .map(Some)
+                    .or_else(|err: sqlx_oldapi::Error| match err {
+                        sqlx_oldapi::Error::RowNotFound => Ok(None),
+                        _ => Err(SqlxError::query_with_source(&query, err)),
+                    })
+                });
+
+                if let Some(t) = timer {
+                    match &result {
+                        Ok(Some(_)) => t.finish(Some(1), None),
+                        Ok(None) => t.finish(Some(0), None),
+                        Err(err) => t.finish(None, Some(&err.to_string())),
+                    }
+                }
+
+                result
+            }
+
             /// Executes the prepared query and returns a single result.
             ///
             /// # Arguments
@@ -730,48 +889,30 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
-                let sql_inline = if self.query_hook.is_set() {
-                    self.render_query_inline(query, parameters.clone()).ok()
-                } else {
-                    None
-                };
+                self.fetch_one_row(query, parameters)?
+                    .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
+            }
 
-                let (query, values) = self.render_query(query, parameters)?;
-                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
-
-                let result = self
-                    .with_retry(|| {
-                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                            let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(&mut *tx),
-                            );
-                            self.place_ongoing_transaction(tx);
-                            val
-                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                            let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(&mut *conn),
-                            );
-                            self.return_pinned_connection(conn);
-                            val
-                        } else {
-                            RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(self.get_read_pool()),
-                            )
-                        }
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
-                    });
-
-                if let Some(t) = timer {
-                    match &result {
-                        Ok(_) => t.finish(Some(1), None),
-                        Err(err) => t.finish(None, Some(&err.to_string())),
-                    }
-                }
-
-                result?.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
+            /// Executes an SQL query and hydrates the single result row into an instance
+            /// of the PHP class `class_name`.
+            ///
+            /// Columns are assigned to public properties of the same name; the class
+            /// constructor is not invoked.
+            ///
+            /// # Exceptions
+            /// Throws if the class is not found, the query fails, or no row is returned.
+            pub fn query_row_into(
+                &self,
+                target: &$crate::conversion::HydrationTarget,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                associative_arrays: Option<bool>,
+            ) -> $crate::error::Result<Zval> {
+                let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+                let target = $crate::conversion::resolve_target(target)?;
+                let parameters = $crate::conversion::with_target_select(&target, query, parameters);
+                self.fetch_one_row(query, parameters)?
+                    .into_target_zval(&target, assoc)
             }
 
             /// Executes an SQL query and returns a single row if available, or `null` if no rows are returned.
@@ -796,56 +937,36 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Zval> {
-                let sql_inline = if self.query_hook.is_set() {
-                    self.render_query_inline(query, parameters.clone()).ok()
-                } else {
-                    None
-                };
-
-                let (query, values) = self.render_query(query, parameters)?;
-                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
-
-                let result = self
-                    .with_retry(|| {
-                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                            let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(&mut *tx),
-                            );
-                            self.place_ongoing_transaction(tx);
-                            val
-                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                            let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(&mut *conn),
-                            );
-                            self.return_pinned_connection(conn);
-                            val
-                        } else {
-                            RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_one(self.get_read_pool()),
-                            )
-                        }
-                        .map(Some)
-                        .or_else(|err: sqlx_oldapi::Error| match err {
-                            sqlx_oldapi::Error::RowNotFound => Ok(None),
-                            _ => Err(SqlxError::query_with_source(&query, err)),
-                        })
-                    });
-
-                if let Some(t) = timer {
-                    match &result {
-                        Ok(Some(_)) => t.finish(Some(1), None),
-                        Ok(None) => t.finish(Some(0), None),
-                        Err(err) => t.finish(None, Some(&err.to_string())),
-                    }
-                }
-
-                Ok(result?
-                    .map(|x| {
-                        x.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
+                Ok(self
+                    .fetch_maybe_row(query, parameters)?
+                    .map(|row| {
+                        row.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
                     })
+                    .transpose()?
+                    .unwrap_or_else(Zval::null))
+            }
+
+            /// Executes an SQL query and hydrates the single result row into an instance
+            /// of the PHP class `class_name`, or returns `null` if no row matched.
+            ///
+            /// Columns are assigned to public properties of the same name; the class
+            /// constructor is not invoked.
+            ///
+            /// # Exceptions
+            /// Throws if the class is not found or the query fails.
+            pub fn query_maybe_row_into(
+                &self,
+                target: &$crate::conversion::HydrationTarget,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                associative_arrays: Option<bool>,
+            ) -> $crate::error::Result<Zval> {
+                let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+                let target = $crate::conversion::resolve_target(target)?;
+                let parameters = $crate::conversion::with_target_select(&target, query, parameters);
+                Ok(self
+                    .fetch_maybe_row(query, parameters)?
+                    .map(|row| row.into_target_zval(&target, assoc))
                     .transpose()?
                     .unwrap_or_else(Zval::null))
             }
@@ -1005,51 +1126,34 @@ macro_rules! php_sqlx_impl_driver_inner {
                 parameters: Option<BTreeMap<String, ParameterValue>>,
                 associative_arrays: Option<bool>,
             ) -> $crate::error::Result<Vec<Zval>> {
-                let sql_inline = if self.query_hook.is_set() {
-                    self.render_query_inline(query, parameters.clone()).ok()
-                } else {
-                    None
-                };
-
-                let (query, values) = self.render_query(query, parameters)?;
-                let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
-
                 let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
-                let result = self
-                    .with_retry(|| {
-                        if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                            let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_all(&mut *tx),
-                            );
-                            self.place_ongoing_transaction(tx);
-                            val
-                        } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                            let val = RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_all(&mut *conn),
-                            );
-                            self.return_pinned_connection(conn);
-                            val
-                        } else {
-                            RUNTIME.block_on(
-                                bind_values(sqlx_oldapi::query(&query), &values)?
-                                    .fetch_all(self.get_read_pool()),
-                            )
-                        }
-                        .map_err(|err| SqlxError::query_with_source(&query, err))
-                    });
-
-                if let Some(t) = timer {
-                    match &result {
-                        Ok(rows) => t.finish(u64::try_from(rows.len()).ok(), None),
-                        Err(err) => t.finish(None, Some(&err.to_string())),
-                    }
-                }
-
-                result?
+                self.fetch_all_rows(query, parameters)?
                     .into_iter()
                     .map(|row| row.into_zval(assoc))
+                    .try_collect()
+            }
+
+            /// Executes an SQL query and hydrates every result row into an instance of
+            /// the PHP class `class_name`.
+            ///
+            /// Columns are assigned to public properties of the same name; the class
+            /// constructor is not invoked.
+            ///
+            /// # Exceptions
+            /// Throws if the class is not found or the query fails.
+            pub fn query_all_into(
+                &self,
+                target: &$crate::conversion::HydrationTarget,
+                query: &str,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+                associative_arrays: Option<bool>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                let assoc = associative_arrays.unwrap_or(self.options.associative_arrays);
+                let target = $crate::conversion::resolve_target(target)?;
+                let parameters = $crate::conversion::with_target_select(&target, query, parameters);
+                self.fetch_all_rows(query, parameters)?
+                    .into_iter()
+                    .map(|row| row.into_target_zval(&target, assoc))
                     .try_collect()
             }
 

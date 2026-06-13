@@ -99,6 +99,7 @@ impl SelectClause {
                     .map(|expr| SelectClauseRenderedColumn {
                         column: field,
                         expression: expr.clone(),
+                        table_alias: None,
                     })
             })
             .collect();
@@ -183,9 +184,50 @@ pub struct SelectClauseRenderedColumn {
     pub(crate) column: String,
     /// Optional SQL expression for the column.
     pub(crate) expression: Option<String>,
+    /// Optional table alias qualifying the column, for multi-table hydration.
+    /// When set (and no `expression`), renders as `alias."column" AS "alias.column"`.
+    pub(crate) table_alias: Option<String>,
 }
 
 impl SelectClauseRendered {
+    /// Builds a rendered clause from a plain list of column names.
+    ///
+    /// Each name becomes a quoted column with no SQL expression. Used to derive
+    /// a `SELECT` list from a hydration target class's properties.
+    #[must_use]
+    pub(crate) fn from_columns(columns: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            __inner: columns
+                .into_iter()
+                .map(|column| SelectClauseRenderedColumn {
+                    column,
+                    expression: None,
+                    table_alias: None,
+                })
+                .collect(),
+        }
+    }
+
+    /// Builds a rendered clause from `(alias, columns)` groups for multi-table
+    /// hydration. Each column renders as `alias."column" AS "alias.column"`, so
+    /// columns from different joined tables never collide in the result set.
+    #[must_use]
+    pub(crate) fn from_aliased_columns(
+        groups: impl IntoIterator<Item = (String, Vec<String>)>,
+    ) -> Self {
+        let mut inner = Vec::new();
+        for (alias, columns) in groups {
+            for column in columns {
+                inner.push(SelectClauseRenderedColumn {
+                    column,
+                    expression: None,
+                    table_alias: Some(alias.clone()),
+                });
+            }
+        }
+        Self { __inner: inner }
+    }
+
     /// Returns true if no valid columns were rendered.
     #[must_use]
     pub(crate) fn is_empty(&self) -> bool {
@@ -203,25 +245,93 @@ impl SelectClauseRendered {
             SelectClauseRenderedColumn {
                 column: field,
                 expression,
+                table_alias,
             },
         ) in self.__inner.iter().enumerate()
         {
             if i > 0 {
                 sql.push_str(", ");
             }
-            if let Some(expression) = expression {
-                if settings.column_backticks {
-                    write!(sql, "{expression} AS `{field}`")?;
-                } else {
-                    write!(sql, "{expression} AS \"{field}\"")?;
+            let backticks = settings.column_backticks;
+            match (table_alias.as_deref(), expression.as_deref()) {
+                // Alias-qualified column with an output alias: `t."col" AS "t.col"`.
+                (Some(alias), None) => {
+                    if backticks {
+                        write!(sql, "{alias}.`{field}` AS `{alias}.{field}`")?;
+                    } else {
+                        write!(sql, "{alias}.\"{field}\" AS \"{alias}.{field}\"")?;
+                    }
                 }
-            } else if settings.column_backticks {
-                write!(sql, "`{field}`")?;
-            } else {
-                write!(sql, "\"{field}\"")?;
+                // Expression with an alias-prefixed output name, when an alias is set.
+                (Some(alias), Some(expression)) => {
+                    if backticks {
+                        write!(sql, "{expression} AS `{alias}.{field}`")?;
+                    } else {
+                        write!(sql, "{expression} AS \"{alias}.{field}\"")?;
+                    }
+                }
+                // Plain expression aliased to the column name.
+                (None, Some(expression)) => {
+                    if backticks {
+                        write!(sql, "{expression} AS `{field}`")?;
+                    } else {
+                        write!(sql, "{expression} AS \"{field}\"")?;
+                    }
+                }
+                // Plain column.
+                (None, None) => {
+                    if backticks {
+                        write!(sql, "`{field}`")?;
+                    } else {
+                        write!(sql, "\"{field}\"")?;
+                    }
+                }
             }
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Settings;
+
+    fn render(clause: &SelectClauseRendered, backticks: bool) -> String {
+        let mut sql = String::new();
+        clause
+            .write_sql_to(
+                &mut sql,
+                &Settings {
+                    column_backticks: backticks,
+                    ..Default::default()
+                },
+            )
+            .expect("render");
+        sql
+    }
+
+    #[test]
+    fn plain_columns_render_quoted() {
+        let clause = SelectClauseRendered::from_columns(["id".to_string(), "email".to_string()]);
+        assert_eq!(render(&clause, false), r#""id", "email""#);
+        assert_eq!(render(&clause, true), "`id`, `email`");
+    }
+
+    #[test]
+    fn aliased_columns_are_qualified_and_output_aliased() {
+        let clause = SelectClauseRendered::from_aliased_columns([
+            ("o".to_string(), vec!["id".to_string(), "total".to_string()]),
+            ("u".to_string(), vec!["email".to_string()]),
+        ]);
+        assert_eq!(
+            render(&clause, false),
+            r#"o."id" AS "o.id", o."total" AS "o.total", u."email" AS "u.email""#
+        );
+        assert_eq!(
+            render(&clause, true),
+            "o.`id` AS `o.id`, o.`total` AS `o.total`, u.`email` AS `u.email`"
+        );
     }
 }

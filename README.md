@@ -445,6 +445,47 @@ Note that column names are case-sensitive, but they get trimmed.
 
 --- 
 
+## Hydrating rows into objects
+
+`queryAllInto()`, `queryRowInto()` and `queryMaybeRowInto()` map rows onto your own classes instead of `stdClass`. Columns are assigned to **public properties of the same name**; the constructor is **not** called (like PDO's `FETCH_CLASS`), so plain DTOs work out of the box.
+
+```php
+class User {
+    public int $id;
+    public string $email;
+}
+
+/** @var User[] $users */
+$users = $driver->queryAllInto(User::class, 'SELECT id, email FROM users');
+$user  = $driver->queryRowInto(User::class, 'SELECT id, email FROM users WHERE id = $id', ['id' => 1]);
+```
+
+Use the `:select` placeholder to derive the column list from the class — no manual enumeration:
+
+```php
+$users = $driver->queryAllInto(User::class, 'SELECT :select FROM users');
+// runs: SELECT "id", "email" FROM users
+```
+
+For joins, pass an `alias => class` map. Each row becomes an object with one property per alias, and `:select` qualifies + output-aliases every column (`o."id" AS "o.id"`) so same-named columns never collide:
+
+```php
+class Order { public int $id; public float $total; }
+
+$rows = $driver->queryAllInto(
+    ['o' => Order::class, 'u' => User::class],
+    'SELECT :select FROM orders o JOIN users u ON u.id = o.user_id'
+);
+foreach ($rows as $row) {
+    echo $row->o->total;   // Order
+    echo $row->u->email;   // User
+}
+```
+
+This is intentionally **not** an ORM: a row maps to one object (or, for the map form, a fixed set of objects) — there is no `array`/relation grouping.
+
+--- 
+
 ## Transactions
 
 ```php

@@ -14,6 +14,17 @@ use Sqlx\WriteQueryBuilderInterface;
 use Sqlx\Exceptions\SqlxException;
 
 /**
+ * Plain DTO used by the `*Into()` hydration tests. Untyped public properties
+ * keep it portable across drivers regardless of how each returns column types.
+ */
+class HydrationTestUser
+{
+    public $id;
+    public $name;
+    public $email;
+}
+
+/**
  * Abstract base class for database driver integration tests.
  *
  * Subclasses must implement getConnectionUrl() to provide
@@ -256,6 +267,120 @@ abstract class AbstractDriverTest extends TestCase
             $user = $this->driver->queryMaybeRow('SELECT * FROM test_users WHERE name = ?s', ['Alice']);
             $this->assertNotNull($user);
             $this->assertEquals('Alice', $user->name);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    // =========================================================================
+    // Hydration Tests (queryAllInto / queryRowInto / queryMaybeRowInto)
+    // =========================================================================
+
+    public function testQueryAllIntoClass(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Bob', 'bob@example.com')");
+
+            $users = $this->driver->queryAllInto(
+                HydrationTestUser::class,
+                'SELECT id, name, email FROM test_users ORDER BY name'
+            );
+
+            $this->assertCount(2, $users);
+            $this->assertInstanceOf(HydrationTestUser::class, $users[0]);
+            $this->assertInstanceOf(HydrationTestUser::class, $users[1]);
+            $this->assertEquals('Alice', $users[0]->name);
+            $this->assertEquals('alice@example.com', $users[0]->email);
+            $this->assertEquals('Bob', $users[1]->name);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testQueryAllIntoClassWithSelectPlaceholder(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+
+            // ":select" is derived from the class's public properties.
+            $users = $this->driver->queryAllInto(
+                HydrationTestUser::class,
+                'SELECT :select FROM test_users ORDER BY name'
+            );
+
+            $this->assertCount(1, $users);
+            $this->assertInstanceOf(HydrationTestUser::class, $users[0]);
+            $this->assertEquals('Alice', $users[0]->name);
+            $this->assertEquals('alice@example.com', $users[0]->email);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testQueryRowIntoClass(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+
+            $user = $this->driver->queryRowInto(
+                HydrationTestUser::class,
+                'SELECT id, name, email FROM test_users WHERE name = ?s',
+                ['Alice']
+            );
+
+            $this->assertInstanceOf(HydrationTestUser::class, $user);
+            $this->assertEquals('Alice', $user->name);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testQueryMaybeRowIntoReturnsNull(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $user = $this->driver->queryMaybeRowInto(
+                HydrationTestUser::class,
+                'SELECT id, name, email FROM test_users WHERE name = ?s',
+                ['NonExistent']
+            );
+            $this->assertNull($user);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testQueryAllIntoAliasMap(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Bob', 'bob@example.com')");
+
+            // Self-join exercises the alias map, aliased ":select", and column
+            // collision handling (both aliases expose id/name/email) without
+            // needing a second, driver-specific table.
+            $rows = $this->driver->queryAllInto(
+                ['u' => HydrationTestUser::class, 'm' => HydrationTestUser::class],
+                'SELECT :select FROM test_users u JOIN test_users m ON m.id = u.id ORDER BY u.name'
+            );
+
+            $this->assertCount(2, $rows);
+            $this->assertInstanceOf(HydrationTestUser::class, $rows[0]->u);
+            $this->assertInstanceOf(HydrationTestUser::class, $rows[0]->m);
+            $this->assertEquals('Alice', $rows[0]->u->name);
+            $this->assertEquals('Alice', $rows[0]->m->name);
+            $this->assertEquals('alice@example.com', $rows[0]->u->email);
+            $this->assertEquals('Bob', $rows[1]->u->name);
         } finally {
             $this->dropTestTable();
         }
