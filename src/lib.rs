@@ -42,6 +42,7 @@ pub mod by_clause;
 pub mod conversion;
 mod driver;
 pub mod error;
+pub mod identifier;
 pub mod inner_driver;
 pub mod interfaces;
 #[cfg(feature = "lazy-row")]
@@ -135,6 +136,7 @@ pub fn module(mut module: ModuleBuilder) -> ModuleBuilder {
         .interface::<interfaces::PhpInterfaceWriteQueryBuilderInterface>();
 
     module = error::build(module);
+    module = identifier::build(module);
     module = select_clause::build(module);
     module = by_clause::build(module);
     module = paginate_clause::build(module);

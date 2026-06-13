@@ -98,6 +98,8 @@ impl ParameterValue {
         Ok(match self {
             Self::Null => "NULL".to_string(),
 
+            Self::Identifier(name) => quote_identifier(name, settings),
+
             Self::Int(i) => i.to_string(),
             Self::Float(f) => f.to_string(),
             Self::Json(pv) => escape_sql_string(pv.to_json()?.as_str(), settings),
@@ -187,6 +189,24 @@ mod tests {
         let settings = Settings::default();
         let value = ParameterValue::Null;
         assert_eq!(value.quote(&settings).unwrap(), "NULL");
+    }
+
+    #[test]
+    fn test_quote_identifier_value() {
+        use crate::ast::IdentifierQuoteStyle;
+        let value = ParameterValue::Identifier("col".to_string());
+
+        let pg = Settings {
+            identifier_quote_style: IdentifierQuoteStyle::DoubleQuote,
+            ..Settings::default()
+        };
+        assert_eq!(value.quote(&pg).unwrap(), "\"col\"");
+
+        let mysql = Settings {
+            identifier_quote_style: IdentifierQuoteStyle::Backtick,
+            ..Settings::default()
+        };
+        assert_eq!(value.quote(&mysql).unwrap(), "`col`");
     }
 
     #[test]

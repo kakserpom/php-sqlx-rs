@@ -76,6 +76,9 @@ impl ParameterValue {
             ParameterValue::ByClauseRendered(by) => {
                 by.write_sql_to(sql, settings)?;
             }
+            ParameterValue::Identifier(name) => {
+                sql.push_str(&crate::param_value::quote::quote_identifier(name, settings));
+            }
             ParameterValue::Array(arr) => {
                 out_vals.reserve_exact(arr.len());
                 for (i, item) in arr.iter().enumerate() {

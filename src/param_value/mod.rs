@@ -67,6 +67,9 @@ pub enum ParameterValue {
     PaginateClauseRendered(PaginateClauseRendered),
     /// Embedded query builder with its SQL and parameters.
     Builder((String, BTreeMap<String, ParameterValue>)),
+    /// A validated SQL identifier from `Identifier`, rendered as a quoted
+    /// identifier (e.g. `"col"`) rather than a bound value.
+    Identifier(String),
 }
 
 impl ParameterValue {
@@ -88,6 +91,7 @@ impl ParameterValue {
             | Self::Object(_)
             | Self::DateTime(_)
             | Self::PaginateClauseRendered(_)
+            | Self::Identifier(_)
             | Self::Builder(_) => false,
             Self::Null => true,
             Self::Json(inner) => inner.is_empty(),

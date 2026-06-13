@@ -80,6 +80,7 @@ where
             ParameterValue::ByClauseRendered(_)
             | ParameterValue::SelectClauseRendered(_)
             | ParameterValue::PaginateClauseRendered(_)
+            | ParameterValue::Identifier(_)
             | ParameterValue::Builder(_) => {
                 return Err(SqlxError::Other(
                     "Internal error: cannot bind parameter of this type".to_string(),

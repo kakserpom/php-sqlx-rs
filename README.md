@@ -445,6 +445,25 @@ Note that column names are case-sensitive, but they get trimmed.
 
 --- 
 
+## Validated identifiers
+
+`Sqlx\Identifier` is a validated value type for dynamic table/column names — the single primitive that replaces hand-rolled `preg_replace('/[^\w]+/', ...)` column sanitizers. Construction throws unless the value is a safe identifier (and, optionally, a member of an allowlist), and when bound it renders as a properly quoted identifier for the driver's dialect (`"col"` / `` `col` `` / `[col]`), never as a string literal:
+
+```php
+// Charset validation — throws on anything unsafe:
+$col = Sqlx\Identifier::from($_GET['sort']);              // e.g. "created_at"
+
+// Allowlist validation — throws unless permitted:
+$col = Sqlx\Identifier::from($_GET['sort'], ['created_at', 'name']);
+
+$rows = $driver->queryAll('SELECT * FROM users ORDER BY :col', ['col' => $col]);
+// renders: SELECT * FROM users ORDER BY "created_at"
+```
+
+An invalid or disallowed value throws `Sqlx\Exceptions\ValidationException`.
+
+--- 
+
 ## Hydrating rows into objects
 
 `queryAllInto()`, `queryRowInto()` and `queryMaybeRowInto()` map rows onto your own classes instead of `stdClass`. Columns are assigned to **public properties of the same name**; the constructor is **not** called (like PDO's `FETCH_CLASS`), so plain DTOs work out of the box.

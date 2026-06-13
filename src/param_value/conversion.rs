@@ -51,7 +51,9 @@ impl IntoZval for ParameterValue {
     fn set_zval(self, zv: &mut Zval, persistent: bool) -> ext_php_rs::error::Result<()> {
         match self {
             Self::Json(pv) => Self::set_zval(*pv, zv, persistent)?,
-            Self::String(str) => zv.set_string(str.as_str(), persistent)?,
+            Self::Identifier(name) | Self::String(name) => {
+                zv.set_string(name.as_str(), persistent)?;
+            }
             Self::Int(i64) => zv.set_long(i64),
             Self::Float(f64) => zv.set_double(f64),
             Self::Bool(bool) => zv.set_bool(bool),
@@ -134,6 +136,12 @@ impl FromZval<'_> for ParameterValue {
                         ZendClassObject::<SelectClauseRendered>::from_zend_obj(obj)
                             .and_then(|x| x.obj.as_ref())?
                             .to_owned(),
+                    )),
+                    "Sqlx\\Identifier" => Some(Self::Identifier(
+                        ZendClassObject::<crate::identifier::Identifier>::from_zend_obj(obj)
+                            .and_then(|x| x.obj.as_ref())?
+                            .name
+                            .clone(),
                     )),
                     "Sqlx\\PaginateClauseRendered" => Some(Self::PaginateClauseRendered(
                         ZendClassObject::<PaginateClauseRendered>::from_zend_obj(obj)
@@ -241,6 +249,7 @@ impl Serialize for ParameterValue {
                 m.end()
             }
 
+            Self::Identifier(name) => serializer.serialize_str(name),
             Self::ByClauseRendered(val) => serializer.serialize_str(&format!("{val:?}")),
 
             Self::SelectClauseRendered(val) => serializer.serialize_str(&format!("{val:?}")),

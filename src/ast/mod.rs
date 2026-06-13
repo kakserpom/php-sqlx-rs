@@ -311,6 +311,7 @@ impl PlaceholderType {
             ParameterValue::SelectClauseRendered(_) => "SelectClause",
             ParameterValue::PaginateClauseRendered(_) => "PaginateClause",
             ParameterValue::Builder(_) => "Builder",
+            ParameterValue::Identifier(_) => "Identifier",
         }
     }
 }

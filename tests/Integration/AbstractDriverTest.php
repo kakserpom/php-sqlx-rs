@@ -405,6 +405,44 @@ abstract class AbstractDriverTest extends TestCase
         }
     }
 
+    // =========================================================================
+    // Identifier (validated identifier value type)
+    // =========================================================================
+
+    public function testIdentifierInQuery(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Bob', 'bob@example.com')");
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+
+            // An Identifier binds as a quoted identifier for the driver's dialect,
+            // not as a string literal.
+            $col = new \Sqlx\Identifier('name');
+            $users = $this->driver->queryAll('SELECT * FROM test_users ORDER BY :col', ['col' => $col]);
+
+            $this->assertCount(2, $users);
+            $this->assertEquals('Alice', $users[0]->name);
+            $this->assertEquals('Bob', $users[1]->name);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
+    public function testIdentifierRejectsUnsafeValue(): void
+    {
+        $this->expectException(\Sqlx\Exceptions\ValidationException::class);
+        \Sqlx\Identifier::from('id; DROP TABLE users');
+    }
+
+    public function testIdentifierEnforcesAllowlist(): void
+    {
+        // Valid charset, but not a member of the allowlist.
+        $this->expectException(\Sqlx\Exceptions\ValidationException::class);
+        \Sqlx\Identifier::from('email', ['id', 'name']);
+    }
+
     public function testQueryValue(): void
     {
         $this->createTestTable();
