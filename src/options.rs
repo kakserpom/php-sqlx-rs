@@ -105,6 +105,9 @@ pub struct DriverInnerOptions {
     pub(crate) test_before_acquire: bool,
     /// Whether empty IN clauses collapse to FALSE (and NOT IN to TRUE).
     pub(crate) collapsible_in_enabled: bool,
+    /// Whether exceeding the bind-parameter limit is a hard error instead of
+    /// silently inlining the overflow as quoted literals.
+    pub(crate) strict_placeholders: bool,
     /// Whether the connection should be read-only (useful for replicas).
     pub(crate) readonly: bool,
     /// Read replica configurations for automatic read/write splitting.
@@ -133,6 +136,7 @@ impl Default for DriverInnerOptions {
             idle_timeout: None,
             test_before_acquire: DEFAULT_TEST_BEFORE_ACQUIRE,
             collapsible_in_enabled: DEFAULT_COLLAPSIBLE_IN,
+            strict_placeholders: false,
             readonly: false,
             read_replicas: Vec::new(),
             retry_max_attempts: DEFAULT_RETRY_MAX_ATTEMPTS,
@@ -174,6 +178,10 @@ impl DriverOptions {
 
     /// Enable automatic collapsing of `IN ()` clauses to `FALSE`/`TRUE`.
     pub const OPT_COLLAPSIBLE_IN: &'static str = "collapsible_in";
+
+    /// Throw a `ParameterException` when a query would exceed the bind-parameter
+    /// limit, instead of silently inlining the overflow as quoted literals.
+    pub const OPT_STRICT_PLACEHOLDERS: &'static str = "strict_placeholders";
 
     /// Enable read-only mode (useful for replicas).
     pub const OPT_READONLY: &'static str = "readonly";
@@ -378,6 +386,19 @@ impl DriverOptionsArg {
                             Ok(*bool)
                         } else {
                             Err(SqlxError::config("collapsible_in", "must be a boolean"))
+                        }
+                    },
+                )?,
+                strict_placeholders: kv.get(DriverOptions::OPT_STRICT_PLACEHOLDERS).map_or(
+                    Ok(false),
+                    |value| {
+                        if let ParameterValue::Bool(bool) = value {
+                            Ok(*bool)
+                        } else {
+                            Err(SqlxError::config(
+                                "strict_placeholders",
+                                "must be a boolean",
+                            ))
                         }
                     },
                 )?,

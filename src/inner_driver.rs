@@ -196,6 +196,7 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 let mut settings = SETTINGS.clone();
                 settings.collapsible_in_enabled = options.collapsible_in_enabled;
+                settings.strict_placeholders = options.strict_placeholders;
                 let retry_policy = RetryPolicy {
                     max_attempts: options.retry_max_attempts,
                     initial_backoff: options.retry_initial_backoff,

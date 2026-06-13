@@ -12,6 +12,7 @@ const SETTINGS: Settings = Settings {
     placeholder_dollar_sign: true,
     placeholder_at_sign: false,
     max_placeholders: 65535,
+    strict_placeholders: false,
     booleans_as_literals: false,
     strings_as_ntext: false,
     cast_json: None,

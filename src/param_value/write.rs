@@ -41,6 +41,10 @@ impl ParameterValue {
             } else {
                 sql.push('?');
             }
+        } else if settings.strict_placeholders {
+            return Err(crate::error::Error::TooManyBindParameters {
+                max: settings.max_placeholders,
+            });
         } else {
             sql.push_str(self.quote(settings)?.as_str());
         }
@@ -192,5 +196,30 @@ mod tests {
 
         assert_eq!(sql, "?, ?, 1");
         assert_eq!(out_vals.len(), 2);
+    }
+
+    #[test]
+    fn write_sql_strict_placeholders_errors_on_overflow() {
+        let settings = Settings {
+            max_placeholders: 2,
+            strict_placeholders: true,
+            ..Settings::default()
+        };
+        let mut sql = String::new();
+        let mut out_vals = Vec::new();
+
+        let params = vec![
+            ParameterValue::Int(1),
+            ParameterValue::Int(2),
+            ParameterValue::Int(3), // exceeds the limit of 2
+        ];
+
+        let err = params
+            .write_sql_to(&mut sql, &mut out_vals, &settings)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            crate::error::Error::TooManyBindParameters { max: 2 }
+        ));
     }
 }

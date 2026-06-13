@@ -211,6 +211,10 @@ pub enum Error {
         actual: String,
     },
 
+    /// A rendered query exceeded the bind-parameter limit while
+    /// `strict_placeholders` was enabled.
+    TooManyBindParameters { max: usize },
+
     /// Invalid configuration option.
     Configuration { option: String, message: String },
 
@@ -256,6 +260,7 @@ impl Error {
             Self::Parse { .. } => ErrorCode::Parse,
             Self::MissingPlaceholder { .. }
             | Self::InvalidParameter { .. }
+            | Self::TooManyBindParameters { .. }
             | Self::TypeMismatch { .. } => ErrorCode::Parameter,
             Self::Configuration { .. } | Self::UrlRequired => ErrorCode::Configuration,
             Self::InvalidIdentifier { .. } | Self::InvalidSavepoint { .. } => ErrorCode::Validation,
@@ -423,6 +428,13 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "Type mismatch for placeholder `{placeholder}`: expected {expected}, got {actual}"
+                )
+            }
+            Self::TooManyBindParameters { max } => {
+                write!(
+                    f,
+                    "Query exceeds the bind-parameter limit ({max}); reduce the number of parameters \
+                     (e.g. a smaller IN list) or disable `strict_placeholders`"
                 )
             }
             Self::Configuration { option, message } => {

@@ -29,6 +29,7 @@ pub const SETTINGS: Settings = Settings {
     placeholder_dollar_sign: false,
     placeholder_at_sign: true, // @p1, @p2, etc.
     max_placeholders: 2100,    // hardcoded MSSQL limit
+    strict_placeholders: false,
 
     booleans_as_literals: false, // MSSQL doesn't have BOOLEAN: use 1/0
     strings_as_ntext: true,      // use N'string' for Unicode

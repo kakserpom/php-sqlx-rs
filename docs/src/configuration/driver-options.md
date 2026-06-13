@@ -88,6 +88,20 @@ $driver->queryAll("SELECT * FROM users WHERE id IN (?)", [[]]);
 // Throws ParameterException
 ```
 
+### OPT_STRICT_PLACEHOLDERS
+
+By default, when a query would exceed the driver's bind-parameter limit
+(e.g. a very large `IN (?)` array — Postgres caps at 65535), the overflow
+values are silently inlined as safely-quoted literals. Enable this to instead
+fail fast with a `ParameterException`:
+
+```php
+DriverOptions::OPT_STRICT_PLACEHOLDERS => true  // Default: false
+```
+
+This is useful when you'd rather catch an oversized batch explicitly (and chunk
+it yourself) than ship a multi-megabyte inlined query.
+
 ## AST Cache Options
 
 php-sqlx caches parsed query ASTs for performance.
@@ -119,6 +133,7 @@ Total cache capacity = shard_count × shard_size (default: 2048 entries)
 | `OPT_READONLY` | bool | `false` | Disable write operations |
 | `OPT_PERSISTENT_NAME` | string | `null` | Persistent pool name |
 | `OPT_COLLAPSIBLE_IN` | bool | `true` | Collapse empty IN to FALSE |
+| `OPT_STRICT_PLACEHOLDERS` | bool | `false` | Error instead of inlining when over the bind-parameter limit |
 | `OPT_AST_CACHE_SHARD_COUNT` | int | `8` | AST cache shards |
 | `OPT_AST_CACHE_SHARD_SIZE` | int | `256` | Entries per cache shard |
 | `OPT_MAX_CONNECTIONS` | int | `2` | Max pool connections |

@@ -29,6 +29,7 @@ pub const SETTINGS: Settings = Settings {
     placeholder_dollar_sign: true, // $1, $2...
     placeholder_at_sign: false,
     max_placeholders: 65535,
+    strict_placeholders: false,
 
     booleans_as_literals: true, // PostgreSQL prefers TRUE/FALSE
     strings_as_ntext: false,    // N'' not used

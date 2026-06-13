@@ -441,6 +441,10 @@ pub struct Settings {
     pub placeholder_at_sign: bool,
     /// Maximum number of placeholders
     pub max_placeholders: usize,
+    /// When `true`, exceeding `max_placeholders` is a hard error
+    /// ([`crate::error::Error::TooManyBindParameters`]) instead of silently
+    /// inlining the overflow values as quoted literals.
+    pub strict_placeholders: bool,
 
     /// Emit `true`/`false` instead of `1`/`0`
     pub booleans_as_literals: bool,
