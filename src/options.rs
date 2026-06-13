@@ -520,8 +520,8 @@ mod tests {
         .parse()
         .unwrap();
 
-        assert_eq!(driver_options.max_lifetime, Some(Duration::from_secs(3600)));
-        assert_eq!(driver_options.idle_timeout, Some(Duration::from_secs(120)));
+        assert_eq!(driver_options.max_lifetime, Some(Duration::from_hours(1)));
+        assert_eq!(driver_options.idle_timeout, Some(Duration::from_mins(2)));
     }
 
     #[test]

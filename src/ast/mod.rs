@@ -1096,9 +1096,10 @@ impl Ast {
                         if !*nullable && matches!(val, ParameterValue::Null) {
                             return Err(SqlxError::TypeMismatch {
                                 placeholder: name.clone(),
-                                expected: expected_type
-                                    .map(|t| t.description().to_string())
-                                    .unwrap_or_else(|| "non-null value".to_string()),
+                                expected: expected_type.map_or_else(
+                                    || "non-null value".to_string(),
+                                    |t| t.description().to_string(),
+                                ),
                                 actual: "null".to_string(),
                             });
                         }

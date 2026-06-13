@@ -1,15 +1,15 @@
 use crate::error::Error as SqlxError;
 #[cfg(feature = "lazy-row")]
 use crate::lazy_row::{LazyRow, LazyRowJson};
+use crate::param_value::ParameterValue;
+use crate::select_clause::SelectClauseRendered;
+use ext_php_rs::ZvalConvert;
 use ext_php_rs::boxed::ZBox;
 use ext_php_rs::convert::IntoZval;
 use ext_php_rs::ffi::zend_array;
 use ext_php_rs::ffi::zend_object;
 #[cfg(feature = "lazy-row")]
 use ext_php_rs::types::ZendClassObject;
-use crate::param_value::ParameterValue;
-use crate::select_clause::SelectClauseRendered;
-use ext_php_rs::ZvalConvert;
 use ext_php_rs::types::{ArrayKey, Zval};
 use ext_php_rs::zend::ClassEntry;
 use sqlx_oldapi::Column;
@@ -251,9 +251,11 @@ pub trait Conversion: Row {
                     message: format!("{err:?}"),
                 })?;
         }
-        object.into_zval(false).map_err(|err| SqlxError::Conversion {
-            message: format!("{err:?}"),
-        })
+        object
+            .into_zval(false)
+            .map_err(|err| SqlxError::Conversion {
+                message: format!("{err:?}"),
+            })
     }
 
     /// Converts a row according to a [`ResolvedTarget`].
@@ -296,16 +298,18 @@ pub trait Conversion: Row {
             for column in columns {
                 if let Some(prop_name) = column.name().strip_prefix(prefix.as_str()) {
                     let value = self.column_value_into_zval(column, associative_arrays)?;
-                    instance
-                        .set_property(prop_name, value)
-                        .map_err(|err| SqlxError::Conversion {
+                    instance.set_property(prop_name, value).map_err(|err| {
+                        SqlxError::Conversion {
                             message: format!("{err:?}"),
-                        })?;
+                        }
+                    })?;
                 }
             }
-            let instance = instance.into_zval(false).map_err(|err| SqlxError::Conversion {
-                message: format!("{err:?}"),
-            })?;
+            let instance = instance
+                .into_zval(false)
+                .map_err(|err| SqlxError::Conversion {
+                    message: format!("{err:?}"),
+                })?;
             row.set_property(alias, instance)
                 .map_err(|err| SqlxError::Conversion {
                     message: format!("{err:?}"),
