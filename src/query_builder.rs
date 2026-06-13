@@ -2746,6 +2746,60 @@ macro_rules! php_sqlx_impl_query_builder {
                     .query_all(&self.query, merged_params, Some(false))
             }
 
+            /// Executes the built query and hydrates every row into `target`.
+            ///
+            /// `target` is either a class name or an `alias => class` map; see
+            /// `Sqlx\\DriverInterface::queryAllInto`. The `:select` placeholder, if
+            /// present in the built query, is filled from the target's class(es).
+            ///
+            /// # Arguments
+            /// - `target`: Class name, or `['alias' => Class::class, ...]` for joins.
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            pub fn query_all_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> crate::error::Result<Vec<Zval>> {
+                let merged_params = self.merge_parameters(parameters);
+                self.driver_inner
+                    .query_all_into(&target, &self.query, merged_params, None)
+            }
+
+            /// Executes the built query and hydrates the single row into `target`.
+            ///
+            /// See [`Self::query_all_into`] for the `target` forms.
+            ///
+            /// # Arguments
+            /// - `target`: Class name, or `['alias' => Class::class, ...]` for joins.
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            pub fn query_row_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
+                self.driver_inner
+                    .query_row_into(&target, &self.query, merged_params, None)
+            }
+
+            /// Executes the built query and hydrates the single row into `target`,
+            /// or returns `null` if no row matched.
+            ///
+            /// See [`Self::query_all_into`] for the `target` forms.
+            ///
+            /// # Arguments
+            /// - `target`: Class name, or `['alias' => Class::class, ...]` for joins.
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            pub fn query_maybe_row_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> crate::error::Result<Zval> {
+                let merged_params = self.merge_parameters(parameters);
+                self.driver_inner
+                    .query_maybe_row_into(&target, &self.query, merged_params, None)
+            }
+
             /// Executes the query and returns a lazy `QueryResult` iterator.
             ///
             /// This method returns a `QueryResult` object that implements PHP's `Iterator`

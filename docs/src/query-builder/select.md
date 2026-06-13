@@ -311,3 +311,27 @@ $users = $driver->builder()
     ->limit(10)
     ->queryAll();
 ```
+
+## Hydrating into classes
+
+The terminal methods `queryAllInto()`, `queryRowInto()` and `queryMaybeRowInto()`
+map the built query's rows onto your own classes instead of `stdClass`, just like
+the driver-level methods (see [Result Handling](../core/results.md#hydrating-rows-into-classes)).
+
+```php
+class User { public int $id; public string $email; }
+
+$users = $driver->builder()
+    ->select(['id', 'email'])
+    ->from('users')
+    ->where(['status' => 'active'])
+    ->queryAllInto(User::class);          // User[]
+
+$user = $driver->builder()
+    ->select(['id', 'email'])
+    ->from('users')
+    ->where([['id', '=', 1]])
+    ->queryRowInto(User::class);          // User
+```
+
+The `alias => class` map form works here too for joins.

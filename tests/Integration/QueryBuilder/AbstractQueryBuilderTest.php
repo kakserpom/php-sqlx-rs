@@ -11,6 +11,17 @@ use Sqlx\Exceptions\SqlxException;
 use function Sqlx\OR_;
 
 /**
+ * Plain DTO used by the builder `*Into()` hydration tests. Uniquely named to
+ * avoid clashing with hydration DTOs defined in other test files.
+ */
+class BuilderHydrationUser
+{
+    public $id;
+    public $name;
+    public $email;
+}
+
+/**
  * Abstract base class for query builder integration tests.
  */
 abstract class AbstractQueryBuilderTest extends TestCase
@@ -88,6 +99,39 @@ abstract class AbstractQueryBuilderTest extends TestCase
 
         $this->assertCount(1, $users);
         $this->assertEquals('Alice', $users[0]->name);
+    }
+
+    public function testQueryAllIntoClass(): void
+    {
+        $this->createTestTable();
+        $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+        $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Bob', 'bob@example.com')");
+
+        $users = $this->driver->builder()
+            ->select(['id', 'name', 'email'])
+            ->from('test_users')
+            ->where([['name', '=', 'Alice']])
+            ->queryAllInto(BuilderHydrationUser::class);
+
+        $this->assertCount(1, $users);
+        $this->assertInstanceOf(BuilderHydrationUser::class, $users[0]);
+        $this->assertEquals('Alice', $users[0]->name);
+        $this->assertEquals('alice@example.com', $users[0]->email);
+    }
+
+    public function testQueryRowIntoClass(): void
+    {
+        $this->createTestTable();
+        $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+
+        $user = $this->driver->builder()
+            ->select(['id', 'name', 'email'])
+            ->from('test_users')
+            ->where([['name', '=', 'Alice']])
+            ->queryRowInto(BuilderHydrationUser::class);
+
+        $this->assertInstanceOf(BuilderHydrationUser::class, $user);
+        $this->assertEquals('Alice', $user->name);
     }
 
     public function testSelectWithAliases(): void
