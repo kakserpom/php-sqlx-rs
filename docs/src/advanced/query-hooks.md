@@ -5,42 +5,87 @@ Query hooks let you intercept and observe all queries executed by a driver. They
 ## Setting a Query Hook
 
 ```php
-$driver->onQuery(function(string $sql, array $params, float $duration) {
-    echo "Query: $sql\n";
-    echo "Params: " . json_encode($params) . "\n";
-    echo "Duration: {$duration}ms\n";
+$driver->onQuery(function(
+    string $sql,
+    string $sqlInline,
+    float $durationMs,
+    ?int $rows,
+    ?string $error,
+) {
+    echo "Query: $sqlInline\n";
+    echo "Rows: " . ($rows ?? 'n/a') . "\n";
+    echo "Duration: {$durationMs}ms\n";
+    if ($error !== null) {
+        echo "Error: $error\n";
+    }
 });
 ```
 
 The callback receives:
-- `$sql` - The SQL query (with placeholders)
-- `$params` - The bound parameters
-- `$duration` - Execution time in milliseconds
+
+- `$sql` – The rendered SQL with placeholders (`SELECT * FROM users WHERE status = $1`)
+- `$sqlInline` – The SQL with inlined parameter values, for logging (`SELECT * FROM users WHERE status = 'active'`)
+- `$durationMs` – Execution time in milliseconds (DB execution only, excluding row-to-PHP conversion)
+- `$rows` – Rows affected (writes) or returned (reads), or `null` if unknown
+- `$error` – The error message if the query failed, or `null` on success
+
+The hook fires after **every** query, including failed ones. On failure, `$error` is set and `$rows` is `null`.
+
+> **Note:** PHP ignores trailing arguments a closure doesn't declare, so a hook that only accepts `(string $sql, string $sqlInline, float $durationMs)` keeps working unchanged.
 
 ## Use Cases
 
 ### Logging
 
 ```php
-$driver->onQuery(function(string $sql, array $params, float $duration) {
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) use ($logger) {
     $logger->debug('SQL Query', [
-        'sql' => $sql,
-        'params' => $params,
-        'duration_ms' => $duration,
+        'sql' => $sqlInline,
+        'rows' => $rows,
+        'duration_ms' => $durationMs,
+        'error' => $error,
     ]);
+});
+```
+
+### Error Logging
+
+The hook fires on failures too, so you can capture every error in one place:
+
+```php
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) use ($logger) {
+    if ($error !== null) {
+        $logger->error('Query failed', [
+            'sql' => $sqlInline,
+            'duration_ms' => $durationMs,
+            'error' => $error,
+        ]);
+    }
 });
 ```
 
 ### Slow Query Detection
 
 ```php
-$driver->onQuery(function(string $sql, array $params, float $duration) {
-    if ($duration > 1000) {  // > 1 second
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) use ($logger) {
+    if ($durationMs > 1000) {  // > 1 second
         $logger->warning('Slow query detected', [
-            'sql' => $sql,
-            'params' => $params,
-            'duration_ms' => $duration,
+            'sql' => $sqlInline,
+            'rows' => $rows,
+            'duration_ms' => $durationMs,
         ]);
+    }
+});
+```
+
+### Large Result-Set Detection
+
+`$rows` makes it easy to flag unbounded reads before they hurt:
+
+```php
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) use ($logger) {
+    if ($rows !== null && $rows > 10_000) {
+        $logger->warning("Query returned {$rows} rows", ['sql' => $sqlInline]);
     }
 });
 ```
@@ -51,9 +96,9 @@ $driver->onQuery(function(string $sql, array $params, float $duration) {
 $queryCount = 0;
 $totalTime = 0;
 
-$driver->onQuery(function(string $sql, array $params, float $duration) use (&$queryCount, &$totalTime) {
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs) use (&$queryCount, &$totalTime) {
     $queryCount++;
-    $totalTime += $duration;
+    $totalTime += $durationMs;
 });
 
 // After request processing
@@ -65,10 +110,9 @@ echo "Executed $queryCount queries in {$totalTime}ms\n";
 ```php
 $queries = [];
 
-$driver->onQuery(function(string $sql, array $params, float $duration) use (&$queries) {
-    // Normalize query (remove specific values)
-    $normalized = preg_replace('/\$\d+/', '?', $sql);
-    $queries[$normalized] = ($queries[$normalized] ?? 0) + 1;
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs) use (&$queries) {
+    // The placeholder form already strips specific values, so it normalizes well
+    $queries[$sql] = ($queries[$sql] ?? 0) + 1;
 });
 
 // After request, check for repeated queries
@@ -85,8 +129,8 @@ register_shutdown_function(function() use (&$queries) {
 
 ```php
 // Example with a hypothetical APM library
-$driver->onQuery(function(string $sql, array $params, float $duration) {
-    APM::recordQuery($sql, $duration);
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) {
+    APM::recordQuery($sql, $durationMs, rows: $rows, error: $error);
 });
 ```
 
@@ -94,9 +138,9 @@ $driver->onQuery(function(string $sql, array $params, float $duration) {
 
 ```php
 if (getenv('DEBUG_SQL')) {
-    $driver->onQuery(function(string $sql, array $params, float $duration) {
-        $paramStr = empty($params) ? '' : ' -- ' . json_encode($params);
-        echo "\033[36m[SQL {$duration}ms]\033[0m $sql$paramStr\n";
+    $driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) {
+        $tag = $error !== null ? "\033[31mERR\033[0m" : "\033[36m{$durationMs}ms\033[0m";
+        echo "[SQL $tag] $sqlInline\n";
     });
 }
 ```
@@ -121,18 +165,18 @@ function addQueryHandler(callable $handler) {
     $handlers[] = $handler;
 }
 
-$driver->onQuery(function(string $sql, array $params, float $duration) {
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) {
     global $handlers;
     foreach ($handlers as $handler) {
-        $handler($sql, $params, $duration);
+        $handler($sql, $sqlInline, $durationMs, $rows, $error);
     }
 });
 
-addQueryHandler(function($sql, $params, $duration) {
+addQueryHandler(function($sql, $sqlInline, $durationMs, $rows, $error) {
     // Logging
 });
 
-addQueryHandler(function($sql, $params, $duration) {
+addQueryHandler(function($sql, $sqlInline, $durationMs, $rows, $error) {
     // Metrics
 });
 ```
@@ -147,9 +191,9 @@ Query hooks add overhead to every query. For production:
 
 ```php
 // Lightweight production hook
-$driver->onQuery(function(string $sql, array $params, float $duration) {
-    if ($duration > 100) {  // Only log slow queries
-        error_log("Slow query: $sql ({$duration}ms)");
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs) {
+    if ($durationMs > 100) {  // Only log slow queries
+        error_log("Slow query: $sqlInline ({$durationMs}ms)");
     }
 });
 ```
@@ -163,15 +207,16 @@ public function testUserCreation()
 {
     $executedQueries = [];
 
-    $this->driver->onQuery(function($sql, $params, $duration) use (&$executedQueries) {
-        $executedQueries[] = ['sql' => $sql, 'params' => $params];
+    $this->driver->onQuery(function($sql, $sqlInline, $durationMs, $rows, $error) use (&$executedQueries) {
+        $executedQueries[] = ['sql' => $sql, 'rows' => $rows, 'error' => $error];
     });
 
     $this->userService->createUser('Alice', 'alice@example.com');
 
     $this->assertCount(1, $executedQueries);
     $this->assertStringContains('INSERT INTO users', $executedQueries[0]['sql']);
-    $this->assertEquals(['Alice', 'alice@example.com'], $executedQueries[0]['params']);
+    $this->assertSame(1, $executedQueries[0]['rows']);
+    $this->assertNull($executedQueries[0]['error']);
 }
 ```
 
@@ -185,8 +230,8 @@ public function handle($request, $next)
 {
     $requestId = uniqid();
 
-    $this->driver->onQuery(function($sql, $params, $duration) use ($requestId) {
-        Log::debug("[$requestId] SQL: $sql ({$duration}ms)");
+    $this->driver->onQuery(function($sql, $sqlInline, $durationMs) use ($requestId) {
+        Log::debug("[$requestId] SQL: $sqlInline ({$durationMs}ms)");
     });
 
     $response = $next($request);
@@ -211,11 +256,12 @@ class QueryProfiler
         $this->startTime = microtime(true);
         $this->queries = [];
 
-        $driver->onQuery(function($sql, $params, $duration) {
+        $driver->onQuery(function($sql, $sqlInline, $durationMs, $rows, $error) {
             $this->queries[] = [
-                'sql' => $sql,
-                'params' => $params,
-                'duration' => $duration,
+                'sql' => $sqlInline,
+                'rows' => $rows,
+                'error' => $error,
+                'duration' => $durationMs,
                 'timestamp' => microtime(true) - $this->startTime,
             ];
         });
@@ -227,6 +273,7 @@ class QueryProfiler
 
         return [
             'query_count' => count($this->queries),
+            'error_count' => count(array_filter($this->queries, fn($q) => $q['error'] !== null)),
             'total_time_ms' => $totalTime,
             'queries' => $this->queries,
         ];

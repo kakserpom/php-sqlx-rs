@@ -955,8 +955,12 @@ $driver->quoteIdentifier("user");  // [user]
 
 ```php
 // Enable query logging
-$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs) {
-    Logger::debug("Query took {$durationMs}ms: $sqlInline");
+$driver->onQuery(function(string $sql, string $sqlInline, float $durationMs, ?int $rows, ?string $error) {
+    if ($error !== null) {
+        Logger::error("Query failed after {$durationMs}ms: $error -- $sqlInline");
+    } else {
+        Logger::debug("Query returned {$rows} row(s) in {$durationMs}ms: $sqlInline");
+    }
 });
 
 // Run some queries - the callback is called after each one
@@ -970,7 +974,11 @@ The callback receives:
 
 - `$sql` – The rendered SQL with placeholders (`SELECT * FROM users WHERE status = $1`)
 - `$sqlInline` – The SQL with inlined values for logging (`SELECT * FROM users WHERE status = 'active'`)
-- `$durationMs` – Execution time in milliseconds
+- `$durationMs` – Execution time in milliseconds (DB execution only, excluding row-to-PHP conversion)
+- `$rows` – Rows affected (writes) or returned (reads), or `null` if unknown
+- `$error` – The error message if the query failed, or `null` on success
+
+The hook fires after **every** query, including failed ones (with `$error` set and `$rows` as `null`).
 
 **Performance**: When no hook is registered, there is zero overhead. Timing only starts when a hook is active.
 

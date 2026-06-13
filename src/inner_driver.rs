@@ -415,7 +415,10 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 // Call hook with timing info
                 if let Some(t) = timer {
-                    t.finish();
+                    match &result {
+                        Ok(rows) => t.finish(Some(*rows), None),
+                        Err(err) => t.finish(None, Some(&err.to_string())),
+                    }
                 }
 
                 result
@@ -759,14 +762,16 @@ macro_rules! php_sqlx_impl_driver_inner {
                             )
                         }
                         .map_err(|err| SqlxError::query_with_source(&query, err))
-                    })?
-                    .into_zval(associative_arrays.unwrap_or(self.options.associative_arrays));
+                    });
 
                 if let Some(t) = timer {
-                    t.finish();
+                    match &result {
+                        Ok(_) => t.finish(Some(1), None),
+                        Err(err) => t.finish(None, Some(&err.to_string())),
+                    }
                 }
 
-                result
+                result?.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
             }
 
             /// Executes an SQL query and returns a single row if available, or `null` if no rows are returned.
@@ -827,18 +832,22 @@ macro_rules! php_sqlx_impl_driver_inner {
                             sqlx_oldapi::Error::RowNotFound => Ok(None),
                             _ => Err(SqlxError::query_with_source(&query, err)),
                         })
-                    })?
+                    });
+
+                if let Some(t) = timer {
+                    match &result {
+                        Ok(Some(_)) => t.finish(Some(1), None),
+                        Ok(None) => t.finish(Some(0), None),
+                        Err(err) => t.finish(None, Some(&err.to_string())),
+                    }
+                }
+
+                Ok(result?
                     .map(|x| {
                         x.into_zval(associative_arrays.unwrap_or(self.options.associative_arrays))
                     })
                     .transpose()?
-                    .unwrap_or_else(Zval::null);
-
-                if let Some(t) = timer {
-                    t.finish();
-                }
-
-                Ok(result)
+                    .unwrap_or_else(Zval::null))
             }
 
             /// Executes an SQL query and returns a channel receiver for lazy iteration.
@@ -1029,16 +1038,19 @@ macro_rules! php_sqlx_impl_driver_inner {
                             )
                         }
                         .map_err(|err| SqlxError::query_with_source(&query, err))
-                    })?
-                    .into_iter()
-                    .map(|row| row.into_zval(assoc))
-                    .try_collect();
+                    });
 
                 if let Some(t) = timer {
-                    t.finish();
+                    match &result {
+                        Ok(rows) => t.finish(u64::try_from(rows.len()).ok(), None),
+                        Err(err) => t.finish(None, Some(&err.to_string())),
+                    }
                 }
 
-                result
+                result?
+                    .into_iter()
+                    .map(|row| row.into_zval(assoc))
+                    .try_collect()
             }
 
             /// Returns the rendered query and its parameters.

@@ -3,18 +3,31 @@
 //! This module provides a callback mechanism for logging and profiling SQL queries.
 //! When a hook is registered, it will be called after each query with:
 //! - The rendered SQL query
-//! - The bound parameters (as PHP array)
+//! - The SQL with inlined parameters (for logging)
 //! - The execution duration in milliseconds
+//! - The number of rows affected (writes) or returned (reads), if known
+//! - The error message, if the query failed (`null` on success)
 //!
 //! # Example
 //!
 //! ```php
-//! $driver->onQuery(function(string $sql, array $params, float $durationMs) {
-//!     Logger::debug("Query took {$durationMs}ms: $sql");
+//! $driver->onQuery(function(
+//!     string $sql,
+//!     string $sqlInline,
+//!     float $durationMs,
+//!     ?int $rows,
+//!     ?string $error,
+//! ) {
+//!     if ($error !== null) {
+//!         Logger::error("Query failed after {$durationMs}ms: $error");
+//!     } else {
+//!         Logger::debug("Query returned {$rows} row(s) in {$durationMs}ms: $sql");
+//!     }
 //! });
 //! ```
 
 use ext_php_rs::types::{ZendCallable, Zval};
+use saturating_cast::SaturatingCast;
 use std::cell::RefCell;
 use std::time::Instant;
 
@@ -27,6 +40,12 @@ pub struct QueryInfo {
     pub sql_inline: Option<String>,
     /// Execution duration in milliseconds.
     pub duration_ms: f64,
+    /// Number of rows affected (for writes) or returned (for reads).
+    ///
+    /// `None` when the count is not applicable or the query failed.
+    pub rows: Option<u64>,
+    /// Error message if the query failed; `None` on success.
+    pub error: Option<String>,
 }
 
 /// Storage for the query hook callback.
@@ -56,8 +75,10 @@ impl QueryHook {
     ///
     /// The callback should be a PHP callable that accepts:
     /// - `string $sql` - The rendered SQL query
-    /// - `array $params` - The bound parameters
+    /// - `string $sqlInline` - The SQL with inlined parameters
     /// - `float $durationMs` - Execution time in milliseconds
+    /// - `?int $rows` - Rows affected/returned, or `null` if unknown
+    /// - `?string $error` - Error message, or `null` on success
     pub fn set(&self, callback: Zval) {
         *self.callback.borrow_mut() = Some(callback);
     }
@@ -91,9 +112,13 @@ impl QueryHook {
         let sql: &str = &info.sql;
         let sql_inline: &str = info.sql_inline.as_deref().unwrap_or(&info.sql);
         let duration = info.duration_ms;
+        // PHP integers are signed 64-bit; saturate on the (practically impossible)
+        // overflow rather than wrapping.
+        let rows: Option<i64> = info.rows.map(SaturatingCast::saturating_cast);
+        let error: Option<&str> = info.error.as_deref();
 
         // Call the hook, ignoring any errors
-        let _ = callable.try_call(vec![&sql, &sql_inline, &duration]);
+        let _ = callable.try_call(vec![&sql, &sql_inline, &duration, &rows, &error]);
     }
 }
 
@@ -132,7 +157,10 @@ impl<'a> QueryTimer<'a> {
     }
 
     /// Completes the timer and calls the hook.
-    pub fn finish(self) {
+    ///
+    /// - `rows`: rows affected (writes) or returned (reads), if known.
+    /// - `error`: the error message if the query failed, or `None` on success.
+    pub fn finish(self, rows: Option<u64>, error: Option<&str>) {
         let duration = self.start.elapsed();
         let duration_ms = duration.as_secs_f64() * 1000.0;
 
@@ -140,6 +168,8 @@ impl<'a> QueryTimer<'a> {
             sql: self.sql,
             sql_inline: self.sql_inline,
             duration_ms,
+            rows,
+            error: error.map(ToOwned::to_owned),
         });
     }
 }

@@ -217,7 +217,7 @@ Currently, retry attempts are not exposed to PHP. Consider using query hooks for
 ```php
 $retryCount = 0;
 
-$driver->onQuery(function($sql, $params, $duration) use (&$retryCount) {
+$driver->onQuery(function($sql, $sqlInline, $durationMs, $rows, $error) use (&$retryCount) {
     // Note: This counts total queries, not retries specifically
     // You'd need to track unique query executions for accurate retry counts
 });

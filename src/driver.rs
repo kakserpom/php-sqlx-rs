@@ -987,11 +987,23 @@ macro_rules! php_sqlx_impl_driver {
             /// - `string $sql` - The rendered SQL query with placeholders
             /// - `string $sqlInline` - The SQL query with inlined parameter values (for logging)
             /// - `float $durationMs` - Execution time in milliseconds
+            /// - `?int $rows` - Rows affected (writes) or returned (reads), or `null` if unknown
+            /// - `?string $error` - Error message if the query failed, or `null` on success
             ///
             /// # Example
             /// ```php
-            /// $driver->onQuery(function(string $sql, string $sqlInline, float $durationMs) {
-            ///     Logger::debug("Query took {$durationMs}ms: $sqlInline");
+            /// $driver->onQuery(function(
+            ///     string $sql,
+            ///     string $sqlInline,
+            ///     float $durationMs,
+            ///     ?int $rows,
+            ///     ?string $error,
+            /// ) {
+            ///     if ($error !== null) {
+            ///         Logger::error("Query failed after {$durationMs}ms: $error");
+            ///     } else {
+            ///         Logger::debug("Query returned {$rows} row(s) in {$durationMs}ms: $sqlInline");
+            ///     }
             /// });
             ///
             /// // Disable the hook
