@@ -443,6 +443,43 @@ abstract class AbstractDriverTest extends TestCase
         \Sqlx\Identifier::from('email', ['id', 'name']);
     }
 
+    // =========================================================================
+    // Resource guards (max_rows / query_timeout)
+    // =========================================================================
+
+    public function testMaxRowsCap(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'a@example.com')");
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Bob', 'b@example.com')");
+
+            $capped = \Sqlx\DriverFactory::make([
+                \Sqlx\DriverOptions::OPT_URL => $this->getConnectionUrl(),
+                \Sqlx\DriverOptions::OPT_MAX_ROWS => 1,
+            ]);
+
+            try {
+                $threw = false;
+                try {
+                    $capped->queryAll('SELECT * FROM test_users');
+                } catch (\Sqlx\Exceptions\QueryException $e) {
+                    $threw = true;
+                }
+                $this->assertTrue($threw, 'queryAll should throw when the row cap is exceeded');
+
+                // Within the cap, it succeeds.
+                $one = $capped->queryAll('SELECT * FROM test_users WHERE name = ?s', ['Alice']);
+                $this->assertCount(1, $one);
+            } finally {
+                $capped->close();
+            }
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
     public function testQueryValue(): void
     {
         $this->createTestTable();

@@ -102,6 +102,30 @@ DriverOptions::OPT_STRICT_PLACEHOLDERS => true  // Default: false
 This is useful when you'd rather catch an oversized batch explicitly (and chunk
 it yourself) than ship a multi-megabyte inlined query.
 
+### OPT_MAX_ROWS
+
+A hard cap on the number of rows a result set may return before throwing a
+`QueryException` — a guard against runaway/unbounded reads:
+
+```php
+DriverOptions::OPT_MAX_ROWS => 100_000  // Default: 0 (unlimited)
+```
+
+Applies to the `queryAll` family (including `queryAllInto`).
+
+### OPT_QUERY_TIMEOUT
+
+A per-query client-side timeout. When a query doesn't complete in time, its
+future is cancelled and a `TimeoutException` is thrown:
+
+```php
+DriverOptions::OPT_QUERY_TIMEOUT => '5s'    // duration string
+DriverOptions::OPT_QUERY_TIMEOUT => 500     // or integer milliseconds
+```
+
+Applies to `queryRow`, `queryMaybeRow`, `queryAll` (and their `*Into` variants)
+and `execute`.
+
 ## AST Cache Options
 
 php-sqlx caches parsed query ASTs for performance.
@@ -134,6 +158,8 @@ Total cache capacity = shard_count × shard_size (default: 2048 entries)
 | `OPT_PERSISTENT_NAME` | string | `null` | Persistent pool name |
 | `OPT_COLLAPSIBLE_IN` | bool | `true` | Collapse empty IN to FALSE |
 | `OPT_STRICT_PLACEHOLDERS` | bool | `false` | Error instead of inlining when over the bind-parameter limit |
+| `OPT_MAX_ROWS` | int | `0` | Cap rows per result set (0 = unlimited) |
+| `OPT_QUERY_TIMEOUT` | string/int | `null` | Per-query timeout (duration string or ms) |
 | `OPT_AST_CACHE_SHARD_COUNT` | int | `8` | AST cache shards |
 | `OPT_AST_CACHE_SHARD_SIZE` | int | `256` | Entries per cache shard |
 | `OPT_MAX_CONNECTIONS` | int | `2` | Max pool connections |

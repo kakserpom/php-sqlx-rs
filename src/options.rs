@@ -108,6 +108,10 @@ pub struct DriverInnerOptions {
     /// Whether exceeding the bind-parameter limit is a hard error instead of
     /// silently inlining the overflow as quoted literals.
     pub(crate) strict_placeholders: bool,
+    /// Hard cap on rows a result set may contain before erroring (0 = unlimited).
+    pub(crate) max_rows: u64,
+    /// Per-query client-side timeout; `None` disables it.
+    pub(crate) query_timeout: Option<Duration>,
     /// Whether the connection should be read-only (useful for replicas).
     pub(crate) readonly: bool,
     /// Read replica configurations for automatic read/write splitting.
@@ -137,6 +141,8 @@ impl Default for DriverInnerOptions {
             test_before_acquire: DEFAULT_TEST_BEFORE_ACQUIRE,
             collapsible_in_enabled: DEFAULT_COLLAPSIBLE_IN,
             strict_placeholders: false,
+            max_rows: 0,
+            query_timeout: None,
             readonly: false,
             read_replicas: Vec::new(),
             retry_max_attempts: DEFAULT_RETRY_MAX_ATTEMPTS,
@@ -182,6 +188,13 @@ impl DriverOptions {
     /// Throw a `ParameterException` when a query would exceed the bind-parameter
     /// limit, instead of silently inlining the overflow as quoted literals.
     pub const OPT_STRICT_PLACEHOLDERS: &'static str = "strict_placeholders";
+
+    /// Hard cap on rows a result set may return before throwing (0 = unlimited).
+    pub const OPT_MAX_ROWS: &'static str = "max_rows";
+
+    /// Per-query timeout. Accepts a duration string (e.g. `"5s"`, `"500ms"`) or
+    /// an integer number of milliseconds. On expiry a `TimeoutException` is thrown.
+    pub const OPT_QUERY_TIMEOUT: &'static str = "query_timeout";
 
     /// Enable read-only mode (useful for replicas).
     pub const OPT_READONLY: &'static str = "readonly";
@@ -402,6 +415,30 @@ impl DriverOptionsArg {
                         }
                     },
                 )?,
+                max_rows: kv.get(DriverOptions::OPT_MAX_ROWS).map_or(Ok(0), |value| {
+                    if let ParameterValue::Int(n) = value {
+                        u64::try_from(*n)
+                            .map_err(|_| SqlxError::config("max_rows", "must be non-negative"))
+                    } else {
+                        Err(SqlxError::config("max_rows", "must be an integer"))
+                    }
+                })?,
+                query_timeout: match kv.get(DriverOptions::OPT_QUERY_TIMEOUT) {
+                    None | Some(ParameterValue::Null) => None,
+                    Some(ParameterValue::String(value)) => Some(
+                        parse_duration::parse(value)
+                            .map_err(|e| SqlxError::config("query_timeout", e.to_string()))?,
+                    ),
+                    Some(ParameterValue::Int(value)) => {
+                        Some(Duration::from_millis(u64::try_from(*value)?))
+                    }
+                    _ => {
+                        return Err(SqlxError::config(
+                            "query_timeout",
+                            "must be a duration string or a non-negative integer (milliseconds)",
+                        ));
+                    }
+                },
                 readonly: kv
                     .get(DriverOptions::OPT_READONLY)
                     .map_or(Ok(false), |value| {

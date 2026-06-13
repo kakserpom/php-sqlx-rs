@@ -517,4 +517,28 @@ class PostgreSQLDriverTest extends AbstractDriverTest
             $this->driver->execute('DROP TABLE IF EXISTS test_copy_in');
         }
     }
+
+    public function testQueryTimeout(): void
+    {
+        $driver = \Sqlx\DriverFactory::make([
+            \Sqlx\DriverOptions::OPT_URL => $this->getConnectionUrl(),
+            \Sqlx\DriverOptions::OPT_QUERY_TIMEOUT => '100ms',
+        ]);
+
+        try {
+            $threw = false;
+            try {
+                // pg_sleep(1) far exceeds the 100ms client-side timeout.
+                $driver->queryRow('SELECT pg_sleep(1)');
+            } catch (\Sqlx\Exceptions\TimeoutException $e) {
+                $threw = true;
+            }
+            $this->assertTrue($threw, 'query should time out');
+
+            // A fast query under the same driver still succeeds.
+            $this->assertEquals(1, $driver->queryValue('SELECT 1'));
+        } finally {
+            $driver->close();
+        }
+    }
 }

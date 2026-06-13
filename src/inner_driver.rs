@@ -361,6 +361,33 @@ macro_rules! php_sqlx_impl_driver_inner {
                 }
             }
 
+            /// Drives a query future on the runtime, applying the configured
+            /// per-query timeout (`OPT_QUERY_TIMEOUT`) when set.
+            ///
+            /// Returns the inner driver `Result` unchanged on success, or a
+            /// `Timeout` error if the future did not complete in time (the future
+            /// is dropped, cancelling the query client-side). Callers map the inner
+            /// `sqlx` error as they see fit (e.g. `RowNotFound` handling).
+            fn run_query<Fut, T>(
+                &self,
+                fut: Fut,
+            ) -> $crate::error::Result<Result<T, sqlx_oldapi::Error>>
+            where
+                Fut: std::future::Future<Output = Result<T, sqlx_oldapi::Error>>,
+            {
+                match self.options.query_timeout {
+                    Some(timeout) => {
+                        RUNTIME.block_on(tokio::time::timeout(timeout, fut)).map_err(|_| {
+                            SqlxError::Timeout {
+                                operation: "query".to_string(),
+                                timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
+                            }
+                        })
+                    }
+                    None => Ok(RUNTIME.block_on(fut)),
+                }
+            }
+
             /// Executes an INSERT/UPDATE/DELETE query and returns affected row count.
             ///
             /// # Arguments
@@ -393,25 +420,27 @@ macro_rules! php_sqlx_impl_driver_inner {
                 let timer = QueryTimer::new(&self.query_hook, query.clone(), sql_inline);
 
                 let result = self.with_retry(|| {
-                    Ok(if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                        let val = RUNTIME.block_on(
+                    if let Some(mut tx) = self.retrieve_ongoing_transaction() {
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *tx),
                         );
                         self.place_ongoing_transaction(tx);
                         val
                     } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                        let val = RUNTIME.block_on(
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.execute(&mut *conn),
                         );
                         self.return_pinned_connection(conn);
                         val
                     } else {
-                        RUNTIME.block_on(
+                        self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.execute(&self.pool),
                         )
                     }
-                    .map_err(|err| SqlxError::query_with_source(&query, err))?
-                    .rows_affected())
+                    .and_then(|inner| {
+                        inner.map_err(|err| SqlxError::query_with_source(&query, err))
+                    })
+                    .map(|done| done.rows_affected())
                 });
 
                 // Call hook with timing info
@@ -733,24 +762,26 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 let result = self.with_retry(|| {
                     if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                        let val = RUNTIME.block_on(
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *tx),
                         );
                         self.place_ongoing_transaction(tx);
                         val
                     } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                        let val = RUNTIME.block_on(
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.fetch_all(&mut *conn),
                         );
                         self.return_pinned_connection(conn);
                         val
                     } else {
-                        RUNTIME.block_on(
+                        self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_all(self.get_read_pool()),
                         )
                     }
-                    .map_err(|err| SqlxError::query_with_source(&query, err))
+                    .and_then(|inner| {
+                        inner.map_err(|err| SqlxError::query_with_source(&query, err))
+                    })
                 });
 
                 if let Some(t) = timer {
@@ -760,7 +791,17 @@ macro_rules! php_sqlx_impl_driver_inner {
                     }
                 }
 
-                result
+                result.and_then(|rows| {
+                    if self.options.max_rows > 0
+                        && u64::try_from(rows.len()).is_ok_and(|n| n > self.options.max_rows)
+                    {
+                        Err(SqlxError::TooManyRows {
+                            max: self.options.max_rows,
+                        })
+                    } else {
+                        Ok(rows)
+                    }
+                })
             }
 
             /// Fetches exactly one row, applying retry, connection routing, and the query hook.
@@ -783,24 +824,26 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 let result = self.with_retry(|| {
                     if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                        let val = RUNTIME.block_on(
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
                         );
                         self.place_ongoing_transaction(tx);
                         val
                     } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                        let val = RUNTIME.block_on(
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
                         );
                         self.return_pinned_connection(conn);
                         val
                     } else {
-                        RUNTIME.block_on(
+                        self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_one(self.get_read_pool()),
                         )
                     }
-                    .map_err(|err| SqlxError::query_with_source(&query, err))
+                    .and_then(|inner| {
+                        inner.map_err(|err| SqlxError::query_with_source(&query, err))
+                    })
                 });
 
                 if let Some(t) = timer {
@@ -835,27 +878,28 @@ macro_rules! php_sqlx_impl_driver_inner {
 
                 let result = self.with_retry(|| {
                     if let Some(mut tx) = self.retrieve_ongoing_transaction() {
-                        let val = RUNTIME.block_on(
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *tx),
                         );
                         self.place_ongoing_transaction(tx);
                         val
                     } else if let Some(mut conn) = self.retrieve_pinned_connection() {
-                        let val = RUNTIME.block_on(
+                        let val = self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?.fetch_one(&mut *conn),
                         );
                         self.return_pinned_connection(conn);
                         val
                     } else {
-                        RUNTIME.block_on(
+                        self.run_query(
                             bind_values(sqlx_oldapi::query(&query), &values)?
                                 .fetch_one(self.get_read_pool()),
                         )
                     }
-                    .map(Some)
-                    .or_else(|err: sqlx_oldapi::Error| match err {
-                        sqlx_oldapi::Error::RowNotFound => Ok(None),
-                        _ => Err(SqlxError::query_with_source(&query, err)),
+                    .and_then(|inner| {
+                        inner.map(Some).or_else(|err: sqlx_oldapi::Error| match err {
+                            sqlx_oldapi::Error::RowNotFound => Ok(None),
+                            _ => Err(SqlxError::query_with_source(&query, err)),
+                        })
                     })
                 });
 

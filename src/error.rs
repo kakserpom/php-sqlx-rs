@@ -215,6 +215,9 @@ pub enum Error {
     /// `strict_placeholders` was enabled.
     TooManyBindParameters { max: usize },
 
+    /// A result set exceeded the configured `max_rows` cap.
+    TooManyRows { max: u64 },
+
     /// Invalid configuration option.
     Configuration { option: String, message: String },
 
@@ -252,7 +255,9 @@ impl Error {
     pub const fn code(&self) -> ErrorCode {
         match self {
             Self::Connection { .. } => ErrorCode::Connection,
-            Self::Query { .. } | Self::ColumnNotFound { .. } => ErrorCode::Query,
+            Self::Query { .. } | Self::ColumnNotFound { .. } | Self::TooManyRows { .. } => {
+                ErrorCode::Query
+            }
             Self::NoActiveTransaction
             | Self::CommitFailed { .. }
             | Self::RollbackFailed { .. }
@@ -435,6 +440,13 @@ impl fmt::Display for Error {
                     f,
                     "Query exceeds the bind-parameter limit ({max}); reduce the number of parameters \
                      (e.g. a smaller IN list) or disable `strict_placeholders`"
+                )
+            }
+            Self::TooManyRows { max } => {
+                write!(
+                    f,
+                    "Result set exceeds the configured row cap (max_rows = {max}); narrow the query \
+                     or raise `max_rows`"
                 )
             }
             Self::Configuration { option, message } => {
