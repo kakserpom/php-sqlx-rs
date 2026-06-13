@@ -120,6 +120,57 @@ macro_rules! php_sqlx_impl_prepared_query {
         }
         #[php_impl]
         impl $struct {
+            /// Executes the prepared query and hydrates every row into `target`.
+            ///
+            /// `target` is either a class name or an `alias => class` map; see
+            /// `Sqlx\\DriverInterface::queryAllInto`. The `:select` placeholder, if
+            /// present in the prepared query, is filled from the target's class(es).
+            ///
+            /// # Arguments
+            /// - `target`: Class name, or `['alias' => Class::class, ...]` for joins.
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            pub fn query_all_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Vec<Zval>> {
+                self.driver_inner
+                    .query_all_into(&target, &self.query, parameters, None)
+            }
+
+            /// Executes the prepared query and hydrates the single row into `target`.
+            ///
+            /// See [`Self::query_all_into`] for the `target` forms.
+            ///
+            /// # Arguments
+            /// - `target`: Class name, or `['alias' => Class::class, ...]` for joins.
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            pub fn query_row_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner
+                    .query_row_into(&target, &self.query, parameters, None)
+            }
+
+            /// Executes the prepared query and hydrates the single row into `target`,
+            /// or returns `null` if no row matched.
+            ///
+            /// See [`Self::query_all_into`] for the `target` forms.
+            ///
+            /// # Arguments
+            /// - `target`: Class name, or `['alias' => Class::class, ...]` for joins.
+            /// - `parameters`: Optional array of indexed/named parameters to bind.
+            pub fn query_maybe_row_into(
+                &self,
+                target: $crate::conversion::HydrationTarget,
+                parameters: Option<BTreeMap<String, ParameterValue>>,
+            ) -> $crate::error::Result<Zval> {
+                self.driver_inner
+                    .query_maybe_row_into(&target, &self.query, parameters, None)
+            }
+
             /// Executes the prepared query and returns a dictionary mapping the first column to the second column.
             ///
             /// This method expects each result row to contain at least two columns. It converts the first column

@@ -209,3 +209,17 @@ MySQL prepared statements are connection-specific. In pooled environments, state
 ### MSSQL
 
 MSSQL uses `sp_executesql` for parameterized queries, which provides plan caching benefits similar to prepared statements.
+
+## Hydrating into classes
+
+Prepared queries support the same hydration methods as the driver —
+`queryAllInto()`, `queryRowInto()` and `queryMaybeRowInto()` — see
+[Result Handling](../core/results.md#hydrating-rows-into-classes).
+
+```php
+class User { public int $id; public string $email; }
+
+$stmt  = $driver->prepare('SELECT :select FROM users WHERE id = :id');
+$user  = $stmt->queryRowInto(User::class, ['id' => 1]);   // User
+$users = $stmt->queryAllInto(User::class);                // User[]
+```

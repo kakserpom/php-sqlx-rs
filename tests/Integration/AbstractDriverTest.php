@@ -386,6 +386,25 @@ abstract class AbstractDriverTest extends TestCase
         }
     }
 
+    public function testPreparedQueryQueryAllInto(): void
+    {
+        $this->createTestTable();
+
+        try {
+            $this->driver->execute("INSERT INTO test_users (name, email) VALUES ('Alice', 'alice@example.com')");
+
+            $prepared = $this->driver->prepare('SELECT id, name, email FROM test_users WHERE name = :name');
+            $users = $prepared->queryAllInto(HydrationTestUser::class, ['name' => 'Alice']);
+
+            $this->assertCount(1, $users);
+            $this->assertInstanceOf(HydrationTestUser::class, $users[0]);
+            $this->assertEquals('Alice', $users[0]->name);
+            $this->assertEquals('alice@example.com', $users[0]->email);
+        } finally {
+            $this->dropTestTable();
+        }
+    }
+
     public function testQueryValue(): void
     {
         $this->createTestTable();
