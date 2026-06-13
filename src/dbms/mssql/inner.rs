@@ -39,3 +39,21 @@ pub const SETTINGS: Settings = Settings {
 };
 
 php_sqlx_impl_driver_inner!(MssqlDriverInner, Mssql);
+
+impl MssqlDriverInner {
+    /// Bulk-ingest fast path is not available for `MSSQL`.
+    ///
+    /// SQL Server has no `COPY`-equivalent exposed by the underlying driver.
+    /// Use `insertMany()` instead.
+    #[allow(clippy::unused_self)]
+    pub fn copy_in(
+        &self,
+        _table: &str,
+        _rows: &ext_php_rs::types::Zval,
+    ) -> crate::error::Result<u64> {
+        Err(crate::error::Error::Other(
+            "copyIn (bulk COPY) is only supported on PostgreSQL; use insertMany() on MSSQL"
+                .to_string(),
+        ))
+    }
+}

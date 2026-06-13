@@ -929,6 +929,42 @@ macro_rules! php_sqlx_impl_driver {
                 self.execute(&sql, Some(all_params))
             }
 
+            /// Bulk-inserts many rows using the database's native fast path.
+            ///
+            /// On **`PostgreSQL`** this streams the rows via `COPY ... FROM STDIN`,
+            /// which is much faster than `insertMany()` for large batches and is not
+            /// subject to the bind-parameter limit. Values are encoded into the COPY
+            /// stream with full escaping, so row data cannot break out of its field.
+            ///
+            /// **`MySQL`** and **`MSSQL`** have no equivalent exposed by the driver and
+            /// will throw; use `insertMany()` there.
+            ///
+            /// Columns are taken from the first row; columns missing from later rows
+            /// are inserted as `NULL`. Rows are read straight from the PHP array and
+            /// streamed to the server in chunks, so memory stays bounded for large batches.
+            ///
+            /// # Arguments
+            /// - `table`: Table name (optionally schema-qualified).
+            /// - `rows`: Array of rows, each an associative array (column name → value).
+            ///
+            /// # Returns
+            /// Number of rows ingested.
+            ///
+            /// # Example
+            /// ```php
+            /// $driver->copyIn('users', [
+            ///     ['name' => 'Alice', 'email' => 'alice@example.com'],
+            ///     ['name' => 'Bob',   'email' => 'bob@example.com'],
+            /// ]);
+            /// ```
+            ///
+            /// # Exceptions
+            /// Throws if the rows array is empty, the driver is not `PostgreSQL`, or the
+            /// `COPY` stream fails.
+            pub fn copy_in(&self, table: &str, rows: &Zval) -> $crate::error::Result<u64> {
+                self.driver_inner.copy_in(table, rows)
+            }
+
             /// Inserts a row or updates it if a conflict occurs on the specified columns.
             ///
             /// This method generates database-specific SQL for upsert operations:

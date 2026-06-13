@@ -40,3 +40,21 @@ pub const SETTINGS: Settings = Settings {
 };
 
 php_sqlx_impl_driver_inner!(MySqlDriverInner, MySql);
+
+impl MySqlDriverInner {
+    /// Bulk-ingest fast path is not available for `MySQL`.
+    ///
+    /// `MySQL`'s `LOAD DATA LOCAL INFILE` is not exposed by the underlying driver,
+    /// so there is no `COPY`-equivalent. Use `insertMany()` instead.
+    #[allow(clippy::unused_self)]
+    pub fn copy_in(
+        &self,
+        _table: &str,
+        _rows: &ext_php_rs::types::Zval,
+    ) -> crate::error::Result<u64> {
+        Err(crate::error::Error::Other(
+            "copyIn (bulk COPY) is only supported on PostgreSQL; use insertMany() on MySQL"
+                .to_string(),
+        ))
+    }
+}

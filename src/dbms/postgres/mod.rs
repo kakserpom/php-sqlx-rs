@@ -1,3 +1,4 @@
+mod copy;
 #[cfg(test)]
 mod tests;
 use crate::php_sqlx_impl_driver;

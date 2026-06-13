@@ -134,6 +134,9 @@ public function insert(string $table, array $row): int;
 // Insert multiple rows, returns affected rows
 public function insertMany(string $table, array $rows): int;
 
+// High-volume bulk ingest via COPY (PostgreSQL only; MySQL/MSSQL throw)
+public function copyIn(string $table, array $rows): int;
+
 // Insert or update on conflict
 public function upsert(string $table, array $row, array $conflictCols, ?array $updateCols = null): void;
 ```

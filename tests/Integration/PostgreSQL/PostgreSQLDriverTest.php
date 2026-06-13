@@ -475,4 +475,46 @@ class PostgreSQLDriverTest extends AbstractDriverTest
             $this->driver->execute('DROP TABLE IF EXISTS test_insert_many');
         }
     }
+
+    public function testCopyIn(): void
+    {
+        $this->driver->execute('DROP TABLE IF EXISTS test_copy_in');
+        $this->driver->execute('
+            CREATE TABLE test_copy_in (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255),
+                data JSONB
+            )
+        ');
+
+        try {
+            $affected = $this->driver->copyIn('test_copy_in', [
+                ['name' => 'Alice', 'email' => 'alice@example.com', 'data' => ['k' => 1]],
+                // tab in value, NULL email, NULL json
+                ['name' => "Bob\tTab", 'email' => null, 'data' => null],
+                // newline in value, nested json
+                ['name' => "Carol\nNewline", 'email' => 'carol@example.com', 'data' => ['x' => [1, 2, 3]]],
+            ]);
+
+            $this->assertEquals(3, $affected);
+
+            $rows = $this->driver->queryAll('SELECT name, email, data FROM test_copy_in ORDER BY id');
+            $this->assertCount(3, $rows);
+
+            $this->assertEquals('Alice', $rows[0]->name);
+            $this->assertEquals('alice@example.com', $rows[0]->email);
+            $this->assertEquals(1, $rows[0]->data->k);
+
+            // COPY escaping round-trips tab/newline and NULLs.
+            $this->assertEquals("Bob\tTab", $rows[1]->name);
+            $this->assertNull($rows[1]->email);
+            $this->assertNull($rows[1]->data);
+
+            $this->assertEquals("Carol\nNewline", $rows[2]->name);
+            $this->assertEquals([1, 2, 3], $rows[2]->data->x);
+        } finally {
+            $this->driver->execute('DROP TABLE IF EXISTS test_copy_in');
+        }
+    }
 }

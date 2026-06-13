@@ -565,6 +565,23 @@ VALUES ($email_0, $name_0),
 - Missing columns in subsequent rows default to `NULL`
 - Returns the number of inserted rows
 
+### High-volume ingestion with `copyIn()` (PostgreSQL)
+
+For large batches, `copyIn()` streams rows via PostgreSQL's `COPY ... FROM STDIN`
+— much faster than `insertMany()` and not subject to the bind-parameter limit:
+
+```php
+$driver->copyIn('users', [
+    ['name' => 'Alice', 'email' => 'alice@example.com'],
+    ['name' => 'Bob',   'email' => 'bob@example.com'],
+    // ... thousands more
+]);
+```
+
+- Same shape as `insertMany()` (columns from the first row; missing → `NULL`).
+- Values are encoded into the COPY stream with full escaping — no injection surface in row data. JSON/array values are sent as JSON text (for `json`/`jsonb` columns).
+- **PostgreSQL only.** `MySQL` and `MSSQL` throw (no `COPY` equivalent is exposed by the driver) — use `insertMany()` there.
+
 ---
 
 ## Upsert (Insert or Update)
