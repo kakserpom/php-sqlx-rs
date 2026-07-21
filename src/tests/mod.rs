@@ -69,7 +69,7 @@ fn runtime_timeout_is_usable() {
 
     let result = crate::RUNTIME.block_on(async move {
         tokio::time::timeout(Duration::from_millis(10), async {
-            tokio::time::sleep(Duration::from_secs(3600)).await;
+            tokio::time::sleep(Duration::from_hours(1)).await;
         })
         .await
     });
