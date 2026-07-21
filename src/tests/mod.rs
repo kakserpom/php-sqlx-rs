@@ -58,3 +58,20 @@ fn run_php_test(name: &str) -> Result<String> {
         .join(format!("tests/{name}.php")),
     )
 }
+
+/// Regression test: `OPT_QUERY_TIMEOUT` uses `tokio::time::timeout` on the shared
+/// runtime. The timer must be built inside the runtime context and the runtime
+/// must have the time driver enabled, or the whole process aborts with
+/// "there is no reactor running". This mirrors how `run_query` drives a query.
+#[test]
+fn runtime_timeout_is_usable() {
+    use std::time::Duration;
+
+    let result = crate::RUNTIME.block_on(async move {
+        tokio::time::timeout(Duration::from_millis(10), async {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+        })
+        .await
+    });
+    assert!(result.is_err(), "the timeout should have elapsed");
+}

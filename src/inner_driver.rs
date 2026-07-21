@@ -377,12 +377,15 @@ macro_rules! php_sqlx_impl_driver_inner {
             {
                 match self.options.query_timeout {
                     Some(timeout) => {
-                        RUNTIME.block_on(tokio::time::timeout(timeout, fut)).map_err(|_| {
-                            SqlxError::Timeout {
+                        // The `Sleep` timer must be constructed inside the runtime
+                        // context, so build the `timeout` future within the async
+                        // block rather than passing it as an argument to block_on.
+                        RUNTIME
+                            .block_on(async move { tokio::time::timeout(timeout, fut).await })
+                            .map_err(|_| SqlxError::Timeout {
                                 operation: "query".to_string(),
                                 timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
-                            }
-                        })
+                            })
                     }
                     None => Ok(RUNTIME.block_on(fut)),
                 }
