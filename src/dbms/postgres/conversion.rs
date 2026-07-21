@@ -15,7 +15,7 @@ use sqlx_oldapi::Error::ColumnDecode;
 use sqlx_oldapi::TypeInfo;
 use sqlx_oldapi::error::UnexpectedNullError;
 use sqlx_oldapi::postgres::{PgRow, PgValueRef};
-use sqlx_oldapi::{Decode, Row, Type};
+use sqlx_oldapi::{Decode, Row, Type, ValueRef};
 use uuid::Uuid;
 
 impl Conversion for PgRow {
@@ -67,6 +67,9 @@ impl Conversion for PgRow {
             "JSON" => self
                 .try_get_raw::<_>(column_ordinal)
                 .map(|val_ref: PgValueRef| {
+                    if val_ref.is_null() {
+                        return Ok(Zval::null());
+                    }
                     let buf = val_ref.as_bytes().map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
                     if buf.is_empty() {
                         return Err(SqlxError::Conversion { message: format!("empty JSON raw value in {:?}", column.name()) });
@@ -92,6 +95,9 @@ impl Conversion for PgRow {
             "JSONB" => self
                 .try_get_raw::<_>(column_ordinal)
                 .map(|val_ref: PgValueRef| {
+                    if val_ref.is_null() {
+                        return Ok(Zval::null());
+                    }
                     let buf = val_ref.as_bytes().map_err(|err| SqlxError::Conversion { message: format!("{err:?}") })?;
                     if buf.is_empty() {
                         return Err(SqlxError::Conversion { message: format!("empty JSONB raw value in {:?}", column.name()) });
